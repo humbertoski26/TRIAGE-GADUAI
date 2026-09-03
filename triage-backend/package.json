@@ -1,0 +1,17 @@
+{
+  "name": "triage-gaduai-backend",
+  "version": "1.0.0",
+  "description": "Backend real (Node + Postgres) para TRIAGE GADUAI: colegios, usuarios, timeline, chat y alertas sincronizados entre dispositivos.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "migrate": "node db/migrate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  }
+}

@@ -1,0 +1,64 @@
+-- TRIAGE GADUAI · esquema de base de datos (Postgres)
+
+create table if not exists colegios (
+  id text primary key,
+  nombre text not null,
+  comuna text,
+  creado_en timestamptz not null default now()
+);
+
+create table if not exists usuarios (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  nombre text not null,
+  correo text not null,
+  clave text not null,
+  perfil text not null,
+  creado_en timestamptz not null default now(),
+  unique (colegio_id, correo)
+);
+
+create table if not exists items (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  tipo text not null,            -- 'tarea' | 'hito'
+  triage text not null,          -- 'Rojo' | 'Azul' | 'Naranjo' | 'Gris'
+  titulo text not null,
+  descripcion text,
+  fecha date not null,
+  responsable text,
+  copiados text[] default '{}',
+  persona text not null,
+  perfil text not null,
+  creado text not null,
+  revisado boolean not null default false,
+  archivo_nombre text,
+  archivo_data text,             -- data URL (base64), documento adjunto
+  react jsonb not null default '{"like":0,"dislike":0,"ok":0,"heart":0,"done":false}',
+  creado_en timestamptz not null default now()
+);
+create index if not exists items_colegio_idx on items(colegio_id);
+
+create table if not exists chat_mensajes (
+  id bigserial primary key,
+  item_id bigint not null references items(id) on delete cascade,
+  autor text not null,
+  perfil text not null,
+  texto text not null,
+  fecha text not null,
+  creado_en timestamptz not null default now()
+);
+create index if not exists chat_item_idx on chat_mensajes(item_id);
+
+create table if not exists alertas (
+  id bigserial primary key,
+  item_id bigint not null references items(id) on delete cascade,
+  autor text not null,
+  destinatario text not null,
+  mensaje text,
+  fecha text not null,
+  leida boolean not null default false,
+  creado_en timestamptz not null default now()
+);
+create index if not exists alertas_item_idx on alertas(item_id);
+create index if not exists alertas_destinatario_idx on alertas(destinatario);

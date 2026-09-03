@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>TRIAGE GADUAI</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  :root{color-scheme:dark}
+  html,body{background:#020617;margin:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#334155;border-radius:99px}
+  ::-webkit-scrollbar-track{background:transparent}
+  .gaduai-focus{--tw-ring-color:#818cf8}
+  .fade-in{animation:fadeIn .25s ease both}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  .triage-card{transition:.15s}
+  .triage-card:hover{transform:translateY(-1px);border-color:#64748b}
+  .fab{box-shadow:0 10px 30px -8px rgba(99,102,241,.6)}
+  .fab:hover{transform:translateY(-2px) scale(1.04)}
+  .quad-cell{transition:.15s;cursor:pointer}
+  .quad-cell:hover{transform:scale(1.02)}
+  .quad-cell.selected{outline:3px solid #fff;outline-offset:-3px}
+  .modal-scroll{max-height:82vh;overflow-y:auto}
+  .brand-gradient{background:linear-gradient(90deg,#f43f5e,#f59e0b,#818cf8,#38bdf8)}
+  .gaduai-gradient{background:linear-gradient(90deg,#4338ca,#0ea5e9)}
+  .logo-orb{background:radial-gradient(circle at 35% 30%,#22d3ee,#4338ca 65%,#1e1b4b);box-shadow:0 0 30px -4px rgba(56,189,248,.7)}
+  .react-btn{transition:.15s;cursor:pointer}
+  .react-btn:hover{transform:scale(1.15)}
+  .react-btn.active{filter:drop-shadow(0 0 4px currentColor)}
+  .tab-btn{transition:.15s}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body class="text-slate-200 min-h-screen">
+
+<!-- ============ PANTALLA 0: PORTADA DEL PRODUCTO ============ -->
+<div id="pantalla-landing" class="min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-lg fade-in">
+    <div class="flex flex-col items-center text-center mb-8">
+      <div class="w-20 h-20 rounded-full logo-orb flex items-center justify-center text-white text-3xl mb-4"><i class="fa-solid fa-list-check"></i></div>
+      <h1 class="text-3xl font-black text-white leading-tight">TRIAGE <span class="text-cyan-400">GADUAI</span></h1>
+      <p class="text-sm font-bold text-slate-300 mt-1">Sistema de Inteligencia Organizacional para colegios</p>
+      <p class="text-[11px] uppercase tracking-widest text-slate-500 mt-2">Timeline · Perfiles · Triage inteligente</p>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 mb-8">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
+        <i class="fa-solid fa-timeline text-cyan-400 text-lg"></i>
+        <p class="text-[11px] font-bold text-white mt-2">Timeline compartido</p>
+        <p class="text-[10px] text-slate-500 mt-1">Toda la comunidad escolar en un mismo hilo de hitos y tareas, sincronizado en tiempo real.</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
+        <i class="fa-solid fa-circle-half-stroke text-indigo-400 text-lg"></i>
+        <p class="text-[11px] font-bold text-white mt-2">Triage por color</p>
+        <p class="text-[10px] text-slate-500 mt-1">Cuadrante de Covey: clasifica cada acción en Rojo, Azul, Naranjo o Gris.</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
+        <i class="fa-solid fa-school text-emerald-400 text-lg"></i>
+        <p class="text-[11px] font-bold text-white mt-2">Cualquier colegio</p>
+        <p class="text-[10px] text-slate-500 mt-1">Cada establecimiento tiene su propio espacio, con memoria real en la nube.</p>
+      </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6">
+      <button onclick="mostrarSetup()" class="w-full gaduai-gradient text-white text-sm font-bold py-3 rounded-xl mb-4"><i class="fa-solid fa-plus mr-1"></i> Activar TRIAGE GADUAI en un colegio nuevo</button>
+      <div class="border-t border-slate-800 pt-4">
+        <label class="block text-[11px] font-semibold text-slate-400 mb-1">¿Ya tienes un colegio activado? Búscalo por nombre</label>
+        <div class="flex gap-2">
+          <input id="landing-buscar" placeholder="Ej. Colegio San Andrés" class="flex-1 bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 outline-none focus:ring-2 gaduai-focus">
+          <button onclick="buscarColegio()" class="bg-slate-800 text-white px-4 rounded-xl"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+        <div id="landing-resultados" class="mt-3 space-y-1.5"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PANTALLA 1: CONFIGURACIÓN DEL COLEGIO ============ -->
+<div id="pantalla-setup" class="min-h-screen flex items-center justify-center p-4" hidden>
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 fade-in">
+    <div class="flex items-center gap-3 mb-1">
+      <div class="w-11 h-11 rounded-2xl gaduai-gradient flex items-center justify-center text-white text-lg"><i class="fa-solid fa-list-check"></i></div>
+      <div>
+        <h1 class="text-lg font-black text-white leading-tight">TRIAGE GADUAI</h1>
+        <p class="text-[11px] text-slate-500">Configuración inicial del establecimiento</p>
+      </div>
+    </div>
+    <p class="text-xs text-slate-400 mt-4 mb-5">Este producto funciona en cualquier colegio: complete estos datos una sola vez para activar TRIAGE GADUAI en su establecimiento. Al activarlo se crea automáticamente el perfil <b>Director ejecutivo/máster</b>, desde donde podrá agregar al resto de los usuarios.</p>
+    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Nombre del colegio / institución</label>
+    <input id="setup-colegio" placeholder="Ej. Colegio San Andrés" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-4 outline-none focus:ring-2 gaduai-focus">
+    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Comuna / ciudad (opcional)</label>
+    <input id="setup-comuna" placeholder="Ej. Puente Alto" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-4 outline-none focus:ring-2 gaduai-focus">
+    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Correo del Director ejecutivo/máster</label>
+    <input id="setup-correo" placeholder="Ej. director@colegio.cl" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-5 outline-none focus:ring-2 gaduai-focus">
+    <button onclick="crearColegio()" class="w-full gaduai-gradient text-white text-sm font-bold py-3 rounded-xl"><i class="fa-solid fa-right-to-bracket mr-1"></i> Activar TRIAGE GADUAI en este colegio</button>
+    <button onclick="mostrarLanding()" class="w-full text-center text-[11px] text-slate-500 mt-4 hover:text-slate-300">Volver</button>
+  </div>
+</div>
+
+<!-- ============ PANTALLA 2: LOGIN ============ -->
+<div id="pantalla-login" class="min-h-screen flex items-center justify-center p-4" hidden>
+  <div class="w-full max-w-md rounded-3xl overflow-hidden bg-slate-900 border border-slate-800 fade-in">
+    <div class="h-1.5 gaduai-gradient"></div>
+    <div class="p-8">
+      <div class="flex flex-col items-center text-center mb-5">
+        <div class="w-16 h-16 rounded-full logo-orb flex items-center justify-center text-white text-2xl mb-3"><i class="fa-solid fa-list-check"></i></div>
+        <h1 class="text-xl font-black"><span class="text-indigo-400">PLATAFORMA</span> <span class="text-cyan-400">GADUAI</span></h1>
+        <p class="text-xs font-bold text-slate-300">Triage · Sistema de Inteligencia Organizacional</p>
+        <p class="text-[10px] uppercase tracking-widest text-slate-500 mt-1">Datos · Personas · Propósito</p>
+      </div>
+
+      <label class="block text-[10px] uppercase tracking-wide text-slate-400 mb-1">Colegio</label>
+      <p id="login-colegio-label" class="text-sm font-bold text-white mb-4">—</p>
+
+      <label class="block text-[10px] uppercase tracking-wide text-slate-400 mb-1">Correo de acceso</label>
+      <input id="login-correo" placeholder="nombre@colegio.cl" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-4 outline-none focus:ring-2 gaduai-focus">
+
+      <label class="block text-[10px] uppercase tracking-wide text-slate-400 mb-1">Clave de acceso</label>
+      <input id="login-clave" type="password" placeholder="••••••" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-5 outline-none focus:ring-2 gaduai-focus">
+
+      <button onclick="ingresar()" class="w-full gaduai-gradient text-white text-sm font-bold py-3 rounded-xl"><i class="fa-solid fa-right-to-bracket mr-1"></i> Ingresar al Sistema GADUAI</button>
+      <button onclick="mostrarLanding()" class="w-full text-center text-[11px] text-slate-500 mt-4 hover:text-slate-300">Cambiar de colegio / portada</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PANTALLA 3: APP · TIMELINE POR PERFIL ============ -->
+<div id="pantalla-app" class="min-h-screen" hidden>
+
+  <header class="sticky top-0 z-30 bg-slate-950/95 backdrop-blur border-b border-slate-800 px-4 py-3">
+    <div class="flex items-center justify-between gap-2 flex-wrap">
+      <div class="flex items-center gap-2 min-w-0">
+        <button onclick="toggleMenu()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-bars"></i></button>
+        <div class="min-w-0">
+          <p class="text-[10px] uppercase tracking-wide text-slate-500 truncate">Timeline del establecimiento · <span id="app-perfil-label">Perfil</span></p>
+          <p class="text-sm font-black text-white truncate">TRIAGE GADUAI · <span id="app-colegio-label"></span></p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="sync-indicator" class="text-[10px] text-emerald-400" title="Sincronizado con el servidor"><i class="fa-solid fa-cloud"></i></span>
+        <span id="hitos-count" class="text-[11px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-3 py-1">0 hitos</span>
+        <button onclick="abrirAlertas()" class="relative text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1"><i class="fa-solid fa-bell"></i> <span id="alertas-count">0</span></button>
+        <button onclick="cerrarSesion()" class="text-[11px] text-slate-500 hover:text-rose-400"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+      </div>
+    </div>
+    <p class="text-[10px] text-slate-500 mt-2">Alimentado por Director/a, Inspector/a General, UTP, Convivencia, Dupla y Docentes del colegio · ordenado de lo más próximo a vencer a lo último solicitado.</p>
+    <div class="flex items-center justify-between gap-2 mt-3 flex-wrap">
+      <div class="flex items-center gap-1.5">
+        <button onclick="filtrarTipo('todos')" data-tipo="todos" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-indigo-600 text-white">Todos</button>
+        <button onclick="filtrarTipo('tarea')" data-tipo="tarea" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300"><i class="fa-solid fa-clipboard-list mr-1"></i>Tareas</button>
+        <button onclick="filtrarTipo('hito')" data-tipo="hito" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300"><i class="fa-solid fa-exclamation mr-1"></i>Hitos</button>
+      </div>
+      <div class="flex items-center gap-1.5" id="filtro-triage">
+        <button onclick="filtrarColor('todos')" data-f="todos" class="filtro-btn px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-white ring-2 ring-white">Color</button>
+        <button onclick="filtrarColor('Rojo')" data-f="Rojo" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-rose-600/20" title="Rojo · Crítico">🔴</button>
+        <button onclick="filtrarColor('Azul')" data-f="Azul" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-sky-600/20" title="Azul · Estratégico">🔵</button>
+        <button onclick="filtrarColor('Naranjo')" data-f="Naranjo" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-amber-600/20" title="Naranjo · Delegable">🟠</button>
+        <button onclick="filtrarColor('Gris')" data-f="Gris" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-slate-600/20" title="Gris · Diferible">⚪</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="menu-lateral" class="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm" hidden onclick="if(event.target===this)toggleMenu()">
+    <div class="w-72 h-full bg-slate-900 border-r border-slate-800 p-5 fade-in overflow-y-auto">
+      <p class="text-xs font-black text-white mb-1">Perfiles conectados</p>
+      <p class="text-[11px] text-slate-500 mb-4">Todos comparten el mismo Timeline del colegio, sincronizado entre dispositivos.</p>
+      <div id="menu-perfiles" class="space-y-1.5"></div>
+      <button id="btn-usuarios" onclick="abrirUsuarios()" hidden class="w-full mt-5 text-[11px] text-cyan-300 border border-cyan-500/30 rounded-lg py-2"><i class="fa-solid fa-users-gear mr-1"></i> Administrar usuarios (máster)</button>
+      <button onclick="toggleMenu();cerrarSesion()" class="w-full mt-3 text-[11px] text-rose-400 border border-rose-500/30 rounded-lg py-2">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <main class="max-w-2xl mx-auto px-4 py-5 pb-32">
+    <div id="timeline-container" class="space-y-3"></div>
+    <p id="timeline-empty" class="text-center text-xs text-slate-600 py-14" hidden>Aún no hay hitos ni tareas en el Timeline. Use el botón <b>+</b> para registrar el primero.</p>
+  </main>
+
+  <button onclick="abrirModal()" class="fab fixed bottom-7 right-1/2 translate-x-1/2 md:right-8 md:translate-x-0 w-16 h-16 rounded-full brand-gradient text-white text-3xl font-black flex items-center justify-center z-40">+</button>
+</div>
+
+<!-- ============ MODAL: REGISTRAR TAREA O HITO ============ -->
+<div id="modal-triage" class="hidden fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-4">
+      <div>
+        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-list-check text-amber-400"></i> Triage GADUAI</h3>
+        <p class="text-[11px] text-slate-500">Registre una tarea o hallazgo; queda incorporado al Timeline del colegio.</p>
+      </div>
+      <button onclick="cerrarModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+
+    <label class="block text-[11px] text-slate-400 mb-1">Tipo de registro</label>
+    <select id="f-tipo" class="w-full bg-slate-950 border border-amber-500/40 rounded-xl p-3 text-xs text-white font-bold mb-4">
+      <option value="tarea">📋 Tarea (con círculo de la promesa)</option>
+      <option value="hito">❗ Hito (marcar avance en el Timeline)</option>
+    </select>
+
+    <label class="block text-[11px] text-slate-400 mb-1">Situación / acción / hallazgo</label>
+    <input id="f-titulo" placeholder="Ej. Reunión de apoderados 4°B" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-4">
+
+    <div id="bloque-covey" class="mb-4">
+      <label class="block text-[11px] text-slate-400 mb-2">Cuadrante de Covey — ¿es urgente? ¿es importante?</label>
+      <div class="grid grid-cols-2 gap-2">
+        <div onclick="setQuad('Rojo')" data-q="Rojo" class="quad-cell p-3 rounded-xl border border-rose-500/40 bg-rose-500/10"><b class="text-rose-300 text-[11px]">🔴 Urgente + Importante</b><small class="block text-[9px] text-slate-400 mt-0.5">Crítico · actuar ahora</small></div>
+        <div onclick="setQuad('Azul')" data-q="Azul" class="quad-cell p-3 rounded-xl border border-sky-500/40 bg-sky-500/10"><b class="text-sky-300 text-[11px]">🔵 No urgente + Importante</b><small class="block text-[9px] text-slate-400 mt-0.5">Estratégico · planificar</small></div>
+        <div onclick="setQuad('Naranjo')" data-q="Naranjo" class="quad-cell p-3 rounded-xl border border-amber-500/40 bg-amber-500/10"><b class="text-amber-300 text-[11px]">🟠 Urgente + No importante</b><small class="block text-[9px] text-slate-400 mt-0.5">Delegable · resolver</small></div>
+        <div onclick="setQuad('Gris')" data-q="Gris" class="quad-cell p-3 rounded-xl border border-slate-500/40 bg-slate-500/10"><b class="text-slate-300 text-[11px]">⚪ No urgente + No importante</b><small class="block text-[9px] text-slate-400 mt-0.5">Diferible · programar</small></div>
+      </div>
+      <div id="quad-preview" class="mt-2 text-[11px] text-slate-400"></div>
+    </div>
+
+    <label class="block text-[11px] text-slate-400 mb-1">Fecha</label>
+    <input id="f-fecha" type="date" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-4">
+
+    <label class="block text-[11px] text-slate-400 mb-1">Detalle, contexto o evidencia</label>
+    <textarea id="f-desc" rows="3" placeholder="Detalle, contexto o evidencia..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-4"></textarea>
+
+    <label class="block text-[11px] text-slate-400 mb-1">Adjuntar documento (queda almacenado en el servidor)</label>
+    <input id="f-archivo" type="file" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-4">
+
+    <label class="block text-[11px] text-slate-400 mb-1">Responsable de la acción</label>
+    <select id="f-responsable" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-4"></select>
+
+    <label class="block text-[11px] text-slate-400 mb-1">Copiar a (Ctrl/Cmd+clic = varios)</label>
+    <select id="f-copiar" multiple class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white mb-5 h-24"></select>
+
+    <button onclick="registrar()" class="w-full brand-gradient text-white text-sm font-bold py-3 rounded-xl"><i class="fa-solid fa-list-check mr-1"></i> Registrar en GADUAI</button>
+  </div>
+</div>
+
+<!-- ============ MODAL: ADMINISTRAR USUARIOS ============ -->
+<div id="modal-usuarios" class="hidden fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-4">
+      <div>
+        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-users-gear text-cyan-400"></i> Administrar usuarios</h3>
+        <p class="text-[11px] text-slate-500">Cree un acceso por cada persona del colegio: nombre, correo, contraseña y perfil.</p>
+      </div>
+      <button onclick="cerrarUsuarios()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div id="lista-usuarios" class="space-y-2 mb-5"></div>
+    <div class="border-t border-slate-800 pt-4">
+      <p class="text-[11px] font-bold text-white mb-2">Nuevo usuario</p>
+      <input id="u-nombre" placeholder="Nombre completo" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+      <input id="u-correo" placeholder="correo@colegio.cl" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+      <input id="u-clave" placeholder="Contraseña" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+      <select id="u-perfil" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-3"></select>
+      <button onclick="agregarUsuario()" class="w-full gaduai-gradient text-white text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-user-plus mr-1"></i> Crear usuario</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: MINUTA ============ -->
+<div id="modal-minuta" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-4">
+      <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-file-lines text-slate-300"></i> Minuta</h3>
+      <button onclick="cerrarModalId('modal-minuta')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <pre id="minuta-texto" class="whitespace-pre-wrap text-[11px] text-slate-300 bg-slate-950 border border-slate-800 rounded-xl p-4 mb-4"></pre>
+    <button onclick="descargarMinuta()" class="w-full gaduai-gradient text-white text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-download mr-1"></i> Descargar minuta (.txt)</button>
+  </div>
+</div>
+
+<!-- ============ MODAL: CHAT ============ -->
+<div id="modal-chat" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 fade-in flex flex-col" style="max-height:82vh">
+    <div class="flex justify-between items-start mb-3">
+      <div>
+        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-comments text-sky-300"></i> Chat</h3>
+        <p id="chat-item-titulo" class="text-[11px] text-slate-500"></p>
+      </div>
+      <button onclick="cerrarModalId('modal-chat')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div id="chat-mensajes" class="flex-1 overflow-y-auto space-y-2 mb-3 pr-1"></div>
+    <div class="flex gap-2">
+      <input id="chat-input" placeholder="Escribir un mensaje..." class="flex-1 bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white">
+      <button onclick="enviarChat()" class="bg-sky-600 text-white px-3 rounded-xl text-xs font-bold"><i class="fa-solid fa-paper-plane"></i></button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: ENVIAR ALERTA ============ -->
+<div id="modal-alertar" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 fade-in">
+    <div class="flex justify-between items-start mb-3">
+      <h3 class="text-base font-black text-white flex items-center gap-2">🔔 Enviar alerta</h3>
+      <button onclick="cerrarModalId('modal-alertar')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <p id="alertar-destinatario" class="text-[11px] text-slate-500 mb-3"></p>
+    <textarea id="alertar-msg" rows="3" placeholder="Mensaje de la alerta (opcional)..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-4"></textarea>
+    <div id="alertar-historial" class="space-y-1.5 mb-4"></div>
+    <button onclick="enviarAlerta()" class="w-full brand-gradient text-white text-xs font-bold py-2.5 rounded-xl">🔔 Enviar alerta</button>
+  </div>
+</div>
+
+<!-- ============ MODAL: MIS ALERTAS ============ -->
+<div id="modal-alertas" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-4">
+      <h3 class="text-base font-black text-white flex items-center gap-2">🔔 Mis alertas</h3>
+      <button onclick="cerrarModalId('modal-alertas')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div id="lista-alertas" class="space-y-2"></div>
+  </div>
+</div>
+
+<div id="toast" class="hidden fixed bottom-28 md:bottom-8 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl z-[200] fade-in max-w-[90vw] text-center"></div>
+
+<script>
+/* ===================== TRIAGE GADUAI · frontend conectado a la API real =====================
+   Ya no usa localStorage para el Timeline/usuarios/colegios: todo vive en el backend
+   (Node + Postgres), así que se sincroniza de verdad entre cualquier dispositivo que entre
+   al mismo colegio. El navegador solo recuerda, con localStorage, la sesión activa (colegio +
+   correo + clave) para no tener que loguearse cada vez que se recarga la página. */
+
+const API = ""; // mismo origen: el backend sirve este archivo y expone /api/*
+
+const PERFILES = [
+  "Director ejecutivo/máster",
+  "Director/a de colegio",
+  "Inspector General",
+  "UTP",
+  "Encargado de Convivencia Educativa",
+  "Dupla psicosocial",
+  "Docente"
+];
+const PERFIL_MASTER = PERFILES[0];
+
+const TRIAGE = {
+  Rojo:   {orden:0, color:"#fb7185", icon:"🔴", nombre:"Crítico",     desc:"Urgente + importante · Actuar ahora"},
+  Azul:   {orden:1, color:"#38bdf8", icon:"🔵", nombre:"Estratégico", desc:"No urgente + importante · Planificar"},
+  Naranjo:{orden:2, color:"#fbbf24", icon:"🟠", nombre:"Delegable",   desc:"Urgente + no importante · Resolver/delegar"},
+  Gris:   {orden:3, color:"#94a3b8", icon:"⚪", nombre:"Diferible",   desc:"No urgente + no importante · Programar/eliminar"}
+};
+
+let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, filtroTipo:"todos", filtroColor:"todos" };
+let archivoPendiente = null;
+let timelineCache = [];
+let pollTimer = null;
+
+function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.hidden=false; t.classList.remove("hidden"); clearTimeout(window._toastT); window._toastT=setTimeout(()=>t.classList.add("hidden"),2800); }
+function slug(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,""); }
+function pantallas(){ return ["pantalla-landing","pantalla-setup","pantalla-login","pantalla-app"]; }
+function mostrarPantalla(id){ pantallas().forEach(p=>document.getElementById(p).hidden = p!==id); }
+
+async function api(path, opts){
+  const r = await fetch(API + path, {
+    headers: {"Content-Type":"application/json"},
+    ...opts
+  });
+  let data = null;
+  try{ data = await r.json(); }catch(e){}
+  if(!r.ok){ const err = new Error((data&&data.error)||"error_api"); err.data = data; err.status = r.status; throw err; }
+  return data;
+}
+function actorBody(extra){ return { actorCorreo: STATE.correo, actorClave: STATE.clave, ...extra }; }
+
+/* ---------- sesión recordada en este navegador (solo para no re-loguear en cada recarga) ---------- */
+function guardarSesion(){
+  localStorage.setItem("triageGaduai.sesion", JSON.stringify({
+    colegioId: STATE.colegioId, correo: STATE.correo, clave: STATE.clave
+  }));
+}
+function borrarSesion(){ localStorage.removeItem("triageGaduai.sesion"); }
+
+/* ---------- navegación ---------- */
+function mostrarLanding(){ mostrarPantalla("pantalla-landing"); document.getElementById("landing-resultados").innerHTML=""; document.getElementById("landing-buscar").value=""; }
+function mostrarSetup(){ mostrarPantalla("pantalla-setup"); }
+
+async function buscarColegio(){
+  const q = document.getElementById("landing-buscar").value.trim();
+  const cont = document.getElementById("landing-resultados");
+  if(!q){ cont.innerHTML=""; return; }
+  cont.innerHTML = '<p class="text-[10px] text-slate-500">Buscando…</p>';
+  try{
+    const resultados = await api("/api/colegios?q=" + encodeURIComponent(q));
+    cont.innerHTML = resultados.length ? resultados.map(c=>`<button onclick="irALogin('${c.id}')" class="w-full text-left bg-slate-800 hover:bg-slate-700 text-white text-xs rounded-xl p-3">${esc(c.nombre)}${c.comuna?` · ${esc(c.comuna)}`:''}</button>`).join("") : '<p class="text-[10px] text-slate-500">No se encontró ningún colegio activado con ese nombre.</p>';
+  }catch(e){ cont.innerHTML = '<p class="text-[10px] text-rose-400">No se pudo buscar (revise su conexión).</p>'; }
+}
+async function irALogin(id){
+  try{
+    const colegio = await api("/api/colegios/" + id);
+    entrarColegioEnUI(colegio);
+    mostrarPantalla("pantalla-login");
+  }catch(e){ toast("No se pudo abrir ese colegio"); }
+}
+function entrarColegioEnUI(colegio){
+  STATE.colegio = colegio; STATE.colegioId = colegio.id;
+  document.getElementById("login-colegio-label").textContent = colegio.nombre + (colegio.comuna?` · ${colegio.comuna}`:"");
+}
+
+/* ---------- arranque: retoma sesión guardada si sigue siendo válida ---------- */
+async function init(){
+  const raw = localStorage.getItem("triageGaduai.sesion");
+  if(raw){
+    try{
+      const s = JSON.parse(raw);
+      const colegio = await api("/api/colegios/" + s.colegioId);
+      const r = await api(`/api/colegios/${s.colegioId}/login`, {method:"POST", body: JSON.stringify({correo:s.correo, clave:s.clave})});
+      STATE.colegio = colegio; STATE.colegioId = colegio.id;
+      STATE.correo = s.correo; STATE.clave = s.clave;
+      STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster;
+      await entrarApp();
+      return;
+    }catch(e){ borrarSesion(); }
+  }
+  mostrarLanding();
+}
+
+async function crearColegio(){
+  const nombre = document.getElementById("setup-colegio").value.trim();
+  const comuna = document.getElementById("setup-comuna").value.trim();
+  const correoMaster = document.getElementById("setup-correo").value.trim();
+  if(!nombre){ toast("Ingrese el nombre del colegio"); return; }
+  try{
+    const r = await api("/api/colegios", {method:"POST", body: JSON.stringify({nombre, comuna, correoMaster})});
+    entrarColegioEnUI({id:r.id, nombre:r.nombre, comuna:r.comuna});
+    mostrarPantalla("pantalla-login");
+    document.getElementById("login-correo").value = r.master.correo;
+    toast(`Colegio activado. Acceso máster: ${r.master.correo} / clave ${r.master.clave}`);
+  }catch(e){
+    if(e.data && e.data.error==="colegio_existente") toast("Ya existe un colegio activado con ese nombre. Búsquelo desde la portada.");
+    else toast("No se pudo activar el colegio (revise su conexión)");
+  }
+}
+
+async function ingresar(){
+  const correo = document.getElementById("login-correo").value.trim();
+  const clave = document.getElementById("login-clave").value;
+  if(!correo || !clave){ toast("Ingrese correo y clave"); return; }
+  try{
+    const r = await api(`/api/colegios/${STATE.colegioId}/login`, {method:"POST", body: JSON.stringify({correo, clave})});
+    STATE.correo = correo; STATE.clave = clave;
+    STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster;
+    guardarSesion();
+    await entrarApp();
+  }catch(e){ toast("Correo o clave incorrectos para este colegio"); }
+}
+
+async function entrarApp(){
+  mostrarPantalla("pantalla-app");
+  document.getElementById("app-perfil-label").textContent = STATE.perfil;
+  document.getElementById("app-colegio-label").textContent = STATE.colegio.nombre;
+  document.getElementById("btn-usuarios").hidden = !STATE.isMaster;
+  await Promise.all([renderMenuPerfiles(), cargarTimeline()]);
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(cargarTimeline, 5000); // sincronización con otros dispositivos
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) cargarTimeline(); });
+}
+
+async function renderMenuPerfiles(){
+  const usuarios = await api(`/api/colegios/${STATE.colegioId}/usuarios`);
+  const menu = document.getElementById("menu-perfiles");
+  menu.innerHTML = usuarios.map(u=>`<div class="text-[11px] px-3 py-2 rounded-lg ${u.correo.toLowerCase()===STATE.correo.toLowerCase()?'bg-indigo-600/30 text-white font-bold':'text-slate-400'}"><i class="fa-solid fa-circle-user mr-1"></i>${esc(u.nombre)} <span class="text-[9px] block text-slate-500">${esc(u.perfil)}</span></div>`).join("") || '<p class="text-[10px] text-slate-600">Sin usuarios registrados.</p>';
+}
+
+function toggleMenu(){ const m=document.getElementById("menu-lateral"); m.hidden=!m.hidden; }
+
+function cerrarSesion(){
+  if(pollTimer) clearInterval(pollTimer);
+  borrarSesion();
+  mostrarPantalla("pantalla-login");
+  document.getElementById("login-clave").value="";
+}
+
+/* ---------- administración de usuarios (perfil máster) ---------- */
+async function abrirUsuarios(){
+  toggleMenu();
+  await renderListaUsuarios();
+  const sel = document.getElementById("u-perfil");
+  sel.innerHTML = PERFILES.map(p=>`<option>${esc(p)}</option>`).join("");
+  document.getElementById("u-nombre").value="";
+  document.getElementById("u-correo").value="";
+  document.getElementById("u-clave").value="";
+  document.getElementById("modal-usuarios").classList.remove("hidden");
+}
+function cerrarUsuarios(){ document.getElementById("modal-usuarios").classList.add("hidden"); }
+async function renderListaUsuarios(){
+  const usuarios = await api(`/api/colegios/${STATE.colegioId}/usuarios`);
+  document.getElementById("lista-usuarios").innerHTML = usuarios.map(u=>`
+    <div class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-xl p-3">
+      <div class="min-w-0">
+        <p class="text-xs font-bold text-white truncate">${esc(u.nombre)} ${u.perfil===PERFIL_MASTER?'<span class="text-[9px] text-cyan-300">· máster</span>':''}</p>
+        <p class="text-[10px] text-slate-500 truncate">${esc(u.correo)} · ${esc(u.perfil)}</p>
+      </div>
+      ${u.perfil===PERFIL_MASTER ? '' : `<button onclick="eliminarUsuario(${u.id})" class="text-rose-400 hover:text-rose-300 text-xs px-2"><i class="fa-solid fa-trash"></i></button>`}
+    </div>`).join("");
+}
+async function agregarUsuario(){
+  const nombre = document.getElementById("u-nombre").value.trim();
+  const correo = document.getElementById("u-correo").value.trim();
+  const clave = document.getElementById("u-clave").value.trim();
+  const perfil = document.getElementById("u-perfil").value;
+  if(!nombre||!correo||!clave){ toast("Complete nombre, correo y contraseña"); return; }
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/usuarios`, {method:"POST", body: JSON.stringify(actorBody({nombre, correo, clave, perfil}))});
+    await renderListaUsuarios(); await renderMenuPerfiles();
+    document.getElementById("u-nombre").value=""; document.getElementById("u-correo").value=""; document.getElementById("u-clave").value="";
+    toast(`Usuario creado: ${nombre} (${perfil})`);
+  }catch(e){
+    toast(e.data && e.data.error==="correo_existente" ? "Ya existe un usuario con ese correo" : "No se pudo crear el usuario");
+  }
+}
+async function eliminarUsuario(id){
+  await api(`/api/colegios/${STATE.colegioId}/usuarios/${id}`, {method:"DELETE", body: JSON.stringify(actorBody())});
+  await renderListaUsuarios(); await renderMenuPerfiles();
+}
+
+/* ---------- timeline ---------- */
+function filtrarTipo(v){
+  STATE.filtroTipo=v;
+  document.querySelectorAll(".tab-btn").forEach(b=>{b.classList.remove("bg-indigo-600","text-white"); b.classList.add("bg-slate-800","text-slate-300");});
+  const btn = document.querySelector(`.tab-btn[data-tipo="${v}"]`);
+  btn.classList.remove("bg-slate-800","text-slate-300"); btn.classList.add("bg-indigo-600","text-white");
+  pintarTimeline();
+}
+function filtrarColor(v){
+  STATE.filtroColor=v;
+  document.querySelectorAll(".filtro-btn").forEach(b=>b.classList.remove("ring-2","ring-white"));
+  document.querySelector(`.filtro-btn[data-f="${v}"]`).classList.add("ring-2","ring-white");
+  pintarTimeline();
+}
+
+async function cargarTimeline(){
+  try{
+    timelineCache = await api(`/api/colegios/${STATE.colegioId}/timeline`);
+    document.getElementById("sync-indicator").innerHTML = '<i class="fa-solid fa-cloud"></i>';
+    document.getElementById("sync-indicator").className = "text-[10px] text-emerald-400";
+    pintarTimeline();
+    actualizarBadgeAlertas();
+  }catch(e){
+    document.getElementById("sync-indicator").innerHTML = '<i class="fa-solid fa-cloud-slash"></i>';
+    document.getElementById("sync-indicator").className = "text-[10px] text-rose-400";
+  }
+}
+
+async function reaccionar(id, tipo){
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/timeline/${id}/reaccionar`, {method:"POST", body: JSON.stringify(actorBody({tipo}))});
+    await cargarTimeline();
+  }catch(e){ toast("No se pudo registrar la reacción"); }
+}
+
+function pintarTimeline(){
+  const cont = document.getElementById("timeline-container");
+  let items = timelineCache;
+  document.getElementById("hitos-count").textContent = items.filter(x=>x.tipo==='hito').length + " hitos";
+  if(STATE.filtroTipo!=="todos") items = items.filter(x=>x.tipo===STATE.filtroTipo);
+  if(STATE.filtroColor!=="todos") items = items.filter(x=>x.triage===STATE.filtroColor);
+  items = [...items].sort((a,b)=> new Date(a.fecha)-new Date(b.fecha) || TRIAGE[a.triage].orden - TRIAGE[b.triage].orden);
+  document.getElementById("timeline-empty").hidden = items.length>0;
+  cont.innerHTML = items.map(h=>{
+    const cfg = TRIAGE[h.triage];
+    const today = new Date(); today.setHours(0,0,0,0);
+    const due = new Date(h.fecha+"T12:00:00");
+    const diff = Math.round((due-today)/86400000);
+    const dueClass = diff<0 ? "text-rose-400" : diff===0 ? "text-amber-300" : "text-sky-300";
+    const dueText = diff<0 ? `Vencido hace ${Math.abs(diff)}d` : diff===0 ? "Vence hoy" : `Vence ${h.fecha}`;
+    const react = h.react || {like:0,dislike:0,ok:0,heart:0,done:false};
+    const estado = h.tipo==='hito' ? (react.done ? "Cumplido" : "Pendiente") : (h.revisado ? "Revisado" : "Nuevo, sin revisar");
+    return `<div class="bg-slate-900/70 border ${h.tipo==='hito' && !react.done ? 'border-rose-500/40':'border-slate-800'} rounded-2xl p-4 triage-card fade-in">
+      <div class="flex justify-between gap-2 items-start flex-wrap">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full inline-block" style="background:${cfg.color}"></span>
+          <p class="text-sm font-black text-white">${esc(h.titulo)}</p>
+          ${h.tipo==='hito'?'<span class="text-[9px] font-bold uppercase bg-slate-700 text-slate-200 rounded px-1.5 py-0.5">Hito</span>':''}
+          ${!h.revisado?'<span class="text-[9px] font-bold uppercase bg-rose-600 text-white rounded-full px-2 py-0.5">Nuevo</span>':''}
+        </div>
+        <span class="text-[10px] font-mono font-bold ${dueClass}">${dueText}</span>
+      </div>
+      ${h.desc?`<p class="text-xs text-slate-400 mt-1">${esc(h.desc)}</p>`:""}
+      <p class="text-[11px] mt-2" style="color:${cfg.color}">${h.triage} · vence ${h.fecha} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
+      ${h.archivoNombre ? `<a href="${h.archivoData}" download="${esc(h.archivoNombre)}" class="text-[10px] text-indigo-300 underline mt-1 inline-block"><i class="fa-solid fa-paperclip"></i> ${esc(h.archivoNombre)}</a>` : ""}
+      <div class="flex items-center gap-3 mt-3 text-sm">
+        <span class="react-btn text-slate-500" style="color:${cfg.color}" title="Prioridad">❗</span>
+        <span class="react-btn text-slate-500 ${react.like?'active text-emerald-400':''}" onclick="reaccionar(${h.id},'like')" title="Me parece bien">👍<sup class="text-[9px]">${react.like||''}</sup></span>
+        <span class="react-btn text-slate-500 ${react.dislike?'active text-rose-400':''}" onclick="reaccionar(${h.id},'dislike')" title="No corresponde">👎<sup class="text-[9px]">${react.dislike||''}</sup></span>
+        <span class="react-btn text-slate-500 ${react.ok?'active text-amber-300':''}" onclick="reaccionar(${h.id},'ok')" title="Acuso recibo">🤙<sup class="text-[9px]">${react.ok||''}</sup></span>
+        <span class="react-btn text-slate-500 ${react.done?'active text-emerald-400':''}" onclick="reaccionar(${h.id},'done')" title="Marcar cumplido"><i class="fa-solid fa-circle-check"></i></span>
+        <span class="react-btn text-slate-500 ${react.heart?'active text-pink-400':''}" onclick="reaccionar(${h.id},'heart')" title="Agradecer">♥<sup class="text-[9px]">${react.heart||''}</sup></span>
+        <span class="text-[10px] text-slate-500 ml-auto">${estado}</span>
+      </div>
+      <div class="flex gap-2 mt-3 flex-wrap">
+        <button onclick="abrirMinuta(${h.id})" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[10px] font-semibold"><i class="fa-solid fa-file-lines mr-1"></i>Solicitar Minuta</button>
+        <button onclick="abrirChat(${h.id})" class="bg-sky-600/20 text-sky-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold"><i class="fa-solid fa-comments mr-1"></i>Chat${(h.chat&&h.chat.length)?` (${h.chat.length})`:''}</button>
+        <button onclick="abrirAlertar(${h.id})" class="bg-amber-600/20 text-amber-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold">🔔 Alertar${(h.alertas&&h.alertas.length)?` (${h.alertas.length})`:''}</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+/* ---------- modal registrar ---------- */
+let quadSel = "Rojo";
+async function abrirModal(){
+  document.getElementById("modal-triage").classList.remove("hidden");
+  document.getElementById("f-tipo").value="tarea";
+  document.getElementById("f-titulo").value="";
+  document.getElementById("f-desc").value="";
+  document.getElementById("f-archivo").value="";
+  archivoPendiente = null;
+  document.getElementById("f-fecha").value=new Date().toISOString().slice(0,10);
+  const usuarios = await api(`/api/colegios/${STATE.colegioId}/usuarios`);
+  const opciones = usuarios.length ? usuarios.map(u=>`<option value="${esc(u.nombre)}">${esc(u.nombre)} · ${esc(u.perfil)}</option>`).join("") : PERFILES.map(p=>`<option>${esc(p)}</option>`).join("");
+  document.getElementById("f-responsable").innerHTML = opciones;
+  document.getElementById("f-copiar").innerHTML = opciones;
+  document.getElementById("f-responsable").value = STATE.persona;
+  setQuad("Rojo");
+}
+function cerrarModal(){ document.getElementById("modal-triage").classList.add("hidden"); }
+function setQuad(q){
+  quadSel = q;
+  document.querySelectorAll(".quad-cell").forEach(c=>c.classList.toggle("selected", c.dataset.q===q));
+  const cfg = TRIAGE[q];
+  document.getElementById("quad-preview").innerHTML = `<b style="color:${cfg.color}">${cfg.icon} ${q} · ${cfg.nombre}</b> · ${cfg.desc}`;
+}
+document.addEventListener("change", e=>{
+  if(e.target.id==="f-archivo"){
+    const file = e.target.files[0];
+    if(!file){ archivoPendiente=null; return; }
+    if(file.size > 4*1024*1024){ toast("El documento debe pesar menos de 4MB"); e.target.value=""; archivoPendiente=null; return; }
+    const reader = new FileReader();
+    reader.onload = ()=>{ archivoPendiente = {nombre:file.name, data:reader.result}; };
+    reader.readAsDataURL(file);
+  }
+});
+async function registrar(){
+  const titulo = document.getElementById("f-titulo").value.trim();
+  if(!titulo){ toast("Ingrese la situación / acción / hallazgo"); return; }
+  const body = actorBody({
+    tipo: document.getElementById("f-tipo").value,
+    triage: quadSel,
+    titulo,
+    desc: document.getElementById("f-desc").value.trim(),
+    fecha: document.getElementById("f-fecha").value || new Date().toISOString().slice(0,10),
+    responsable: document.getElementById("f-responsable").value,
+    copiados: [...document.getElementById("f-copiar").selectedOptions].map(o=>o.value),
+    archivoNombre: archivoPendiente ? archivoPendiente.nombre : null,
+    archivoData: archivoPendiente ? archivoPendiente.data : null
+  });
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/timeline`, {method:"POST", body: JSON.stringify(body)});
+    cerrarModal();
+    await cargarTimeline();
+    toast(`Incorporado al Timeline: ${TRIAGE[quadSel].icon} ${TRIAGE[quadSel].nombre}${body.archivoNombre?' · documento almacenado':''}`);
+  }catch(e){ toast("No se pudo registrar (revise su conexión)"); }
+}
+
+/* ---------- minuta ---------- */
+let minutaItemActual = null;
+function cerrarModalId(id){ document.getElementById(id).classList.add("hidden"); }
+function textoMinuta(h){
+  const cfg = TRIAGE[h.triage];
+  const lineas = [
+    `MINUTA · TRIAGE GADUAI`,
+    `Colegio: ${STATE.colegio.nombre}`,
+    `Tipo: ${h.tipo==='hito'?'Hito':'Tarea'} · Triage ${h.triage} (${cfg.nombre})`,
+    `Título: ${h.titulo}`,
+    `Fecha compromiso: ${h.fecha}`,
+    `${h.tipo==='hito'?'Creado por':'Registrado por'}: ${h.persona} (${h.perfil})`,
+    `Responsable: ${h.responsable||'—'}`,
+    h.copiados && h.copiados.length ? `Copiado a: ${h.copiados.join(', ')}` : null,
+    ``, `Detalle:`, h.desc || '(sin detalle adicional)', ``,
+    `Recomendación TRIAGE: ${cfg.desc}.`,
+    h.archivoNombre ? `Documento adjunto: ${h.archivoNombre}` : null,
+    ``, `Historial de chat (${(h.chat||[]).length}):`,
+    ...(h.chat && h.chat.length ? h.chat.map(m=>`  [${m.fecha}] ${m.autor}: ${m.texto}`) : ['  (sin mensajes)']),
+    ``, `Alertas enviadas (${(h.alertas||[]).length}):`,
+    ...(h.alertas && h.alertas.length ? h.alertas.map(a=>`  [${a.fecha}] ${a.autor} → ${a.destinatario}${a.mensaje?': '+a.mensaje:''}`) : ['  (sin alertas)']),
+    ``, `Generado: ${new Date().toLocaleString('es-CL')}`
+  ].filter(x=>x!==null);
+  return lineas.join("\n");
+}
+function abrirMinuta(id){
+  const item = timelineCache.find(x=>x.id===id);
+  if(!item) return;
+  minutaItemActual = item;
+  document.getElementById("minuta-texto").textContent = textoMinuta(item);
+  document.getElementById("modal-minuta").classList.remove("hidden");
+}
+function descargarMinuta(){
+  if(!minutaItemActual) return;
+  const blob = new Blob([textoMinuta(minutaItemActual)], {type:"text/plain;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `minuta-${slug(minutaItemActual.titulo)||minutaItemActual.id}.txt`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  toast("Minuta descargada");
+}
+
+/* ---------- chat ---------- */
+let chatItemActual = null;
+function abrirChat(id){
+  const item = timelineCache.find(x=>x.id===id);
+  if(!item) return;
+  chatItemActual = id;
+  document.getElementById("chat-item-titulo").textContent = item.titulo + " · " + STATE.colegio.nombre;
+  renderChatMensajes(item);
+  document.getElementById("modal-chat").classList.remove("hidden");
+  document.getElementById("chat-input").value = "";
+  document.getElementById("chat-input").focus();
+}
+function renderChatMensajes(item){
+  const cont = document.getElementById("chat-mensajes");
+  cont.innerHTML = (item.chat||[]).map(m=>`
+    <div class="text-[11px] ${m.autor===STATE.persona?'text-right':''}">
+      <div class="inline-block ${m.autor===STATE.persona?'bg-indigo-600/30':'bg-slate-800'} rounded-xl px-3 py-2 max-w-[85%]">
+        <p class="font-bold text-white">${esc(m.autor)} <span class="text-[9px] text-slate-500 font-normal">${esc(m.perfil)}</span></p>
+        <p class="text-slate-300">${esc(m.texto)}</p>
+      </div>
+      <p class="text-[9px] text-slate-600">${m.fecha}</p>
+    </div>`).join("") || '<p class="text-[10px] text-slate-600 text-center py-6">Sin mensajes todavía.</p>';
+  cont.scrollTop = cont.scrollHeight;
+}
+async function enviarChat(){
+  const texto = document.getElementById("chat-input").value.trim();
+  if(!texto || !chatItemActual) return;
+  document.getElementById("chat-input").value = "";
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/timeline/${chatItemActual}/chat`, {method:"POST", body: JSON.stringify(actorBody({texto}))});
+    await cargarTimeline();
+    const item = timelineCache.find(x=>x.id===chatItemActual);
+    if(item) renderChatMensajes(item);
+  }catch(e){ toast("No se pudo enviar el mensaje"); }
+}
+
+/* ---------- alertas ---------- */
+let alertarItemActual = null;
+function abrirAlertar(id){
+  const item = timelineCache.find(x=>x.id===id);
+  if(!item) return;
+  alertarItemActual = id;
+  document.getElementById("alertar-destinatario").textContent = `Se alertará a: ${item.responsable || '—'} · ${item.titulo}`;
+  document.getElementById("alertar-msg").value = "";
+  document.getElementById("alertar-historial").innerHTML = (item.alertas||[]).map(a=>`<p class="text-[10px] text-slate-500">🔔 ${a.fecha} · ${esc(a.autor)} → ${esc(a.destinatario)}${a.mensaje?': '+esc(a.mensaje):''}</p>`).join("") || '<p class="text-[10px] text-slate-600">Sin alertas previas para este registro.</p>';
+  document.getElementById("modal-alertar").classList.remove("hidden");
+}
+async function enviarAlerta(){
+  if(!alertarItemActual) return;
+  const item = timelineCache.find(x=>x.id===alertarItemActual);
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/timeline/${alertarItemActual}/alertar`, {method:"POST", body: JSON.stringify(actorBody({destinatario:item.responsable||'—', mensaje:document.getElementById("alertar-msg").value.trim()}))});
+    cerrarModalId("modal-alertar");
+    await cargarTimeline();
+    toast(`Alerta enviada a ${item.responsable||'—'}`);
+  }catch(e){ toast("No se pudo enviar la alerta"); }
+}
+function actualizarBadgeAlertas(){
+  let n = 0;
+  timelineCache.forEach(h=>(h.alertas||[]).forEach(a=>{ if(a.destinatario===STATE.persona && !a.leida) n++; }));
+  document.getElementById("alertas-count").textContent = n;
+}
+async function abrirAlertas(){
+  const propias = [];
+  timelineCache.forEach(h=>(h.alertas||[]).forEach(a=>{ if(a.destinatario===STATE.persona) propias.push({...a, item:h}); }));
+  propias.sort((a,b)=> new Date(b.fecha)-new Date(a.fecha));
+  document.getElementById("lista-alertas").innerHTML = propias.map(a=>`
+    <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
+      <p class="text-[10px] text-amber-300 font-bold">🔔 ${esc(a.autor)} te alertó · ${a.fecha}</p>
+      <p class="text-xs font-bold text-white mt-1">${esc(a.item.titulo)}</p>
+      ${a.mensaje?`<p class="text-[11px] text-slate-400 mt-1">${esc(a.mensaje)}</p>`:''}
+      <button onclick="cerrarModalId('modal-alertas');abrirChat(${a.item.id})" class="text-[10px] text-sky-300 mt-2"><i class="fa-solid fa-comments mr-1"></i>Responder en el chat</button>
+    </div>`).join("") || '<p class="text-[11px] text-slate-500 text-center py-8">No tienes alertas.</p>';
+  document.getElementById("modal-alertas").classList.remove("hidden");
+  try{ await api(`/api/colegios/${STATE.colegioId}/alertas/marcar-leidas`, {method:"POST", body: JSON.stringify(actorBody())}); }catch(e){}
+  await cargarTimeline();
+}
+
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas"].forEach(cerrarModalId); } });
+init();
+</script>
+</body>
+</html>
