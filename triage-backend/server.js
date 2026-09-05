@@ -9,6 +9,7 @@
  * hashing todavía — ver README "Seguridad pendiente" antes de vender esto a un colegio real).
  */
 const path = require("path");
+const crypto = require("crypto");
 const express = require("express");
 const { Pool } = require("pg");
 
@@ -17,6 +18,23 @@ const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   console.error("Falta la variable de entorno DATABASE_URL");
   process.exit(1);
+}
+// Clave compartida con el panel de administrador de GADUAI: solo ese backend puede crear
+// colegios nuevos o buscar la lista de colegios. Sin esto, cualquiera con el link público
+// podía activar colegios "fantasma" con clave maestra fija — ver README.
+const ADMIN_SETUP_KEY = process.env.ADMIN_SETUP_KEY;
+if (!ADMIN_SETUP_KEY) {
+  console.error("Falta la variable de entorno ADMIN_SETUP_KEY");
+  process.exit(1);
+}
+function requireAdminKey(req, res, next) {
+  if (req.header("X-Admin-Key") !== ADMIN_SETUP_KEY) {
+    return res.status(403).json({ error: "no_autorizado" });
+  }
+  next();
+}
+function claveAleatoria() {
+  return crypto.randomBytes(6).toString("base64url"); // ej. "aB3xQ9-k" — legible y suficiente para un MVP
 }
 const pool = new Pool({
   connectionString,
@@ -63,7 +81,9 @@ function asyncRoute(fn) {
 }
 
 // ---------- colegios ----------
-app.post("/api/colegios", asyncRoute(async (req, res) => {
+// Creación y búsqueda quedan solo para el panel de administrador de GADUAI (ver
+// requireAdminKey) — un colegio ya no puede autoactivarse desde la pantalla pública.
+app.post("/api/colegios", requireAdminKey, asyncRoute(async (req, res) => {
   const { nombre, comuna, correoMaster } = req.body || {};
   if (!nombre || !nombre.trim()) return res.status(400).json({ error: "nombre_requerido" });
   const id = slug(nombre) || ("colegio-" + Date.now());
@@ -71,21 +91,24 @@ app.post("/api/colegios", asyncRoute(async (req, res) => {
   if (existe.rows.length) return res.status(409).json({ error: "colegio_existente", id });
 
   const correo = (correoMaster && correoMaster.trim()) || `director@${id}.cl`;
+  const clave = claveAleatoria();
   await pool.query("insert into colegios (id, nombre, comuna) values ($1,$2,$3)", [id, nombre.trim(), comuna || null]);
   await pool.query(
     "insert into usuarios (colegio_id, nombre, correo, clave, perfil) values ($1,$2,$3,$4,$5)",
-    [id, "Director ejecutivo", correo, "123456", PERFIL_MASTER]
+    [id, "Director ejecutivo", correo, clave, PERFIL_MASTER]
   );
-  res.json({ id, nombre: nombre.trim(), comuna: comuna || null, master: { correo, clave: "123456" } });
+  res.json({ id, nombre: nombre.trim(), comuna: comuna || null, master: { correo, clave } });
 }));
 
+// Pública a propósito: es la que usa el link con ?colegio=<id> para mostrar el nombre antes
+// de loguearse. No expone la lista completa, solo un colegio puntual si se sabe su id.
 app.get("/api/colegios/:id", asyncRoute(async (req, res) => {
   const r = await pool.query("select id, nombre, comuna from colegios where id=$1", [req.params.id]);
   if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
   res.json(r.rows[0]);
 }));
 
-app.get("/api/colegios", asyncRoute(async (req, res) => {
+app.get("/api/colegios", requireAdminKey, asyncRoute(async (req, res) => {
   const q = (req.query.q || "").trim();
   if (!q) return res.json([]); // no listamos todos los colegios por defecto (privacidad multi-tenant)
   const r = await pool.query(

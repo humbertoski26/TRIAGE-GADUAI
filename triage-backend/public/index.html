@@ -64,39 +64,10 @@
       </div>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6">
-      <button onclick="mostrarSetup()" class="w-full gaduai-gradient text-white text-sm font-bold py-3 rounded-xl mb-4"><i class="fa-solid fa-plus mr-1"></i> Activar TRIAGE GADUAI en un colegio nuevo</button>
-      <div class="border-t border-slate-800 pt-4">
-        <label class="block text-[11px] font-semibold text-slate-400 mb-1">¿Ya tienes un colegio activado? Búscalo por nombre</label>
-        <div class="flex gap-2">
-          <input id="landing-buscar" placeholder="Ej. Colegio San Andrés" class="flex-1 bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 outline-none focus:ring-2 gaduai-focus">
-          <button onclick="buscarColegio()" class="bg-slate-800 text-white px-4 rounded-xl"><i class="fa-solid fa-magnifying-glass"></i></button>
-        </div>
-        <div id="landing-resultados" class="mt-3 space-y-1.5"></div>
-      </div>
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center">
+      <p id="landing-mensaje" class="text-sm text-slate-300">El acceso a TRIAGE GADUAI es por invitación de tu colegio: usa el link que te compartió tu administrador GADUAI para entrar directo a tu establecimiento.</p>
+      <p class="text-[11px] text-slate-500 mt-3">¿No tienes ese link, o tu colegio todavía no está activado? Escribe a <a href="mailto:soporte@gaduai.cl" class="text-cyan-400">soporte@gaduai.cl</a>.</p>
     </div>
-  </div>
-</div>
-
-<!-- ============ PANTALLA 1: CONFIGURACIÓN DEL COLEGIO ============ -->
-<div id="pantalla-setup" class="min-h-screen flex items-center justify-center p-4" hidden>
-  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 fade-in">
-    <div class="flex items-center gap-3 mb-1">
-      <div class="w-11 h-11 rounded-2xl gaduai-gradient flex items-center justify-center text-white text-lg"><i class="fa-solid fa-list-check"></i></div>
-      <div>
-        <h1 class="text-lg font-black text-white leading-tight">TRIAGE GADUAI</h1>
-        <p class="text-[11px] text-slate-500">Configuración inicial del establecimiento</p>
-      </div>
-    </div>
-    <p class="text-xs text-slate-400 mt-4 mb-5">Este producto funciona en cualquier colegio: complete estos datos una sola vez para activar TRIAGE GADUAI en su establecimiento. Al activarlo se crea automáticamente el perfil <b>Director ejecutivo/máster</b>, desde donde podrá agregar al resto de los usuarios.</p>
-    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Nombre del colegio / institución</label>
-    <input id="setup-colegio" placeholder="Ej. Colegio San Andrés" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-4 outline-none focus:ring-2 gaduai-focus">
-    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Comuna / ciudad (opcional)</label>
-    <input id="setup-comuna" placeholder="Ej. Puente Alto" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-4 outline-none focus:ring-2 gaduai-focus">
-    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Correo del Director ejecutivo/máster</label>
-    <input id="setup-correo" placeholder="Ej. director@colegio.cl" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-5 outline-none focus:ring-2 gaduai-focus">
-    <button onclick="crearColegio()" class="w-full gaduai-gradient text-white text-sm font-bold py-3 rounded-xl"><i class="fa-solid fa-right-to-bracket mr-1"></i> Activar TRIAGE GADUAI en este colegio</button>
-    <button onclick="mostrarLanding()" class="w-full text-center text-[11px] text-slate-500 mt-4 hover:text-slate-300">Volver</button>
   </div>
 </div>
 
@@ -345,7 +316,7 @@ let pollTimer = null;
 function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.hidden=false; t.classList.remove("hidden"); clearTimeout(window._toastT); window._toastT=setTimeout(()=>t.classList.add("hidden"),2800); }
 function slug(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,""); }
-function pantallas(){ return ["pantalla-landing","pantalla-setup","pantalla-login","pantalla-app"]; }
+function pantallas(){ return ["pantalla-landing","pantalla-login","pantalla-app"]; }
 function mostrarPantalla(id){ pantallas().forEach(p=>document.getElementById(p).hidden = p!==id); }
 
 async function api(path, opts){
@@ -369,64 +340,45 @@ function guardarSesion(){
 function borrarSesion(){ localStorage.removeItem("triageGaduai.sesion"); }
 
 /* ---------- navegación ---------- */
-function mostrarLanding(){ mostrarPantalla("pantalla-landing"); document.getElementById("landing-resultados").innerHTML=""; document.getElementById("landing-buscar").value=""; }
-function mostrarSetup(){ mostrarPantalla("pantalla-setup"); }
-
-async function buscarColegio(){
-  const q = document.getElementById("landing-buscar").value.trim();
-  const cont = document.getElementById("landing-resultados");
-  if(!q){ cont.innerHTML=""; return; }
-  cont.innerHTML = '<p class="text-[10px] text-slate-500">Buscando…</p>';
-  try{
-    const resultados = await api("/api/colegios?q=" + encodeURIComponent(q));
-    cont.innerHTML = resultados.length ? resultados.map(c=>`<button onclick="irALogin('${c.id}')" class="w-full text-left bg-slate-800 hover:bg-slate-700 text-white text-xs rounded-xl p-3">${esc(c.nombre)}${c.comuna?` · ${esc(c.comuna)}`:''}</button>`).join("") : '<p class="text-[10px] text-slate-500">No se encontró ningún colegio activado con ese nombre.</p>';
-  }catch(e){ cont.innerHTML = '<p class="text-[10px] text-rose-400">No se pudo buscar (revise su conexión).</p>'; }
-}
-async function irALogin(id){
-  try{
-    const colegio = await api("/api/colegios/" + id);
-    entrarColegioEnUI(colegio);
-    mostrarPantalla("pantalla-login");
-  }catch(e){ toast("No se pudo abrir ese colegio"); }
-}
+function mostrarLanding(){ mostrarPantalla("pantalla-landing"); }
 function entrarColegioEnUI(colegio){
   STATE.colegio = colegio; STATE.colegioId = colegio.id;
   document.getElementById("login-colegio-label").textContent = colegio.nombre + (colegio.comuna?` · ${colegio.comuna}`:"");
 }
 
-/* ---------- arranque: retoma sesión guardada si sigue siendo válida ---------- */
+/* ---------- arranque ----------
+   Cada colegio entra por un link propio (?colegio=<id>, el que arma el panel de admin de
+   GADUAI al habilitar TRIAGE) que salta directo a su login — ya no existe una pantalla
+   pública para buscar o crear colegios. Si además hay sesión guardada en este navegador
+   para ese mismo colegio, se reanuda sin pedir clave de nuevo. */
 async function init(){
+  const colegioParam = new URLSearchParams(location.search).get("colegio");
   const raw = localStorage.getItem("triageGaduai.sesion");
-  if(raw){
+  const sesion = raw ? JSON.parse(raw) : null;
+
+  if(sesion && (!colegioParam || colegioParam === sesion.colegioId)){
     try{
-      const s = JSON.parse(raw);
-      const colegio = await api("/api/colegios/" + s.colegioId);
-      const r = await api(`/api/colegios/${s.colegioId}/login`, {method:"POST", body: JSON.stringify({correo:s.correo, clave:s.clave})});
+      const colegio = await api("/api/colegios/" + sesion.colegioId);
+      const r = await api(`/api/colegios/${sesion.colegioId}/login`, {method:"POST", body: JSON.stringify({correo:sesion.correo, clave:sesion.clave})});
       STATE.colegio = colegio; STATE.colegioId = colegio.id;
-      STATE.correo = s.correo; STATE.clave = s.clave;
+      STATE.correo = sesion.correo; STATE.clave = sesion.clave;
       STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster;
       await entrarApp();
       return;
     }catch(e){ borrarSesion(); }
   }
-  mostrarLanding();
-}
 
-async function crearColegio(){
-  const nombre = document.getElementById("setup-colegio").value.trim();
-  const comuna = document.getElementById("setup-comuna").value.trim();
-  const correoMaster = document.getElementById("setup-correo").value.trim();
-  if(!nombre){ toast("Ingrese el nombre del colegio"); return; }
-  try{
-    const r = await api("/api/colegios", {method:"POST", body: JSON.stringify({nombre, comuna, correoMaster})});
-    entrarColegioEnUI({id:r.id, nombre:r.nombre, comuna:r.comuna});
-    mostrarPantalla("pantalla-login");
-    document.getElementById("login-correo").value = r.master.correo;
-    toast(`Colegio activado. Acceso máster: ${r.master.correo} / clave ${r.master.clave}`);
-  }catch(e){
-    if(e.data && e.data.error==="colegio_existente") toast("Ya existe un colegio activado con ese nombre. Búsquelo desde la portada.");
-    else toast("No se pudo activar el colegio (revise su conexión)");
+  if(colegioParam){
+    try{
+      const colegio = await api("/api/colegios/" + colegioParam);
+      entrarColegioEnUI(colegio);
+      mostrarPantalla("pantalla-login");
+      return;
+    }catch(e){
+      document.getElementById("landing-mensaje").textContent = "No encontramos tu colegio con ese link. Pide a tu administrador GADUAI que revise el link desde el panel.";
+    }
   }
+  mostrarLanding();
 }
 
 async function ingresar(){

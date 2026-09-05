@@ -28,7 +28,18 @@ Abre `http://localhost:3000`.
    - Build Command: `npm install`
    - Start Command: `npm start`
    - Variable de entorno `DATABASE_URL`: la "Internal Database URL" del Postgres creado.
+   - Variable de entorno `ADMIN_SETUP_KEY`: una clave secreta cualquiera, compartida con
+     `gaduai-portal` (mismo valor en la variable `TRIAGE_ADMIN_KEY` de ese servicio). Sin
+     esto el servidor no arranca — protege la creación de colegios.
 4. Al primer arranque, el propio servidor crea las tablas (no hace falta correr nada más).
+
+## Cómo se activa un colegio
+
+Ya no existe una pantalla pública de "crear colegio": la creación vive en el panel de
+administrador de GADUAI (`gaduai-portal`), que llama a `POST /api/colegios` acá con la
+`ADMIN_SETUP_KEY` en el header `X-Admin-Key`. El link que recibe cada colegio incluye su id
+(`?colegio=<id>`), así el frontend salta directo al login de ese colegio sin pasar por
+ninguna pantalla de configuración.
 
 ## Seguridad pendiente antes de vender esto a un colegio real
 
