@@ -100,6 +100,19 @@ app.post("/api/colegios", requireAdminKey, asyncRoute(async (req, res) => {
   res.json({ id, nombre: nombre.trim(), comuna: comuna || null, master: { correo, clave } });
 }));
 
+// Solo admin: pega/actualiza el link al despliegue de Relacionai de este colegio, para el
+// botón cruzado del header. Se hace aparte de la creación porque Relacionai normalmente se
+// despliega después (o en paralelo) y no siempre se sabe su URL todavía al crear el colegio.
+app.post("/api/colegios/:id/relacionai-url", requireAdminKey, asyncRoute(async (req, res) => {
+  const { url } = req.body || {};
+  const r = await pool.query(
+    "update colegios set relacionai_url=$2 where id=$1 returning id, nombre, comuna, relacionai_url",
+    [req.params.id, (url || "").trim() || null]
+  );
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  res.json(r.rows[0]);
+}));
+
 // Pública a propósito: es la que usa el link con ?colegio=<id> para mostrar el nombre antes
 // de loguearse. No expone la lista completa, solo un colegio puntual si se sabe su id.
 app.get("/api/colegios/:id", asyncRoute(async (req, res) => {
