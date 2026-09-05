@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>TRIAGE GADUAI</title>
+<title>GADUAI</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
 <style>
   :root{color-scheme:dark}
   html,body{background:#020617;margin:0}
@@ -41,9 +42,9 @@
   <div class="w-full max-w-lg fade-in">
     <div class="flex flex-col items-center text-center mb-8">
       <div class="w-20 h-20 rounded-full logo-orb flex items-center justify-center text-white text-3xl mb-4"><i class="fa-solid fa-list-check"></i></div>
-      <h1 class="text-3xl font-black text-white leading-tight">TRIAGE <span class="text-cyan-400">GADUAI</span></h1>
+      <h1 class="text-3xl font-black text-white leading-tight">GADU<span class="text-cyan-400">AI</span></h1>
       <p class="text-sm font-bold text-slate-300 mt-1">Sistema de Inteligencia Organizacional para colegios</p>
-      <p class="text-[11px] uppercase tracking-widest text-slate-500 mt-2">Timeline · Perfiles · Triage inteligente</p>
+      <p class="text-[11px] uppercase tracking-widest text-slate-500 mt-2">Timeline · Perfiles · Triage inteligente · Entrevista formal</p>
     </div>
 
     <div class="grid grid-cols-3 gap-3 mb-8">
@@ -65,7 +66,7 @@
     </div>
 
     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center">
-      <p id="landing-mensaje" class="text-sm text-slate-300">El acceso a TRIAGE GADUAI es por invitación de tu colegio: usa el link que te compartió tu administrador GADUAI para entrar directo a tu establecimiento.</p>
+      <p id="landing-mensaje" class="text-sm text-slate-300">El acceso a GADUAI es por invitación de tu colegio: usa el link que te compartió tu administrador GADUAI para entrar directo a tu establecimiento.</p>
       <p class="text-[11px] text-slate-500 mt-3">¿No tienes ese link, o tu colegio todavía no está activado? Escribe a <a href="mailto:soporte@gaduai.cl" class="text-cyan-400">soporte@gaduai.cl</a>.</p>
     </div>
   </div>
@@ -107,13 +108,15 @@
         <button onclick="toggleMenu()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-bars"></i></button>
         <div class="min-w-0">
           <p class="text-[10px] uppercase tracking-wide text-slate-500 truncate">Timeline del establecimiento · <span id="app-perfil-label">Perfil</span></p>
-          <p class="text-sm font-black text-white truncate">TRIAGE GADUAI · <span id="app-colegio-label"></span></p>
+          <p class="text-sm font-black text-white truncate">GADUAI · <span id="app-colegio-label"></span></p>
         </div>
       </div>
       <div class="flex items-center gap-2">
         <span id="sync-indicator" class="text-[10px] text-emerald-400" title="Sincronizado con el servidor"><i class="fa-solid fa-cloud"></i></span>
         <span id="hitos-count" class="text-[11px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-3 py-1">0 hitos</span>
         <button onclick="abrirAlertas()" class="relative text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1"><i class="fa-solid fa-bell"></i> <span id="alertas-count">0</span></button>
+        <button onclick="abrirEntrevistaFormal()" title="Entrevista formal" class="text-[11px] font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 rounded-full px-3 py-1"><i class="fa-solid fa-file-signature"></i></button>
+        <a id="btn-ir-relacionai" href="#" target="_blank" rel="noopener" hidden title="Ir a Relacionai" class="text-[11px] font-bold text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-1"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
         <button onclick="cerrarSesion()" class="text-[11px] text-slate-500 hover:text-rose-400"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
       </div>
     </div>
@@ -279,6 +282,35 @@
   </div>
 </div>
 
+
+<!-- ============ MODAL: ENTREVISTA FORMAL (disponible a todos los perfiles) ============ -->
+<div id="modal-entrevista" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-4">
+      <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-file-signature text-indigo-300"></i> Entrevista formal</h3>
+      <button onclick="cerrarModalId('modal-entrevista')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <input id="ge-nombre" placeholder="Nombre entrevistado/a" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
+      <input id="ge-correo" placeholder="Correo" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
+      <input id="ge-fono" placeholder="Fono" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
+      <input id="ge-cargo" placeholder="Cargo / rol" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
+      <input id="ge-curso" placeholder="Curso (si aplica)" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
+      <input id="ge-fecha" type="date" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
+      <input id="ge-hora" type="time" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
+      <input id="ge-entrevistador" placeholder="Entrevistador/a" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
+      <textarea id="ge-motivo" placeholder="Motivo de la entrevista" rows="2" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
+      <textarea id="ge-desarrollo" placeholder="Desarrollo de la entrevista" rows="3" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
+      <textarea id="ge-compromisos" placeholder="Compromisos / acuerdos" rows="2" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
+    </div>
+    <button onclick="guardarEntrevista()" class="w-full brand-gradient text-white text-xs font-bold py-2.5 rounded-xl mt-2"><i class="fa-solid fa-file-word mr-1"></i> Guardar y descargar .docx</button>
+    <div class="border-t border-slate-800 mt-4 pt-3">
+      <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-2">Historial de este colegio</p>
+      <div id="lista-entrevistas" class="space-y-1.5 max-h-40 overflow-y-auto"></div>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="hidden fixed bottom-28 md:bottom-8 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl z-[200] fade-in max-w-[90vw] text-center"></div>
 
 <script>
@@ -399,6 +431,9 @@ async function entrarApp(){
   document.getElementById("app-perfil-label").textContent = STATE.perfil;
   document.getElementById("app-colegio-label").textContent = STATE.colegio.nombre;
   document.getElementById("btn-usuarios").hidden = !STATE.isMaster;
+  const btnRelacionai = document.getElementById("btn-ir-relacionai");
+  if(STATE.colegio.relacionai_url){ btnRelacionai.href = STATE.colegio.relacionai_url; btnRelacionai.hidden = false; }
+  else { btnRelacionai.hidden = true; }
   await Promise.all([renderMenuPerfiles(), cargarTimeline()]);
   if(pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(cargarTimeline, 5000); // sincronización con otros dispositivos
@@ -480,7 +515,8 @@ function filtrarColor(v){
 
 async function cargarTimeline(){
   try{
-    timelineCache = await api(`/api/colegios/${STATE.colegioId}/timeline`);
+    const q = new URLSearchParams({perfil: STATE.perfil||"", persona: STATE.persona||""});
+    timelineCache = await api(`/api/colegios/${STATE.colegioId}/timeline?${q}`);
     document.getElementById("sync-indicator").innerHTML = '<i class="fa-solid fa-cloud"></i>';
     document.getElementById("sync-indicator").className = "text-[10px] text-emerald-400";
     pintarTimeline();
@@ -723,7 +759,73 @@ async function abrirAlertas(){
   await cargarTimeline();
 }
 
-document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas"].forEach(cerrarModalId); } });
+/* ---------- entrevista formal (disponible a todos los perfiles) ---------- */
+async function abrirEntrevistaFormal(){
+  ["ge-nombre","ge-correo","ge-fono","ge-cargo","ge-curso","ge-fecha","ge-hora","ge-motivo","ge-desarrollo","ge-compromisos"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("ge-entrevistador").value = STATE.persona||"";
+  await renderHistorialEntrevistas();
+  document.getElementById("modal-entrevista").classList.remove("hidden");
+}
+async function renderHistorialEntrevistas(){
+  const lista = document.getElementById("lista-entrevistas");
+  try{
+    const entrevistas = await api(`/api/colegios/${STATE.colegioId}/entrevistas`);
+    lista.innerHTML = entrevistas.map(e=>`
+      <div class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg p-2">
+        <div class="min-w-0">
+          <p class="text-[11px] font-bold text-white truncate">${esc(e.nombre_entrevistado)}</p>
+          <p class="text-[9px] text-slate-500 truncate">${e.fecha||'—'} · ${esc(e.entrevistador)} · ${esc(e.perfil_creador)}</p>
+        </div>
+        <button onclick='descargarEntrevista(${JSON.stringify(e).replace(/'/g,"&#39;")})' class="text-cyan-300 hover:text-cyan-200 text-xs px-2"><i class="fa-solid fa-download"></i></button>
+      </div>`).join("") || '<p class="text-[10px] text-slate-600">Aún no hay entrevistas registradas.</p>';
+  }catch(e){ lista.innerHTML = '<p class="text-[10px] text-rose-400">No se pudo cargar el historial.</p>'; }
+}
+function entrevistaHtmlDoc(e){
+  return `<html><head><meta charset="utf-8"></head><body style="font-family:Calibri,Arial,sans-serif;">
+    <h2 style="text-align:center;">REGISTRO DE ENTREVISTA</h2>
+    <p><b>Colegio:</b> ${esc(STATE.colegio.nombre)}</p>
+    <p><b>Fecha:</b> ${e.fecha||'—'} &nbsp; <b>Hora:</b> ${e.hora||'—'}</p>
+    <p><b>Entrevistado/a:</b> ${esc(e.nombre_entrevistado)} &nbsp; <b>Cargo:</b> ${esc(e.cargo||'—')}</p>
+    <p><b>Correo:</b> ${esc(e.correo||'—')} &nbsp; <b>Fono:</b> ${esc(e.fono||'—')} &nbsp; <b>Curso:</b> ${esc(e.curso||'—')}</p>
+    <p><b>Entrevistador/a:</b> ${esc(e.entrevistador)}</p>
+    <p><b>Motivo:</b><br>${esc(e.motivo||'—')}</p>
+    <p><b>Desarrollo:</b><br>${esc(e.desarrollo||'—')}</p>
+    <p><b>Compromisos:</b><br>${esc(e.compromisos||'—')}</p>
+  </body></html>`;
+}
+function descargarEntrevista(e){
+  const blob = window.htmlDocx.asBlob(entrevistaHtmlDoc(e));
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `Entrevista_${(e.nombre_entrevistado||"registro").replace(/[^a-zA-Z0-9]+/g,"_")}.docx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+async function guardarEntrevista(){
+  const nombreEntrevistado = document.getElementById("ge-nombre").value.trim();
+  if(!nombreEntrevistado){ toast("Ingrese el nombre del entrevistado/a"); return; }
+  const body = {
+    nombreEntrevistado,
+    correo: document.getElementById("ge-correo").value.trim(),
+    cargo: document.getElementById("ge-cargo").value.trim(),
+    fono: document.getElementById("ge-fono").value.trim(),
+    fecha: document.getElementById("ge-fecha").value,
+    hora: document.getElementById("ge-hora").value,
+    curso: document.getElementById("ge-curso").value.trim(),
+    motivo: document.getElementById("ge-motivo").value.trim(),
+    entrevistador: document.getElementById("ge-entrevistador").value.trim() || STATE.persona,
+    desarrollo: document.getElementById("ge-desarrollo").value.trim(),
+    compromisos: document.getElementById("ge-compromisos").value.trim(),
+  };
+  try{
+    const guardada = await api(`/api/colegios/${STATE.colegioId}/entrevistas`, {method:"POST", body: JSON.stringify(actorBody(body))});
+    descargarEntrevista(guardada);
+    await renderHistorialEntrevistas();
+    toast("Entrevista guardada y descargada.");
+  }catch(e){ toast("No se pudo guardar la entrevista"); }
+}
+
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista"].forEach(cerrarModalId); } });
 init();
 </script>
 </body>

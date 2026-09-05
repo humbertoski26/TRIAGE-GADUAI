@@ -103,7 +103,7 @@ app.post("/api/colegios", requireAdminKey, asyncRoute(async (req, res) => {
 // Pública a propósito: es la que usa el link con ?colegio=<id> para mostrar el nombre antes
 // de loguearse. No expone la lista completa, solo un colegio puntual si se sabe su id.
 app.get("/api/colegios/:id", asyncRoute(async (req, res) => {
-  const r = await pool.query("select id, nombre, comuna from colegios where id=$1", [req.params.id]);
+  const r = await pool.query("select id, nombre, comuna, relacionai_url from colegios where id=$1", [req.params.id]);
   if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
   res.json(r.rows[0]);
 }));
@@ -163,11 +163,19 @@ app.delete("/api/colegios/:id/usuarios/:usuarioId", asyncRoute(async (req, res) 
 }));
 
 // ---------- timeline ----------
+// Con ?perfil=&persona= filtra a lo propio de ese perfil/persona (feed "tipo Instagram" pero
+// con las tareas del rol que corresponde) — sin esos parámetros, o si el perfil es el máster,
+// se ve todo (comportamiento anterior, para no romper a los colegios que ya usan TRIAGE tal cual).
 app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
-  const items = await pool.query(
-    "select * from items where colegio_id=$1 order by fecha asc, id asc",
-    [req.params.id]
-  );
+  const { perfil, persona } = req.query;
+  let sql = "select * from items where colegio_id=$1";
+  const params = [req.params.id];
+  if (perfil && perfil !== PERFIL_MASTER) {
+    params.push(perfil, persona || "");
+    sql += " and (perfil=$2 or persona=$3 or responsable=$3 or $3 = any(copiados))";
+  }
+  sql += " order by fecha asc, id asc";
+  const items = await pool.query(sql, params);
   const ids = items.rows.map(i => i.id);
   let chats = [], alertas = [];
   if (ids.length) {
@@ -211,6 +219,33 @@ app.post("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
     ]
   );
   res.json({ id: r.rows[0].id });
+}));
+
+// ---------- entrevista formal (disponible a todos los perfiles) ----------
+app.get("/api/colegios/:id/entrevistas", asyncRoute(async (req, res) => {
+  const r = await pool.query(
+    "select * from entrevistas where colegio_id=$1 order by creado_en desc",
+    [req.params.id]
+  );
+  res.json(r.rows);
+}));
+
+app.post("/api/colegios/:id/entrevistas", asyncRoute(async (req, res) => {
+  const b = req.body || {};
+  const actor = await verificarActor(req.params.id, b.actorCorreo, b.actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  if (!b.nombreEntrevistado || !b.nombreEntrevistado.trim()) return res.status(400).json({ error: "nombre_requerido" });
+  const r = await pool.query(
+    `insert into entrevistas (colegio_id, nombre_entrevistado, correo, cargo, fono, fecha, hora, curso, motivo, entrevistador, desarrollo, compromisos, creado_por, perfil_creador)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) returning *`,
+    [
+      req.params.id, b.nombreEntrevistado.trim(), b.correo || null, b.cargo || null, b.fono || null,
+      b.fecha || null, b.hora || null, b.curso || null, b.motivo || null,
+      b.entrevistador || actor.nombre, b.desarrollo || null, b.compromisos || null,
+      actor.nombre, actor.perfil,
+    ]
+  );
+  res.json(r.rows[0]);
 }));
 
 app.post("/api/colegios/:id/timeline/:itemId/reaccionar", asyncRoute(async (req, res) => {

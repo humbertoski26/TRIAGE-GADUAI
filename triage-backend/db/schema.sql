@@ -4,8 +4,10 @@ create table if not exists colegios (
   id text primary key,
   nombre text not null,
   comuna text,
+  relacionai_url text,           -- link al despliegue de Relacionai de este colegio (botón cruzado en el header)
   creado_en timestamptz not null default now()
 );
+alter table colegios add column if not exists relacionai_url text;
 
 create table if not exists usuarios (
   id bigserial primary key,
@@ -62,3 +64,23 @@ create table if not exists alertas (
 );
 create index if not exists alertas_item_idx on alertas(item_id);
 create index if not exists alertas_destinatario_idx on alertas(destinatario);
+
+create table if not exists entrevistas (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  nombre_entrevistado text not null,
+  correo text,
+  cargo text,
+  fono text,
+  fecha date,
+  hora text,
+  curso text,
+  motivo text,
+  entrevistador text not null,
+  desarrollo text,
+  compromisos text,
+  creado_por text not null,
+  perfil_creador text not null,
+  creado_en timestamptz not null default now()
+);
+create index if not exists entrevistas_colegio_idx on entrevistas(colegio_id);
