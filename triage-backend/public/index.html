@@ -359,6 +359,7 @@ const TRIAGE = {
 let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, filtroTipo:"todos", filtroColor:"todos" };
 let archivoPendiente = null;
 let timelineCache = [];
+let timelineCacheJson = "";
 let pollTimer = null;
 
 function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -541,10 +542,17 @@ function filtrarColor(v){
 async function cargarTimeline(){
   try{
     const q = new URLSearchParams({perfil: STATE.perfil||"", persona: STATE.persona||""});
-    timelineCache = await api(`/api/colegios/${STATE.colegioId}/timeline?${q}`);
+    const nuevos = await api(`/api/colegios/${STATE.colegioId}/timeline?${q}`);
     document.getElementById("sync-indicator").innerHTML = '<i class="fa-solid fa-cloud"></i>';
     document.getElementById("sync-indicator").className = "text-[10px] text-emerald-400";
-    pintarTimeline();
+    // Repinta solo si de verdad cambió algo — si no, cada sincronización de fondo (cada 5s)
+    // reemplazaba el HTML igual y la animación fade-in de las tarjetas volvía a dispararse,
+    // dando un parpadeo visible aunque nada hubiera cambiado.
+    const nuevoJson = JSON.stringify(nuevos);
+    const cambio = nuevoJson !== timelineCacheJson;
+    timelineCacheJson = nuevoJson;
+    timelineCache = nuevos;
+    if(cambio) pintarTimeline();
     actualizarBadgeAlertas();
   }catch(e){
     document.getElementById("sync-indicator").innerHTML = '<i class="fa-solid fa-cloud-slash"></i>';
