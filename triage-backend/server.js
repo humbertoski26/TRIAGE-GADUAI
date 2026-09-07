@@ -345,6 +345,29 @@ app.post("/api/colegios/:id/alertas/marcar-leidas", asyncRoute(async (req, res) 
   res.json({ ok: true });
 }));
 
+// ---------- PWA: instalar GADUAI como ícono en el celular/computador ----------
+// El manifest se arma por request (no es un archivo estático) para que start_url lleve el
+// ?colegio=<id> — así el ícono instalado abre directo el colegio correcto, aunque este mismo
+// código sirva a varios colegios (despliegue compartido) o a uno solo (despliegue dedicado).
+app.get("/manifest.webmanifest", (req, res) => {
+  const colegio = req.query.colegio ? `?colegio=${encodeURIComponent(req.query.colegio)}` : "";
+  res.json({
+    name: "GADUAI",
+    short_name: "GADUAI",
+    description: "Sistema de Inteligencia Organizacional para colegios",
+    start_url: `/${colegio}`,
+    scope: "/",
+    display: "standalone",
+    background_color: "#020617",
+    theme_color: "#020617",
+    icons: [
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { src: "/icons/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ],
+  });
+});
+
 // ---------- estáticos (sirve el propio frontend) ----------
 app.use(express.static(path.join(__dirname, "public")));
 app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
