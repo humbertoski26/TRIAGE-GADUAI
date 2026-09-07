@@ -40,6 +40,8 @@ create table if not exists items (
   creado_en timestamptz not null default now()
 );
 create index if not exists items_colegio_idx on items(colegio_id);
+-- Evita reenviar el aviso/correo de vencimiento cada vez que corre el cron diario.
+alter table items add column if not exists recordatorio_enviado boolean not null default false;
 
 create table if not exists chat_mensajes (
   id bigserial primary key,

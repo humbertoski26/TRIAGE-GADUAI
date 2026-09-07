@@ -12,6 +12,7 @@ const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
 const { Pool } = require("pg");
+const { enviarCorreo } = require("./email");
 
 const PORT = process.env.PORT || 3000;
 const connectionString = process.env.DATABASE_URL;
@@ -33,6 +34,19 @@ function requireAdminKey(req, res, next) {
   }
   next();
 }
+// Para rutas disparadas por un Cron Job (no por una persona) — mismo patrón que
+// X-Tasks-Secret en Relacionai. A diferencia de ADMIN_SETUP_KEY, no se exige al arrancar:
+// si no está configurada, la ruta protegida simplemente responde 403 siempre (no rompe
+// despliegues que todavía no la necesitan).
+const TASKS_SECRET = process.env.TASKS_SECRET;
+function requireTasksSecret(req, res, next) {
+  if (!TASKS_SECRET || req.header("X-Tasks-Secret") !== TASKS_SECRET) {
+    return res.status(403).json({ error: "no_autorizado" });
+  }
+  next();
+}
+// Nombre de perfil usado por Relacionai al avisar sobre relatos (aviso automático cruzado).
+const PERFIL_CONVIVENCIA = "Encargado de Convivencia Educativa";
 // En un despliegue dedicado a un solo colegio (ej. gaduai-nuevo-rumbo), esto evita depender
 // de que el link exacto con ?colegio=<id> se haya guardado tal cual — un ícono instalado a
 // medias, un bookmark viejo, o abrir solo el dominio, igual cae en el colegio correcto.
@@ -256,16 +270,29 @@ app.post("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
   const actor = await verificarActor(req.params.id, b.actorCorreo, b.actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   if (!b.titulo || !b.titulo.trim()) return res.status(400).json({ error: "titulo_requerido" });
+  const titulo = b.titulo.trim();
   const r = await pool.query(
     `insert into items (colegio_id, tipo, triage, titulo, descripcion, fecha, responsable, copiados, persona, perfil, creado, archivo_nombre, archivo_data)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) returning id`,
     [
-      req.params.id, b.tipo || "tarea", b.triage || "Rojo", b.titulo.trim(), b.desc || null,
+      req.params.id, b.tipo || "tarea", b.triage || "Rojo", titulo, b.desc || null,
       b.fecha, b.responsable || null, b.copiados || [], actor.nombre, actor.perfil,
       new Date().toLocaleDateString("es-CL"), b.archivoNombre || null, b.archivoData || null
     ]
   );
   res.json({ id: r.rows[0].id });
+
+  // Correo a quien entrega (el actor, cuyo correo ya se tiene) y a quien recibe (buscado por
+  // nombre, ya que "responsable" es texto libre y no una FK a usuarios) — best-effort, no
+  // bloquea la respuesta ni falla la creación del ítem si el correo no se puede enviar.
+  const asunto = `Nueva tarea GADUAI: ${titulo}`;
+  const texto = `${actor.nombre} te asignó una tarea en GADUAI.\n\nTítulo: ${titulo}\nFecha: ${b.fecha || "—"}\n${b.desc ? `Descripción: ${b.desc}\n` : ""}`;
+  enviarCorreo({ to: actor.correo, asunto, texto }).catch(() => {});
+  if (b.responsable && b.responsable.trim() && b.responsable.trim() !== actor.nombre) {
+    pool.query("select correo from usuarios where colegio_id=$1 and nombre=$2", [req.params.id, b.responsable.trim()])
+      .then(ur => { if (ur.rows[0]) enviarCorreo({ to: ur.rows[0].correo, asunto, texto }).catch(() => {}); })
+      .catch(() => {});
+  }
 }));
 
 // ---------- entrevista formal (disponible a todos los perfiles) ----------
@@ -307,11 +334,36 @@ app.post("/api/colegios/:id/timeline/:itemId/reaccionar", asyncRoute(async (req,
   if (actor.perfil === PERFIL_MASTER && !enHiloPropio(r.rows[0], actor.perfil, actor.nombre)) {
     return res.status(403).json({ error: "solo_lectura" });
   }
-  const react = r.rows[0].react || { like: 0, dislike: 0, ok: 0, heart: 0, done: false };
+  const item = r.rows[0];
+  const react = item.react || { like: 0, dislike: 0, ok: 0, heart: 0, done: false };
+  const eraCumplida = !!react.done; // se guarda antes de mutar in-place, para distinguir cierre de reapertura
   if (tipo === "done") react.done = !react.done;
   else react[tipo] = (react[tipo] || 0) + 1;
   await pool.query("update items set react=$1, revisado=true where id=$2", [react, req.params.itemId]);
   res.json({ react });
+
+  // Correo de cierre con el historial completo, solo en la transición false→true (no al
+  // reabrir). Best-effort: no bloquea la respuesta ni falla si algún correo no se envía.
+  if (tipo === "done" && !eraCumplida && react.done) {
+    pool.query("select * from chat_mensajes where item_id=$1 order by id", [item.id])
+      .then(async (chatR) => {
+        const historial = chatR.rows.length
+          ? chatR.rows.map(m => `[${m.fecha}] ${m.autor} (${m.perfil}): ${m.texto}`).join("\n")
+          : "(sin mensajes en el chat de esta tarea)";
+        const adjunto = item.archivo_nombre ? `\nAdjunto: ${item.archivo_nombre}` : "";
+        const asunto = `Tarea cerrada en GADUAI: ${item.titulo}`;
+        const texto = `${actor.nombre} marcó como cumplida la tarea "${item.titulo}".${adjunto}\n\nHistorial de mensajes:\n${historial}`;
+        const destinatarios = new Set();
+        const uPersona = await pool.query("select correo from usuarios where colegio_id=$1 and nombre=$2", [req.params.id, item.persona]);
+        if (uPersona.rows[0]) destinatarios.add(uPersona.rows[0].correo);
+        if (item.responsable) {
+          const uResp = await pool.query("select correo from usuarios where colegio_id=$1 and nombre=$2", [req.params.id, item.responsable]);
+          if (uResp.rows[0]) destinatarios.add(uResp.rows[0].correo);
+        }
+        for (const to of destinatarios) await enviarCorreo({ to, asunto, texto });
+      })
+      .catch(() => {});
+  }
 }));
 
 // ---------- chat por ítem ----------
@@ -347,6 +399,75 @@ app.post("/api/colegios/:id/alertas/marcar-leidas", asyncRoute(async (req, res) 
     `update alertas set leida=true where destinatario=$1 and item_id in (select id from items where colegio_id=$2)`,
     [actor.nombre, req.params.id]
   );
+  res.json({ ok: true });
+}));
+
+// ---------- tareas programadas (Render Cron Job) ----------
+// Aviso + correo cuando a una tarea/hito le queda un día para vencer. Se protege con
+// X-Tasks-Secret (no con X-Admin-Key) porque la dispara un Cron Job, no una persona.
+app.post("/tasks/vencimientos", requireTasksSecret, asyncRoute(async (req, res) => {
+  const r = await pool.query(
+    `select * from items
+       where fecha = current_date + 1
+         and recordatorio_enviado = false
+         and coalesce((react->>'done')::boolean, false) = false`
+  );
+  let avisos = 0, correos = 0;
+  for (const it of r.rows) {
+    const destinatarioNombre = it.responsable || it.persona;
+    await pool.query(
+      "insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,'Sistema',$2,$3,$4)",
+      [it.id, destinatarioNombre, `Vence mañana: ${it.titulo}`, new Date().toLocaleString("es-CL")]
+    );
+    avisos++;
+    const u = await pool.query("select correo from usuarios where colegio_id=$1 and nombre=$2", [it.colegio_id, destinatarioNombre]);
+    if (u.rows[0]) {
+      const ok = await enviarCorreo({
+        to: u.rows[0].correo,
+        asunto: `Vence mañana: ${it.titulo}`,
+        texto: `La tarea "${it.titulo}" vence mañana (${it.fecha.toISOString ? it.fecha.toISOString().slice(0, 10) : it.fecha}). Ingresa a GADUAI para revisarla.`,
+      });
+      if (ok) correos++;
+    }
+    await pool.query("update items set recordatorio_enviado=true where id=$1", [it.id]);
+  }
+  res.json({ revisados: r.rows.length, avisos, correos });
+}));
+
+// ---------- avisos de sistema (llamados por Relacionai, no por una persona) ----------
+// Protegida con X-Admin-Key (mismo secreto que ya usan las rutas de administración de
+// colegios) porque quien llama es otro backend de confianza, no un usuario logueado.
+app.post("/api/sistema/avisos", requireAdminKey, asyncRoute(async (req, res) => {
+  const { tipo, colegioId, caso, cantidad, fechaLimite } = req.body || {};
+  const colegio = colegioId || DEFAULT_COLEGIO_ID;
+  if (!colegio) return res.status(400).json({ error: "colegio_requerido" });
+  let titulo, triage, fecha;
+  if (tipo === "relato_enviado") {
+    titulo = `Relacionai: se envió la solicitud de relato a ${cantidad || "un"} destinatario(s) — caso ${caso}`;
+    triage = "Azul";
+    fecha = new Date().toISOString().slice(0, 10);
+  } else if (tipo === "relato_por_vencer") {
+    titulo = `Relacionai: el relato del caso ${caso} vence mañana (${fechaLimite})`;
+    triage = "Rojo";
+    fecha = fechaLimite;
+  } else {
+    return res.status(400).json({ error: "tipo_invalido" });
+  }
+  await pool.query(
+    `insert into items (colegio_id, tipo, triage, titulo, fecha, persona, perfil, creado)
+     values ($1,'tarea',$2,$3,$4,'Relacionai (automático)',$5,$6)`,
+    [colegio, triage, titulo, fecha, PERFIL_CONVIVENCIA, new Date().toLocaleDateString("es-CL")]
+  );
+  if (tipo === "relato_por_vencer") {
+    const usuarios = await pool.query("select correo from usuarios where colegio_id=$1 and perfil=$2", [colegio, PERFIL_CONVIVENCIA]);
+    for (const u of usuarios.rows) {
+      await enviarCorreo({
+        to: u.correo,
+        asunto: `Vence mañana: relato del caso ${caso}`,
+        texto: `El relato del caso ${caso} en Relacionai vence mañana (${fechaLimite}). Ingresa a Relacionai para revisarlo.`,
+      });
+    }
+  }
   res.json({ ok: true });
 }));
 

@@ -812,26 +812,69 @@ async function renderHistorialEntrevistas(){
       </div>`).join("") || '<p class="text-[10px] text-slate-600">Aún no hay entrevistas registradas.</p>';
   }catch(e){ lista.innerHTML = '<p class="text-[10px] text-rose-400">No se pudo cargar el historial.</p>'; }
 }
-function entrevistaHtmlDoc(e){
-  return `<html><head><meta charset="utf-8"></head><body style="font-family:Calibri,Arial,sans-serif;">
-    <h2 style="text-align:center;">REGISTRO DE ENTREVISTA</h2>
-    <p><b>Colegio:</b> ${esc(STATE.colegio.nombre)}</p>
-    <p><b>Fecha:</b> ${e.fecha||'—'} &nbsp; <b>Hora:</b> ${e.hora||'—'}</p>
-    <p><b>Entrevistado/a:</b> ${esc(e.nombre_entrevistado)} &nbsp; <b>Cargo:</b> ${esc(e.cargo||'—')}</p>
-    <p><b>Correo:</b> ${esc(e.correo||'—')} &nbsp; <b>Fono:</b> ${esc(e.fono||'—')} &nbsp; <b>Curso:</b> ${esc(e.curso||'—')}</p>
-    <p><b>Entrevistador/a:</b> ${esc(e.entrevistador)}</p>
-    <p><b>Motivo:</b><br>${esc(e.motivo||'—')}</p>
-    <p><b>Desarrollo:</b><br>${esc(e.desarrollo||'—')}</p>
-    <p><b>Compromisos:</b><br>${esc(e.compromisos||'—')}</p>
+// Insignia institucional del documento — se reutiliza el ícono de GADUAI ya servido por el
+// PWA (mismo para todos los colegios). Se busca una sola vez y se cachea como data-URI, para
+// que html-docx-js no dependa de un fetch en el momento exacto de generar el .docx.
+let _insigniaDataUri = null;
+async function obtenerInsignia(){
+  if(_insigniaDataUri) return _insigniaDataUri;
+  try{
+    const resp = await fetch("/icons/icon-512.png");
+    const blob = await resp.blob();
+    _insigniaDataUri = await new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }catch(e){ _insigniaDataUri = null; }
+  return _insigniaDataUri;
+}
+// Réplica del formato formal del prototipo GADUAI (tablas con bordes, celdas rotuladas,
+// firmas con RUT y nota legal al pie) — antes esta función solo armaba párrafos sueltos,
+// sin insignia ni el diseño de ficha oficial.
+function entrevistaHtmlDoc(e, insignia){
+  const oficio = ((e.desarrollo||"").length + (e.compromisos||"").length) > 1600;
+  const pageSize = oficio ? "8.5in 13in" : "8.5in 11in";
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    @page{size:${pageSize};margin:1in}
+    body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#111}
+    table{width:100%;border-collapse:collapse;margin-bottom:6px}
+    td,th{border:1px solid #000;padding:5px 8px;font-size:10pt;vertical-align:top}
+    .lbl{font-weight:bold;background:#f2f2f2;width:22%}
+    h1{font-size:14pt;text-align:center;text-decoration:underline;margin:10px 0 14px 0}
+    .firmas{width:100%;margin-top:40px}
+    .firmas td{border:none;text-align:center;font-size:10pt;padding-top:0}
+    .linea{border-top:1px solid #000;width:80%;margin:0 auto;padding-top:4px}
+    .nota{font-size:8pt;margin-top:18px;font-style:italic}
+    .desarrollo{min-height:220px}
+  </style></head><body>
+    ${insignia?`<img src="${insignia}" style="height:70px;">`:''}
+    <h1>REGISTRO DE ENTREVISTA</h1>
+    <table><tr><td class="lbl">Nombre Entrevistado/a</td><td>${esc(e.nombre_entrevistado)}</td></tr></table>
+    <table><tr><td class="lbl">Colegio</td><td>${esc(STATE.colegio.nombre)}</td><td class="lbl" style="width:15%">Correo</td><td>${esc(e.correo||'')}</td></tr></table>
+    <table><tr><td class="lbl">Cargo</td><td>${esc(e.cargo||'')}</td><td class="lbl" style="width:15%">Fono</td><td>${esc(e.fono||'')}</td></tr></table>
+    <table><tr><td class="lbl">Fecha</td><td>${e.fecha||''}</td><td class="lbl" style="width:15%">Hora</td><td>${e.hora||''}</td><td class="lbl" style="width:15%">Curso</td><td>${esc(e.curso||'')}</td></tr></table>
+    <table><tr><td class="lbl">Motivo</td><td>${esc(e.motivo||'')}</td></tr></table>
+    <table><tr><td class="lbl">Entrevistador/a</td><td>${esc(e.entrevistador)}</td></tr></table>
+    <table><tr><td><b>Desarrollo de la entrevista</b><div class="desarrollo">${(e.desarrollo||'').replace(/\n/g,'<br>')}</div><br><b>Compromisos / Acuerdos</b><div>${(e.compromisos||'').replace(/\n/g,'<br>')}</div></td></tr></table>
+    <table class="firmas"><tr>
+      <td><div class="linea">ENTREVISTADO/A</div>RUT: ______________________</td>
+      <td><div class="linea">ENTREVISTADOR/A</div>RUT: ______________________</td>
+    </tr></table>
+    <p class="nota">*Tomo conocimiento del registro de la entrevista y los acuerdos entre las partes, firmando en conformidad con lo redactado y expuesto.</p>
   </body></html>`;
 }
-function descargarEntrevista(e){
-  const blob = window.htmlDocx.asBlob(entrevistaHtmlDoc(e));
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = `Entrevista_${(e.nombre_entrevistado||"registro").replace(/[^a-zA-Z0-9]+/g,"_")}.docx`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+async function descargarEntrevista(e){
+  try{
+    const insignia = await obtenerInsignia();
+    const blob = window.htmlDocx.asBlob(entrevistaHtmlDoc(e, insignia));
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Entrevista_${(e.nombre_entrevistado||"registro").replace(/[^a-zA-Z0-9]+/g,"_")}.docx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  }catch(err){ toast("No se pudo generar el Word de la entrevista"); }
 }
 async function guardarEntrevista(){
   const nombreEntrevistado = document.getElementById("ge-nombre").value.trim();
@@ -849,12 +892,13 @@ async function guardarEntrevista(){
     desarrollo: document.getElementById("ge-desarrollo").value.trim(),
     compromisos: document.getElementById("ge-compromisos").value.trim(),
   };
+  let guardada;
   try{
-    const guardada = await api(`/api/colegios/${STATE.colegioId}/entrevistas`, {method:"POST", body: JSON.stringify(actorBody(body))});
-    descargarEntrevista(guardada);
-    await renderHistorialEntrevistas();
-    toast("Entrevista guardada y descargada.");
-  }catch(e){ toast("No se pudo guardar la entrevista"); }
+    guardada = await api(`/api/colegios/${STATE.colegioId}/entrevistas`, {method:"POST", body: JSON.stringify(actorBody(body))});
+  }catch(e){ toast("No se pudo guardar la entrevista"); return; }
+  await descargarEntrevista(guardada);
+  await renderHistorialEntrevistas();
+  toast("Entrevista guardada y descargada.");
 }
 
 document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista"].forEach(cerrarModalId); } });
