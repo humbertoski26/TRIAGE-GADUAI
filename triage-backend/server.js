@@ -153,6 +153,24 @@ app.get("/api/colegios/:id", asyncRoute(async (req, res) => {
   res.json(r.rows[0]);
 }));
 
+// Insignia/logo propio del colegio, usado en documentos formales (ej. Entrevista). Pública
+// de lectura (el frontend la necesita antes de saber si el usuario está logueado), protegida
+// por X-Admin-Key para cargarla — hoy se sube desde el panel de administrador de GADUAI.
+app.get("/api/colegios/:id/insignia", asyncRoute(async (req, res) => {
+  const r = await pool.query("select insignia_data from colegios where id=$1", [req.params.id]);
+  res.json({ insignia: (r.rows[0] && r.rows[0].insignia_data) || null });
+}));
+
+app.post("/api/colegios/:id/insignia", requireAdminKey, asyncRoute(async (req, res) => {
+  const { dataUri } = req.body || {};
+  const r = await pool.query(
+    "update colegios set insignia_data=$2 where id=$1 returning id",
+    [req.params.id, (dataUri || "").trim() || null]
+  );
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  res.json({ ok: true });
+}));
+
 app.get("/api/colegios", requireAdminKey, asyncRoute(async (req, res) => {
   const q = (req.query.q || "").trim();
   if (!q) return res.json([]); // no listamos todos los colegios por defecto (privacidad multi-tenant)

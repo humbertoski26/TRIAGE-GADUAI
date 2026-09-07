@@ -8,6 +8,9 @@ create table if not exists colegios (
   creado_en timestamptz not null default now()
 );
 alter table colegios add column if not exists relacionai_url text;
+-- Insignia/logo propio del colegio (data URI base64), usado en documentos formales como la
+-- ficha de Entrevista — si no está cargada, se usa el ícono genérico de GADUAI como respaldo.
+alter table colegios add column if not exists insignia_data text;
 
 create table if not exists usuarios (
   id bigserial primary key,

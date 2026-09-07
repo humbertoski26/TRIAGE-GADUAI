@@ -820,12 +820,17 @@ async function renderHistorialEntrevistas(){
       </div>`).join("") || '<p class="text-[10px] text-slate-600">Aún no hay entrevistas registradas.</p>';
   }catch(e){ lista.innerHTML = '<p class="text-[10px] text-rose-400">No se pudo cargar el historial.</p>'; }
 }
-// Insignia institucional del documento — se reutiliza el ícono de GADUAI ya servido por el
-// PWA (mismo para todos los colegios). Se busca una sola vez y se cachea como data-URI, para
-// que html-docx-js no dependa de un fetch en el momento exacto de generar el .docx.
+// Insignia institucional del documento — primero intenta el logo propio del colegio (subido
+// por el admin de GADUAI); si el colegio no tiene uno cargado, usa el ícono genérico de GADUAI
+// como respaldo. Se busca una sola vez y se cachea, para que html-docx-js no dependa de un
+// fetch en el momento exacto de generar el .docx.
 let _insigniaDataUri = null;
 async function obtenerInsignia(){
   if(_insigniaDataUri) return _insigniaDataUri;
+  try{
+    const propia = await api(`/api/colegios/${STATE.colegioId}/insignia`);
+    if(propia.insignia){ _insigniaDataUri = propia.insignia; return _insigniaDataUri; }
+  }catch(e){}
   try{
     const resp = await fetch("/icons/icon-512.png");
     const blob = await resp.blob();
@@ -857,7 +862,7 @@ function entrevistaHtmlDoc(e, insignia){
     .nota{font-size:8pt;margin-top:18px;font-style:italic}
     .desarrollo{min-height:220px}
   </style></head><body>
-    ${insignia?`<img src="${insignia}" style="height:70px;">`:''}
+    ${insignia?`<img src="${insignia}" width="70" height="70" style="width:70px;height:70px;">`:''}
     <h1>REGISTRO DE ENTREVISTA</h1>
     <table><tr><td class="lbl">Nombre Entrevistado/a</td><td>${esc(e.nombre_entrevistado)}</td></tr></table>
     <table><tr><td class="lbl">Colegio</td><td>${esc(STATE.colegio.nombre)}</td><td class="lbl" style="width:15%">Correo</td><td>${esc(e.correo||'')}</td></tr></table>
