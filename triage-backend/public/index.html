@@ -394,7 +394,7 @@ async function init(){
       const r = await api(`/api/colegios/${sesion.colegioId}/login`, {method:"POST", body: JSON.stringify({correo:sesion.correo, clave:sesion.clave})});
       STATE.colegio = colegio; STATE.colegioId = colegio.id;
       STATE.correo = sesion.correo; STATE.clave = sesion.clave;
-      STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster;
+      STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken;
       await entrarApp();
       return;
     }catch(e){ borrarSesion(); }
@@ -420,7 +420,7 @@ async function ingresar(){
   try{
     const r = await api(`/api/colegios/${STATE.colegioId}/login`, {method:"POST", body: JSON.stringify({correo, clave})});
     STATE.correo = correo; STATE.clave = clave;
-    STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster;
+    STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken;
     guardarSesion();
     await entrarApp();
   }catch(e){ toast("Correo o clave incorrectos para este colegio"); }
@@ -432,8 +432,11 @@ async function entrarApp(){
   document.getElementById("app-colegio-label").textContent = STATE.colegio.nombre;
   document.getElementById("btn-usuarios").hidden = !STATE.isMaster;
   const btnRelacionai = document.getElementById("btn-ir-relacionai");
-  if(STATE.colegio.relacionai_url){ btnRelacionai.href = STATE.colegio.relacionai_url; btnRelacionai.hidden = false; }
-  else { btnRelacionai.hidden = true; }
+  if(STATE.colegio.relacionai_url){
+    const base = STATE.colegio.relacionai_url.replace(/\/$/, "");
+    btnRelacionai.href = STATE.relacionaiSsoToken ? `${base}/sso?token=${encodeURIComponent(STATE.relacionaiSsoToken)}` : base;
+    btnRelacionai.hidden = false;
+  } else { btnRelacionai.hidden = true; }
   await Promise.all([renderMenuPerfiles(), cargarTimeline()]);
   if(pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(cargarTimeline, 5000); // sincronización con otros dispositivos
@@ -558,6 +561,7 @@ function pintarTimeline(){
           <p class="text-sm font-black text-white">${esc(h.titulo)}</p>
           ${h.tipo==='hito'?'<span class="text-[9px] font-bold uppercase bg-slate-700 text-slate-200 rounded px-1.5 py-0.5">Hito</span>':''}
           ${!h.revisado?'<span class="text-[9px] font-bold uppercase bg-rose-600 text-white rounded-full px-2 py-0.5">Nuevo</span>':''}
+          ${h.soloLectura?'<span class="text-[9px] font-bold uppercase bg-slate-700 text-slate-400 rounded px-1.5 py-0.5" title="Visible como sostenedor — lo resuelve el Director/a de colegio"><i class="fa-solid fa-eye mr-1"></i>Solo lectura</span>':''}
         </div>
         <span class="text-[10px] font-mono font-bold ${dueClass}">${dueText}</span>
       </div>
@@ -566,17 +570,23 @@ function pintarTimeline(){
       ${h.archivoNombre ? `<a href="${h.archivoData}" download="${esc(h.archivoNombre)}" class="text-[10px] text-indigo-300 underline mt-1 inline-block"><i class="fa-solid fa-paperclip"></i> ${esc(h.archivoNombre)}</a>` : ""}
       <div class="flex items-center gap-3 mt-3 text-sm">
         <span class="react-btn text-slate-500" style="color:${cfg.color}" title="Prioridad">❗</span>
+        ${h.soloLectura ? `
+        <span class="text-slate-600 opacity-50">👍</span>
+        <span class="text-slate-600 opacity-50">👎</span>
+        <span class="text-slate-600 opacity-50">🤙</span>
+        <span class="text-slate-600 opacity-50"><i class="fa-solid fa-circle-check"></i></span>
+        <span class="text-slate-600 opacity-50">♥</span>` : `
         <span class="react-btn text-slate-500 ${react.like?'active text-emerald-400':''}" onclick="reaccionar(${h.id},'like')" title="Me parece bien">👍<sup class="text-[9px]">${react.like||''}</sup></span>
         <span class="react-btn text-slate-500 ${react.dislike?'active text-rose-400':''}" onclick="reaccionar(${h.id},'dislike')" title="No corresponde">👎<sup class="text-[9px]">${react.dislike||''}</sup></span>
         <span class="react-btn text-slate-500 ${react.ok?'active text-amber-300':''}" onclick="reaccionar(${h.id},'ok')" title="Acuso recibo">🤙<sup class="text-[9px]">${react.ok||''}</sup></span>
         <span class="react-btn text-slate-500 ${react.done?'active text-emerald-400':''}" onclick="reaccionar(${h.id},'done')" title="Marcar cumplido"><i class="fa-solid fa-circle-check"></i></span>
-        <span class="react-btn text-slate-500 ${react.heart?'active text-pink-400':''}" onclick="reaccionar(${h.id},'heart')" title="Agradecer">♥<sup class="text-[9px]">${react.heart||''}</sup></span>
+        <span class="react-btn text-slate-500 ${react.heart?'active text-pink-400':''}" onclick="reaccionar(${h.id},'heart')" title="Agradecer">♥<sup class="text-[9px]">${react.heart||''}</sup></span>`}
         <span class="text-[10px] text-slate-500 ml-auto">${estado}</span>
       </div>
       <div class="flex gap-2 mt-3 flex-wrap">
         <button onclick="abrirMinuta(${h.id})" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[10px] font-semibold"><i class="fa-solid fa-file-lines mr-1"></i>Solicitar Minuta</button>
         <button onclick="abrirChat(${h.id})" class="bg-sky-600/20 text-sky-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold"><i class="fa-solid fa-comments mr-1"></i>Chat${(h.chat&&h.chat.length)?` (${h.chat.length})`:''}</button>
-        <button onclick="abrirAlertar(${h.id})" class="bg-amber-600/20 text-amber-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold">🔔 Alertar${(h.alertas&&h.alertas.length)?` (${h.alertas.length})`:''}</button>
+        ${h.soloLectura ? '' : `<button onclick="abrirAlertar(${h.id})" class="bg-amber-600/20 text-amber-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold">🔔 Alertar${(h.alertas&&h.alertas.length)?` (${h.alertas.length})`:''}</button>`}
       </div>
     </div>`;
   }).join("");

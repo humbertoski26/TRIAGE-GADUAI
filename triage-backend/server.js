@@ -64,6 +64,19 @@ function slug(s) {
 }
 const PERFIL_MASTER = "Director ejecutivo/máster";
 
+// SSO hacia Relacionai: Encargado de Convivencia y Director (de colegio o ejecutivo/máster)
+// entran a Relacionai sin clave aparte — Relacionai valida este token con el mismo secreto
+// compartido (SSO_SHARED_SECRET) y abre sesión directo. Si no está configurado, simplemente
+// no se emite token y el botón de Relacionai pide su login normal, como antes.
+const SSO_SHARED_SECRET = process.env.SSO_SHARED_SECRET;
+const PERFILES_SSO_RELACIONAI = ["Encargado de Convivencia Educativa", "Director/a de colegio", PERFIL_MASTER];
+function generarSsoToken(correo, nombre, perfil) {
+  const payload = { correo, nombre, perfil, exp: Date.now() + 2 * 60 * 1000 };
+  const b64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sig = crypto.createHmac("sha256", SSO_SHARED_SECRET).update(b64).digest("hex");
+  return `${b64}.${sig}`;
+}
+
 async function verificarActor(colegioId, correo, clave) {
   if (!correo || !clave) return null;
   const r = await pool.query(
@@ -136,7 +149,10 @@ app.post("/api/colegios/:id/login", asyncRoute(async (req, res) => {
   const { correo, clave } = req.body || {};
   const usuario = await verificarActor(req.params.id, correo, clave);
   if (!usuario) return res.status(401).json({ error: "credenciales_invalidas" });
-  res.json({ usuario, isMaster: usuario.perfil === PERFIL_MASTER });
+  const relacionaiSsoToken = (SSO_SHARED_SECRET && PERFILES_SSO_RELACIONAI.includes(usuario.perfil))
+    ? generarSsoToken(usuario.correo, usuario.nombre, usuario.perfil)
+    : null;
+  res.json({ usuario, isMaster: usuario.perfil === PERFIL_MASTER, relacionaiSsoToken });
 }));
 
 // ---------- usuarios (solo máster administra) ----------
@@ -176,16 +192,28 @@ app.delete("/api/colegios/:id/usuarios/:usuarioId", asyncRoute(async (req, res) 
 }));
 
 // ---------- timeline ----------
-// Con ?perfil=&persona= filtra a lo propio de ese perfil/persona (feed "tipo Instagram" pero
-// con las tareas del rol que corresponde) — sin esos parámetros, o si el perfil es el máster,
-// se ve todo (comportamiento anterior, para no romper a los colegios que ya usan TRIAGE tal cual).
+// Cada ítem vive en el timeline de quien lo creó y de quien va dirigido (perfil, responsable
+// o copiados) — dos perfiles solo comparten un hito si uno es contraparte del otro en ese
+// ítem puntual. El Director ejecutivo/máster (sostenedor) es un caso aparte: ve todos los
+// Rojo-críticos del colegio en solo lectura (no resuelve ni cierra — eso es del Director/a de
+// colegio), más su propio hilo activo (igual que cualquier perfil) con quien le dirija algo a
+// él o con quien él mismo cree.
+function enHiloPropio(it, perfil, persona) {
+  return it.perfil === perfil || it.persona === persona || it.responsable === persona || (it.copiados || []).includes(persona);
+}
+
 app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
   const { perfil, persona } = req.query;
-  let sql = "select * from items where colegio_id=$1";
-  const params = [req.params.id];
-  if (perfil && perfil !== PERFIL_MASTER) {
-    params.push(perfil, persona || "");
-    sql += " and (perfil=$2 or persona=$3 or responsable=$3 or $3 = any(copiados))";
+  let sql, params;
+  if (perfil === PERFIL_MASTER) {
+    sql = "select * from items where colegio_id=$1 and (triage='Rojo' or perfil=$2 or persona=$3 or responsable=$3 or $3 = any(copiados))";
+    params = [req.params.id, perfil, persona || ""];
+  } else if (perfil) {
+    sql = "select * from items where colegio_id=$1 and (perfil=$2 or persona=$3 or responsable=$3 or $3 = any(copiados))";
+    params = [req.params.id, perfil, persona || ""];
+  } else {
+    sql = "select * from items where colegio_id=$1";
+    params = [req.params.id];
   }
   sql += " order by fecha asc, id asc";
   const items = await pool.query(sql, params);
@@ -211,6 +239,7 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
     archivoNombre: it.archivo_nombre,
     archivoData: it.archivo_data,
     react: it.react,
+    soloLectura: perfil === PERFIL_MASTER && !enHiloPropio(it, perfil, persona || ""),
     chat: chats.filter(c => c.item_id === it.id).map(c => ({ autor: c.autor, perfil: c.perfil, texto: c.texto, fecha: c.fecha })),
     alertas: alertas.filter(a => a.item_id === it.id).map(a => ({ id: a.id, autor: a.autor, destinatario: a.destinatario, mensaje: a.mensaje, fecha: a.fecha, leida: a.leida }))
   }));
@@ -265,8 +294,14 @@ app.post("/api/colegios/:id/timeline/:itemId/reaccionar", asyncRoute(async (req,
   const { tipo, actorCorreo, actorClave } = req.body || {};
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
-  const r = await pool.query("select react from items where id=$1 and colegio_id=$2", [req.params.itemId, req.params.id]);
+  const r = await pool.query("select * from items where id=$1 and colegio_id=$2", [req.params.itemId, req.params.id]);
   if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  // El sostenedor (Director ejecutivo/máster) ve los Rojo-críticos del colegio entero, pero
+  // solo puede intervenir en los que pertenecen a su propio hilo — el resto lo resuelve y
+  // cierra el Director/a de colegio.
+  if (actor.perfil === PERFIL_MASTER && !enHiloPropio(r.rows[0], actor.perfil, actor.nombre)) {
+    return res.status(403).json({ error: "solo_lectura" });
+  }
   const react = r.rows[0].react || { like: 0, dislike: 0, ok: 0, heart: 0, done: false };
   if (tipo === "done") react.done = !react.done;
   else react[tipo] = (react[tipo] || 0) + 1;
