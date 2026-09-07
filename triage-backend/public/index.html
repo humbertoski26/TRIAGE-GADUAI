@@ -124,14 +124,12 @@
 
   <header class="sticky top-0 z-30 bg-slate-950/95 backdrop-blur border-b border-slate-800 px-4 py-3">
     <div class="flex items-center justify-between gap-2 flex-wrap">
-      <div class="flex items-center gap-3 min-w-0 flex-wrap">
+      <div class="flex items-center gap-2 min-w-0">
         <button onclick="toggleMenu()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-bars"></i></button>
         <div class="min-w-0">
           <p class="text-[10px] uppercase tracking-wide text-slate-500 truncate">Timeline del establecimiento · <span id="app-perfil-label">Perfil</span></p>
           <p class="text-sm font-black text-white truncate">GADUAI · <span id="app-colegio-label"></span></p>
         </div>
-        <button onclick="abrirEntrevistaFormal()" title="Entrevista formal" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-file-signature"></i> Entrevista</button>
-        <a id="btn-ir-relacionai" href="#" target="_blank" rel="noopener" hidden title="Ir a Relacionai" class="gaduai-btn-cyan text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-arrow-up-right-from-square"></i> Relacionai</a>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         <span id="sync-indicator" class="text-[10px] text-emerald-400" title="Sincronizado con el servidor"><i class="fa-solid fa-cloud"></i></span>
@@ -141,14 +139,16 @@
       </div>
     </div>
     <p class="text-[10px] text-slate-500 mt-2">Alimentado por Director/a, Inspector/a General, UTP, Convivencia, Dupla y Docentes del colegio · ordenado de lo más próximo a vencer a lo último solicitado.</p>
-  </header>
-  <div class="bg-slate-950/95 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
-    <div class="flex items-center gap-1.5">
-      <button onclick="filtrarTipo('todos')" data-tipo="todos" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-indigo-600 text-white">Todos</button>
-      <button onclick="filtrarTipo('tarea')" data-tipo="tarea" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300"><i class="fa-solid fa-clipboard-list mr-1"></i>Tareas</button>
-      <button onclick="filtrarTipo('hito')" data-tipo="hito" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300"><i class="fa-solid fa-exclamation mr-1"></i>Hitos</button>
+    <div class="flex items-center gap-2 mt-3">
+      <button onclick="abrirEntrevistaFormal()" title="Entrevista formal" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-file-signature"></i> Entrevista</button>
+      <a id="btn-ir-relacionai" href="#" target="_blank" rel="noopener" hidden title="Ir a Relacionai" class="gaduai-btn-cyan text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-arrow-up-right-from-square"></i> Relacionai</a>
     </div>
-    <div class="flex items-center gap-1.5" id="filtro-triage">
+  </header>
+  <div class="bg-slate-950/95 border-b border-slate-800 px-4 py-2.5 flex items-center gap-1.5 flex-wrap">
+    <button onclick="filtrarTipo('todos')" data-tipo="todos" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-indigo-600 text-white">Todos</button>
+    <button onclick="filtrarTipo('tarea')" data-tipo="tarea" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300"><i class="fa-solid fa-clipboard-list mr-1"></i>Tareas</button>
+    <button onclick="filtrarTipo('hito')" data-tipo="hito" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300"><i class="fa-solid fa-exclamation mr-1"></i>Hitos</button>
+    <div class="flex items-center gap-1.5 ml-2" id="filtro-triage">
       <button onclick="filtrarColor('todos')" data-f="todos" class="filtro-btn px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-white ring-2 ring-white">Color</button>
       <button onclick="filtrarColor('Rojo')" data-f="Rojo" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-rose-600/20" title="Rojo · Crítico">🔴</button>
       <button onclick="filtrarColor('Azul')" data-f="Azul" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-sky-600/20" title="Azul · Estratégico">🔵</button>
