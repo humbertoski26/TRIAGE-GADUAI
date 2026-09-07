@@ -33,6 +33,11 @@ function requireAdminKey(req, res, next) {
   }
   next();
 }
+// En un despliegue dedicado a un solo colegio (ej. gaduai-nuevo-rumbo), esto evita depender
+// de que el link exacto con ?colegio=<id> se haya guardado tal cual — un ícono instalado a
+// medias, un bookmark viejo, o abrir solo el dominio, igual cae en el colegio correcto.
+// Vacío/ausente en el despliegue compartido (varios colegios), donde sí hace falta el parámetro.
+const DEFAULT_COLEGIO_ID = process.env.DEFAULT_COLEGIO_ID || null;
 function claveAleatoria() {
   return crypto.randomBytes(6).toString("base64url"); // ej. "aB3xQ9-k" — legible y suficiente para un MVP
 }
@@ -345,12 +350,19 @@ app.post("/api/colegios/:id/alertas/marcar-leidas", asyncRoute(async (req, res) 
   res.json({ ok: true });
 }));
 
+// El frontend la consulta al iniciar si la URL no trae ?colegio= — solo devuelve algo en
+// despliegues dedicados a un colegio (DEFAULT_COLEGIO_ID configurado).
+app.get("/api/config", (req, res) => {
+  res.json({ defaultColegio: DEFAULT_COLEGIO_ID });
+});
+
 // ---------- PWA: instalar GADUAI como ícono en el celular/computador ----------
 // El manifest se arma por request (no es un archivo estático) para que start_url lleve el
 // ?colegio=<id> — así el ícono instalado abre directo el colegio correcto, aunque este mismo
 // código sirva a varios colegios (despliegue compartido) o a uno solo (despliegue dedicado).
 app.get("/manifest.webmanifest", (req, res) => {
-  const colegio = req.query.colegio ? `?colegio=${encodeURIComponent(req.query.colegio)}` : "";
+  const colegioId = req.query.colegio || DEFAULT_COLEGIO_ID;
+  const colegio = colegioId ? `?colegio=${encodeURIComponent(colegioId)}` : "";
   res.json({
     name: "GADUAI",
     short_name: "GADUAI",

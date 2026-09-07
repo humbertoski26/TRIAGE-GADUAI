@@ -400,7 +400,13 @@ function entrarColegioEnUI(colegio){
    pública para buscar o crear colegios. Si además hay sesión guardada en este navegador
    para ese mismo colegio, se reanuda sin pedir clave de nuevo. */
 async function init(){
-  const colegioParam = new URLSearchParams(location.search).get("colegio");
+  let colegioParam = new URLSearchParams(location.search).get("colegio");
+  if(!colegioParam){
+    // Sin el parámetro en la URL (ícono instalado desde un link viejo, bookmark al dominio
+    // pelado, etc.) — en un despliegue dedicado a un solo colegio, el servidor igual sabe
+    // cuál es y nos lo pasa acá.
+    try{ const cfg = await api("/api/config"); colegioParam = cfg.defaultColegio || null; }catch(e){}
+  }
   const raw = localStorage.getItem("triageGaduai.sesion");
   const sesion = raw ? JSON.parse(raw) : null;
 
