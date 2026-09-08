@@ -685,7 +685,7 @@ function circuloCampos(idSufijo, placeholder){
     <input id="circulo-file${idSufijo}" type="file" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-[10px] text-slate-400 mb-2">`;
 }
 function abrirCirculo(itemId){
-  const h = timelineCache.find(x=>x.id===itemId); if(!h) return;
+  const h = timelineCache.find(x=>x.id==itemId); if(!h) return;
   circuloArchivoPendiente = null;
   const cfg = TRIAGE[h.triage];
   const estado = h.circuloEstado || "nuevo";
@@ -844,7 +844,7 @@ function textoMinuta(h){
   return lineas.join("\n");
 }
 function abrirMinuta(id){
-  const item = timelineCache.find(x=>x.id===id);
+  const item = timelineCache.find(x=>x.id==id);
   if(!item) return;
   minutaItemActual = item;
   document.getElementById("minuta-texto").textContent = textoMinuta(item);
@@ -864,7 +864,7 @@ function descargarMinuta(){
 /* ---------- chat ---------- */
 let chatItemActual = null;
 function abrirChat(id){
-  const item = timelineCache.find(x=>x.id===id);
+  const item = timelineCache.find(x=>x.id==id);
   if(!item) return;
   chatItemActual = id;
   document.getElementById("chat-item-titulo").textContent = item.titulo + " · " + STATE.colegio.nombre;
@@ -892,7 +892,7 @@ async function enviarChat(){
   try{
     await api(`/api/colegios/${STATE.colegioId}/timeline/${chatItemActual}/chat`, {method:"POST", body: JSON.stringify(actorBody({texto}))});
     await cargarTimeline();
-    const item = timelineCache.find(x=>x.id===chatItemActual);
+    const item = timelineCache.find(x=>x.id==chatItemActual);
     if(item) renderChatMensajes(item);
   }catch(e){ toast("No se pudo enviar el mensaje"); }
 }
@@ -900,7 +900,7 @@ async function enviarChat(){
 /* ---------- alertas ---------- */
 let alertarItemActual = null;
 function abrirAlertar(id){
-  const item = timelineCache.find(x=>x.id===id);
+  const item = timelineCache.find(x=>x.id==id);
   if(!item) return;
   alertarItemActual = id;
   document.getElementById("alertar-destinatario").textContent = `Se alertará a: ${item.responsable || '—'} · ${item.titulo}`;
@@ -910,7 +910,7 @@ function abrirAlertar(id){
 }
 async function enviarAlerta(){
   if(!alertarItemActual) return;
-  const item = timelineCache.find(x=>x.id===alertarItemActual);
+  const item = timelineCache.find(x=>x.id==alertarItemActual);
   try{
     await api(`/api/colegios/${STATE.colegioId}/timeline/${alertarItemActual}/alertar`, {method:"POST", body: JSON.stringify(actorBody({destinatario:item.responsable||'—', mensaje:document.getElementById("alertar-msg").value.trim()}))});
     cerrarModalId("modal-alertar");
