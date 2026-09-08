@@ -255,10 +255,11 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
   sql += " order by fecha asc, id asc";
   const items = await pool.query(sql, params);
   const ids = items.rows.map(i => i.id);
-  let chats = [], alertas = [];
+  let chats = [], alertas = [], circulo = [];
   if (ids.length) {
     chats = (await pool.query("select * from chat_mensajes where item_id = any($1) order by id", [ids])).rows;
     alertas = (await pool.query("select * from alertas where item_id = any($1) order by id", [ids])).rows;
+    circulo = (await pool.query("select * from circulo_historial where item_id = any($1) order by id", [ids])).rows;
   }
   const out = items.rows.map(it => ({
     id: it.id,
@@ -276,9 +277,12 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
     archivoNombre: it.archivo_nombre,
     archivoData: it.archivo_data,
     react: it.react,
+    circuloEstado: it.circulo_estado,
+    circuloLike: it.circulo_like,
     soloLectura: perfil === PERFIL_MASTER && !enHiloPropio(it, perfil, persona || ""),
     chat: chats.filter(c => c.item_id === it.id).map(c => ({ autor: c.autor, perfil: c.perfil, texto: c.texto, fecha: c.fecha })),
-    alertas: alertas.filter(a => a.item_id === it.id).map(a => ({ id: a.id, autor: a.autor, destinatario: a.destinatario, mensaje: a.mensaje, fecha: a.fecha, leida: a.leida }))
+    alertas: alertas.filter(a => a.item_id === it.id).map(a => ({ id: a.id, autor: a.autor, destinatario: a.destinatario, mensaje: a.mensaje, fecha: a.fecha, leida: a.leida })),
+    circuloHistorial: circulo.filter(c => c.item_id === it.id).map(c => ({ paso: c.paso, autor: c.autor, perfil: c.perfil, mensaje: c.mensaje, archivoNombre: c.archivo_nombre, archivoData: c.archivo_data, fecha: c.creado_en }))
   }));
   res.json(out);
 }));
@@ -371,6 +375,77 @@ app.post("/api/colegios/:id/timeline/:itemId/reaccionar", asyncRoute(async (req,
         const adjunto = item.archivo_nombre ? `\nAdjunto: ${item.archivo_nombre}` : "";
         const asunto = `Tarea cerrada en GADUAI: ${item.titulo}`;
         const texto = `${actor.nombre} marcó como cumplida la tarea "${item.titulo}".${adjunto}\n\nHistorial de mensajes:\n${historial}`;
+        const destinatarios = new Set();
+        const uPersona = await pool.query("select correo from usuarios where colegio_id=$1 and nombre=$2", [req.params.id, item.persona]);
+        if (uPersona.rows[0]) destinatarios.add(uPersona.rows[0].correo);
+        if (item.responsable) {
+          const uResp = await pool.query("select correo from usuarios where colegio_id=$1 and nombre=$2", [req.params.id, item.responsable]);
+          if (uResp.rows[0]) destinatarios.add(uResp.rows[0].correo);
+        }
+        for (const to of destinatarios) await enviarCorreo({ to, asunto, texto });
+      })
+      .catch(() => {});
+  }
+}));
+
+// ---------- círculo de la promesa (solo tipo='tarea') ----------
+// Máquina de estados que reemplaza las reacciones libres para tareas: nuevo -> (dedo_arriba |
+// dedo_abajo) -> manito_ok -> cerrado, más un like opcional del responsable ya cerrado el
+// ticket. Cada transición la gatea la persona exacta correspondiente (responsable o remitente,
+// igual que ya se gatea el resto del sistema por nombre — no por rol), y queda registrada en
+// circulo_historial con su mensaje/adjunto opcional.
+app.post("/api/colegios/:id/timeline/:itemId/circulo", asyncRoute(async (req, res) => {
+  const { accion, mensaje, archivoNombre, archivoData, actorCorreo, actorClave } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  const r = await pool.query("select * from items where id=$1 and colegio_id=$2", [req.params.itemId, req.params.id]);
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  const item = r.rows[0];
+  if (actor.perfil === PERFIL_MASTER && !enHiloPropio(item, actor.perfil, actor.nombre)) {
+    return res.status(403).json({ error: "solo_lectura" });
+  }
+  const esResponsable = actor.nombre === item.responsable;
+  const esRemitente = actor.nombre === item.persona;
+  const estado = item.circulo_estado || "nuevo";
+
+  let nuevoEstado = null, paso;
+  if (accion === "aceptar") {
+    if (!esResponsable || !(estado === "nuevo" || estado === "dedo_abajo")) return res.status(403).json({ error: "no_autorizado" });
+    nuevoEstado = "dedo_arriba"; paso = "👍 Aceptó la acción";
+  } else if (accion === "rechazar") {
+    if (!esResponsable || estado !== "nuevo") return res.status(403).json({ error: "no_autorizado" });
+    nuevoEstado = "dedo_abajo"; paso = "👎 Rechazó la acción";
+  } else if (accion === "ok") {
+    if (!esResponsable || estado !== "dedo_arriba") return res.status(403).json({ error: "no_autorizado" });
+    nuevoEstado = "manito_ok"; paso = "👌 Acción realizada";
+  } else if (accion === "cerrar") {
+    if (!esRemitente || estado !== "manito_ok") return res.status(403).json({ error: "no_autorizado" });
+    nuevoEstado = "cerrado"; paso = "✅ Ticket cerrado";
+  } else if (accion === "like") {
+    if (!esResponsable || estado !== "cerrado" || item.circulo_like) return res.status(403).json({ error: "no_autorizado" });
+    paso = "❤️ Le gustó la retroalimentación";
+  } else {
+    return res.status(400).json({ error: "accion_invalida" });
+  }
+
+  if (nuevoEstado) await pool.query("update items set circulo_estado=$1, revisado=true where id=$2", [nuevoEstado, item.id]);
+  if (accion === "like") await pool.query("update items set circulo_like=true where id=$1", [item.id]);
+  await pool.query(
+    "insert into circulo_historial (item_id, paso, autor, perfil, mensaje, archivo_nombre, archivo_data) values ($1,$2,$3,$4,$5,$6,$7)",
+    [item.id, paso, actor.nombre, actor.perfil, mensaje || null, archivoNombre || null, archivoData || null]
+  );
+  res.json({ ok: true, circuloEstado: nuevoEstado || estado });
+
+  // Correo de cierre con el historial de chat, igual que el de Hitos — best-effort.
+  if (accion === "cerrar") {
+    pool.query("select * from chat_mensajes where item_id=$1 order by id", [item.id])
+      .then(async (chatR) => {
+        const historialChat = chatR.rows.length
+          ? chatR.rows.map(m => `[${m.fecha}] ${m.autor} (${m.perfil}): ${m.texto}`).join("\n")
+          : "(sin mensajes en el chat de esta tarea)";
+        const adjunto = item.archivo_nombre ? `\nAdjunto: ${item.archivo_nombre}` : "";
+        const asunto = `Tarea cerrada en GADUAI: ${item.titulo}`;
+        const texto = `${actor.nombre} cerró el círculo de la promesa de la tarea "${item.titulo}".${mensaje ? `\n\nRetroalimentación: ${mensaje}` : ""}${adjunto}\n\nHistorial de chat:\n${historialChat}`;
         const destinatarios = new Set();
         const uPersona = await pool.query("select correo from usuarios where colegio_id=$1 and nombre=$2", [req.params.id, item.persona]);
         if (uPersona.rows[0]) destinatarios.add(uPersona.rows[0].correo);

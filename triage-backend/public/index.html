@@ -333,6 +333,26 @@
   </div>
 </div>
 
+<!-- ============ MODAL: CÍRCULO DE LA PROMESA (solo tareas) ============ -->
+<div id="modal-circulo" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-3">
+      <div>
+        <span id="circulo-triage-label" class="text-[10px] font-bold"></span>
+        <h3 id="circulo-titulo" class="text-sm font-black text-white mt-1"></h3>
+        <p id="circulo-desc" class="text-[11px] text-slate-400 mt-1"></p>
+      </div>
+      <button onclick="cerrarModalId('modal-circulo')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div id="circulo-trail" class="flex items-center gap-2 mt-2 flex-wrap"></div>
+    <div id="circulo-accion" class="my-4"></div>
+    <div class="border-t border-slate-800 pt-3">
+      <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-2">Historial</p>
+      <div id="circulo-historial" class="space-y-1.5 max-h-52 overflow-y-auto"></div>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="hidden fixed bottom-28 md:bottom-8 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl z-[200] fade-in max-w-[90vw] text-center"></div>
 
 <script>
@@ -573,6 +593,26 @@ async function reaccionar(id, tipo){
   }catch(e){ toast("No se pudo registrar la reacción"); }
 }
 
+// Círculo de la promesa (solo tareas): los iconos del Timeline no se pueden tocar, solo se
+// van iluminando a medida que avanza el estado — toda la interacción real pasa por el modal
+// (abrirCirculo), igual que en el prototipo de referencia.
+function circuloIconTrail(h){
+  const estado = h.circuloEstado || "nuevo";
+  const up = estado==="dedo_arriba" || estado==="manito_ok" || estado==="cerrado";
+  const down = estado==="dedo_abajo";
+  const ok = estado==="manito_ok" || estado==="cerrado";
+  const cerrado = estado==="cerrado";
+  const like = !!h.circuloLike;
+  const caption = like ? "Tarea completada y valorada" : cerrado ? "Tarea completada" : estado==="manito_ok" ? "Esperando cierre de ticket" : estado==="dedo_arriba" ? "En curso" : estado==="dedo_abajo" ? "Rechazado · a negociar" : "Nuevo, sin revisar";
+  return `<span class="text-sm" title="Triage recibido">❗</span>
+    <span class="text-sm ${up?'':'opacity-25 grayscale'}" title="Aceptado">👍</span>
+    <span class="text-sm ${down?'':'opacity-25 grayscale'}" title="Rechazado / a negociar">👎</span>
+    <span class="text-sm ${ok?'':'opacity-25 grayscale'}" title="Acción realizada">👌</span>
+    <span class="text-sm ${cerrado?'text-emerald-400':'opacity-25 grayscale text-slate-500'}" title="Tarea cerrada"><i class="fa-solid fa-circle-check"></i></span>
+    <span class="text-sm ${like?'':'opacity-25 grayscale'}" title="Retroalimentación valorada">❤️</span>
+    <span class="text-[10px] text-slate-500 ml-auto">${caption}</span>`;
+}
+
 function pintarTimeline(){
   const cont = document.getElementById("timeline-container");
   let items = timelineCache;
@@ -590,7 +630,7 @@ function pintarTimeline(){
     const dueText = diff<0 ? `Vencido hace ${Math.abs(diff)}d` : diff===0 ? "Vence hoy" : `Vence ${h.fecha}`;
     const react = h.react || {like:0,dislike:0,ok:0,heart:0,done:false};
     const estado = h.tipo==='hito' ? (react.done ? "Cumplido" : "Pendiente") : (h.revisado ? "Revisado" : "Nuevo, sin revisar");
-    return `<div class="bg-slate-900/70 border ${h.tipo==='hito' && !react.done ? 'border-rose-500/40':'border-slate-800'} rounded-2xl p-4 triage-card fade-in">
+    return `<div ${h.tipo==='tarea'?`onclick="abrirCirculo(${h.id})"`:''} class="bg-slate-900/70 border ${h.tipo==='hito' && !react.done ? 'border-rose-500/40':'border-slate-800'} rounded-2xl p-4 triage-card fade-in ${h.tipo==='tarea'?'cursor-pointer':''}">
       <div class="flex justify-between gap-2 items-start flex-wrap">
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full inline-block" style="background:${cfg.color}"></span>
@@ -604,6 +644,7 @@ function pintarTimeline(){
       ${h.desc?`<p class="text-xs text-slate-400 mt-1">${esc(h.desc)}</p>`:""}
       <p class="text-[11px] mt-2" style="color:${cfg.color}">${h.triage} · vence ${h.fecha} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
       ${h.archivoNombre ? `<a href="${h.archivoData}" download="${esc(h.archivoNombre)}" class="text-[10px] text-indigo-300 underline mt-1 inline-block"><i class="fa-solid fa-paperclip"></i> ${esc(h.archivoNombre)}</a>` : ""}
+      ${h.tipo==='tarea' ? `<div class="flex items-center gap-2 mt-3 flex-wrap">${circuloIconTrail(h)}</div>` : `
       <div class="flex items-center gap-3 mt-3 text-sm">
         <span class="react-btn text-slate-500" style="color:${cfg.color}" title="Prioridad">❗</span>
         ${h.soloLectura ? `
@@ -618,14 +659,107 @@ function pintarTimeline(){
         <span class="react-btn text-slate-500 ${react.done?'active text-emerald-400':''}" onclick="reaccionar(${h.id},'done')" title="Marcar cumplido"><i class="fa-solid fa-circle-check"></i></span>
         <span class="react-btn text-slate-500 ${react.heart?'active text-pink-400':''}" onclick="reaccionar(${h.id},'heart')" title="Agradecer">♥<sup class="text-[9px]">${react.heart||''}</sup></span>`}
         <span class="text-[10px] text-slate-500 ml-auto">${estado}</span>
-      </div>
+      </div>`}
       <div class="flex gap-2 mt-3 flex-wrap">
-        <button onclick="abrirMinuta(${h.id})" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[10px] font-semibold"><i class="fa-solid fa-file-lines mr-1"></i>Solicitar Minuta</button>
-        <button onclick="abrirChat(${h.id})" class="bg-sky-600/20 text-sky-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold"><i class="fa-solid fa-comments mr-1"></i>Chat${(h.chat&&h.chat.length)?` (${h.chat.length})`:''}</button>
-        ${h.soloLectura ? '' : `<button onclick="abrirAlertar(${h.id})" class="bg-amber-600/20 text-amber-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold">🔔 Alertar${(h.alertas&&h.alertas.length)?` (${h.alertas.length})`:''}</button>`}
+        <button onclick="event.stopPropagation();abrirMinuta(${h.id})" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[10px] font-semibold"><i class="fa-solid fa-file-lines mr-1"></i>Solicitar Minuta</button>
+        <button onclick="event.stopPropagation();abrirChat(${h.id})" class="bg-sky-600/20 text-sky-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold"><i class="fa-solid fa-comments mr-1"></i>Chat${(h.chat&&h.chat.length)?` (${h.chat.length})`:''}</button>
+        ${h.soloLectura ? '' : `<button onclick="event.stopPropagation();abrirAlertar(${h.id})" class="bg-amber-600/20 text-amber-300 px-3 py-1.5 rounded-lg text-[10px] font-semibold">🔔 Alertar${(h.alertas&&h.alertas.length)?` (${h.alertas.length})`:''}</button>`}
       </div>
     </div>`;
   }).join("");
+}
+
+/* ---------- círculo de la promesa (tareas) ---------- */
+let circuloArchivoPendiente = null;
+document.addEventListener("change", e=>{
+  if(e.target.id && e.target.id.startsWith("circulo-file")){
+    const file = e.target.files[0];
+    if(!file){ circuloArchivoPendiente=null; return; }
+    const reader = new FileReader();
+    reader.onload = ()=>{ circuloArchivoPendiente = {nombre:file.name, data:reader.result}; };
+    reader.readAsDataURL(file);
+  }
+});
+function circuloCampos(idSufijo, placeholder){
+  return `<textarea id="circulo-msg${idSufijo}" rows="2" placeholder="${placeholder}" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white mb-2"></textarea>
+    <input id="circulo-file${idSufijo}" type="file" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-[10px] text-slate-400 mb-2">`;
+}
+function abrirCirculo(itemId){
+  const h = timelineCache.find(x=>x.id===itemId); if(!h) return;
+  circuloArchivoPendiente = null;
+  const cfg = TRIAGE[h.triage];
+  const estado = h.circuloEstado || "nuevo";
+  const esResponsable = STATE.persona === h.responsable;
+  const esRemitente = STATE.persona === h.persona;
+
+  document.getElementById("circulo-triage-label").innerHTML = `<span style="color:${cfg.color}">${h.triage}</span> · ${esc(STATE.colegio.nombre)}`;
+  document.getElementById("circulo-titulo").textContent = h.titulo;
+  document.getElementById("circulo-desc").textContent = h.desc || "";
+  document.getElementById("circulo-trail").innerHTML = circuloIconTrail(h);
+
+  let accionHtml = "";
+  if(estado==="nuevo" && esResponsable){
+    accionHtml = `<div class="space-y-2">
+      <p class="text-xs text-slate-300">¿Acepta hacerse cargo de esta acción?</p>
+      ${circuloCampos("-aceptar","Mensaje opcional al aceptar...")}
+      <div class="flex gap-2">
+        <button onclick="circuloAccion(${h.id},'aceptar','circulo-msg-aceptar')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs">👍 Aceptar</button>
+        <button onclick="document.getElementById('circulo-rechazo-form').classList.remove('hidden')" class="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2.5 rounded-xl text-xs">👎 Rechazar</button>
+      </div>
+      <div id="circulo-rechazo-form" class="hidden space-y-2 bg-slate-950 border border-slate-800 rounded-xl p-3">
+        ${circuloCampos("-rechazar","Mensaje opcional para quien envió la acción...")}
+        <button onclick="circuloAccion(${h.id},'rechazar','circulo-msg-rechazar')" class="w-full bg-rose-600 hover:bg-rose-500 text-white font-bold py-2 rounded-lg text-xs">Confirmar rechazo</button>
+      </div>
+    </div>`;
+  } else if(estado==="dedo_abajo"){
+    accionHtml = `<div class="space-y-2">
+      <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-[11px] text-amber-200">Se recomienda hablar en persona o por teléfono con el/la responsable para negociar las condiciones.</div>
+      ${esResponsable ? `${circuloCampos("-aceptar2","Mensaje opcional al aceptar...")}<button onclick="circuloAccion(${h.id},'aceptar','circulo-msg-aceptar2')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs">👍 Ya conversamos, aceptar ahora</button>` : `<p class="text-[10px] text-slate-500">Cuando ya hayan conversado, el/la responsable puede cambiar su respuesta a aceptado.</p>`}
+    </div>`;
+  } else if(estado==="dedo_arriba" && esResponsable){
+    accionHtml = `<div class="space-y-2">
+      <p class="text-xs text-slate-300">Cuando termine la acción solicitada, márquela como realizada.</p>
+      ${circuloCampos("-ok","Mensaje opcional...")}
+      <button onclick="circuloAccion(${h.id},'ok','circulo-msg-ok')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs">👌 Acción realizada</button>
+    </div>`;
+  } else if(estado==="dedo_arriba"){
+    accionHtml = `<p class="text-xs text-slate-400">En curso. Se avisará cuando ${esc(h.responsable||'—')} marque la acción como realizada.</p>`;
+  } else if(estado==="manito_ok" && esRemitente){
+    accionHtml = `<div class="space-y-2">
+      <p class="text-xs text-slate-300">La acción fue marcada como realizada. Cierre el ticket con su retroalimentación.</p>
+      ${circuloCampos("-cerrar","Retroalimentación para quien realizó la acción...")}
+      <button onclick="circuloAccion(${h.id},'cerrar','circulo-msg-cerrar')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs"><i class="fa-solid fa-circle-check"></i> Cerrar tarea</button>
+    </div>`;
+  } else if(estado==="manito_ok"){
+    accionHtml = `<p class="text-xs text-slate-400">Acción realizada. Esperando que ${esc(h.persona)} cierre el ticket.</p>`;
+  } else if(estado==="cerrado"){
+    accionHtml = `<div class="space-y-2">
+      <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-[11px] text-emerald-200"><b>Tarea completada.</b> Ticket cerrado.</div>
+      ${esResponsable ? (h.circuloLike ? `<p class="text-[11px] text-rose-300">❤️ Reaccionaste con me gusta a la retroalimentación.</p>` : `${circuloCampos("-like","Mensaje opcional junto a tu me gusta...")}<button onclick="circuloAccion(${h.id},'like','circulo-msg-like')" class="bg-slate-800 hover:bg-slate-700 text-rose-300 font-bold py-2 px-4 rounded-xl text-xs">❤️ Me gusta</button>`) : ''}
+    </div>`;
+  } else {
+    accionHtml = `<p class="text-xs text-slate-500">Esta acción está esperando revisión de ${esc(h.responsable||'—')}.</p>`;
+  }
+  document.getElementById("circulo-accion").innerHTML = accionHtml;
+
+  const hist = h.circuloHistorial||[];
+  document.getElementById("circulo-historial").innerHTML = hist.length ? hist.map(ev=>`<div class="text-[10px] text-slate-400 border-l-2 border-slate-800 pl-2 py-1"><b class="text-slate-300">${esc(ev.paso)}</b> · ${esc(ev.autor)} · ${esc(new Date(ev.fecha).toLocaleString('es-CL'))}${ev.mensaje?`<br><span class="text-slate-500">"${esc(ev.mensaje)}"</span>`:''}${ev.archivoData?`<br><a href="${ev.archivoData}" download="${esc(ev.archivoNombre)}" class="text-sky-400 hover:underline"><i class="fa-solid fa-paperclip"></i> ${esc(ev.archivoNombre)} · descargar</a>`:''}</div>`).join("") : '<p class="text-[10px] text-slate-600">Sin historial todavía.</p>';
+
+  document.getElementById("modal-circulo").classList.remove("hidden");
+}
+async function circuloAccion(itemId, accion, msgId){
+  const mensaje = document.getElementById(msgId)?.value || "";
+  const body = actorBody({
+    accion, mensaje,
+    archivoNombre: circuloArchivoPendiente ? circuloArchivoPendiente.nombre : null,
+    archivoData: circuloArchivoPendiente ? circuloArchivoPendiente.data : null
+  });
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/timeline/${itemId}/circulo`, {method:"POST", body: JSON.stringify(body)});
+    circuloArchivoPendiente = null;
+    await cargarTimeline();
+    abrirCirculo(itemId);
+  }catch(e){ toast("No se pudo registrar la acción"); }
 }
 
 /* ---------- modal registrar ---------- */
@@ -920,7 +1054,7 @@ async function guardarEntrevista(){
   toast("Entrevista guardada y descargada.");
 }
 
-document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista"].forEach(cerrarModalId); } });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista","modal-circulo"].forEach(cerrarModalId); } });
 init();
 </script>
 </body>

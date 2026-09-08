@@ -45,6 +45,24 @@ create table if not exists items (
 create index if not exists items_colegio_idx on items(colegio_id);
 -- Evita reenviar el aviso/correo de vencimiento cada vez que corre el cron diario.
 alter table items add column if not exists recordatorio_enviado boolean not null default false;
+-- Círculo de la promesa (solo tipo='tarea'): nuevo -> dedo_arriba|dedo_abajo -> manito_ok -> cerrado.
+alter table items add column if not exists circulo_estado text not null default 'nuevo';
+alter table items add column if not exists circulo_like boolean not null default false;
+
+-- Bitácora estructurada del círculo de la promesa (distinta del chat libre): un mensaje +
+-- adjunto opcional por cada paso (aceptar, rechazar, ok, cerrar, like).
+create table if not exists circulo_historial (
+  id bigserial primary key,
+  item_id bigint not null references items(id) on delete cascade,
+  paso text not null,
+  autor text not null,
+  perfil text not null,
+  mensaje text,
+  archivo_nombre text,
+  archivo_data text,
+  creado_en timestamptz not null default now()
+);
+create index if not exists circulo_historial_item_idx on circulo_historial(item_id);
 
 create table if not exists chat_mensajes (
   id bigserial primary key,
