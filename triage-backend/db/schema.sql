@@ -45,6 +45,9 @@ create table if not exists items (
 create index if not exists items_colegio_idx on items(colegio_id);
 -- Evita reenviar el aviso/correo de vencimiento cada vez que corre el cron diario.
 alter table items add column if not exists recordatorio_enviado boolean not null default false;
+-- Reemplaza recordatorio_enviado con 3 etapas (null -> '2dias' -> '1dia' -> 'hoy', nunca
+-- retrocede) — permite avisar en 2 días, 1 día y el mismo día del vencimiento sin duplicar.
+alter table items add column if not exists recordatorio_etapa text;
 -- Círculo de la promesa (solo tipo='tarea'): nuevo -> dedo_arriba|dedo_abajo -> manito_ok -> cerrado.
 alter table items add column if not exists circulo_estado text not null default 'nuevo';
 alter table items add column if not exists circulo_like boolean not null default false;
