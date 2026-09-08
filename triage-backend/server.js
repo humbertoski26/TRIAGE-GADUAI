@@ -536,7 +536,6 @@ const ETAPAS_VENCIMIENTO = [
 ];
 app.post("/tasks/vencimientos", requireTasksSecret, asyncRoute(async (req, res) => {
   let revisados = 0, avisos = 0, correos = 0;
-  const debug = [];
   for (const { dias, etapa, texto } of ETAPAS_VENCIMIENTO) {
     const r = await pool.query(
       `select * from items where tipo='tarea' and fecha = current_date + $1::int and circulo_estado <> 'cerrado'`,
@@ -544,7 +543,6 @@ app.post("/tasks/vencimientos", requireTasksSecret, asyncRoute(async (req, res) 
     );
     revisados += r.rows.length;
     for (const it of r.rows) {
-      debug.push({ id: it.id, titulo: it.titulo, etapaBuscada: etapa, etapaActual: it.recordatorio_etapa, responsable: it.responsable, tipoDeEtapaActual: typeof it.recordatorio_etapa });
       if (it.recordatorio_etapa === etapa) continue;
       if (!it.responsable) { await pool.query("update items set recordatorio_etapa=$1 where id=$2", [etapa, it.id]); continue; }
       const mensaje = `${texto}: ${it.titulo}`;
@@ -565,7 +563,7 @@ app.post("/tasks/vencimientos", requireTasksSecret, asyncRoute(async (req, res) 
       await pool.query("update items set recordatorio_etapa=$1 where id=$2", [etapa, it.id]);
     }
   }
-  res.json({ revisados, avisos, correos, debug });
+  res.json({ revisados, avisos, correos });
 }));
 
 // ---------- avisos de sistema (llamados por Relacionai, no por una persona) ----------
