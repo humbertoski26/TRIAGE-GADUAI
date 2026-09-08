@@ -91,6 +91,19 @@ create table if not exists alertas (
 create index if not exists alertas_item_idx on alertas(item_id);
 create index if not exists alertas_destinatario_idx on alertas(destinatario);
 
+-- Suscripciones a notificaciones push del navegador (Web Push) — una fila por
+-- dispositivo/navegador que activó notificaciones; una persona puede tener varias.
+create table if not exists push_subscripciones (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  persona text not null,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  creado_en timestamptz not null default now()
+);
+create index if not exists push_subscripciones_persona_idx on push_subscripciones(colegio_id, persona);
+
 create table if not exists entrevistas (
   id bigserial primary key,
   colegio_id text not null references colegios(id) on delete cascade,

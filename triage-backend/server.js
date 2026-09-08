@@ -13,6 +13,7 @@ const crypto = require("crypto");
 const express = require("express");
 const { Pool } = require("pg");
 const { enviarCorreo } = require("./email");
+const { enviarPush } = require("./push");
 
 const PORT = process.env.PORT || 3000;
 const connectionString = process.env.DATABASE_URL;
@@ -112,6 +113,22 @@ function asyncRoute(fn) {
   });
 }
 
+// Centraliza los ~9 lugares que insertaban directo en `alertas` — ahora todos pasan por acá,
+// así ninguno se queda sin disparar la notificación push (Fase 5). `vencimiento` arma el
+// mensaje del push con el formato exacto pedido ("Te recuerdo que ... vence en ..."); si no
+// se pasa, el push reutiliza el mismo texto de la alerta. Best-effort: nunca bloquea ni
+// rompe el flujo que la llama.
+async function crearAlerta(colegioId, itemId, destinatario, mensaje, { autor = "Sistema", vencimiento } = {}) {
+  await pool.query(
+    "insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,$2,$3,$4,$5)",
+    [itemId, autor, destinatario, mensaje, new Date().toLocaleString("es-CL")]
+  );
+  const cuerpo = vencimiento
+    ? `Te recuerdo que ${vencimiento.evento} vence en ${vencimiento.plazo}. Gracias.`
+    : mensaje;
+  enviarPush(pool, colegioId, destinatario, { titulo: "Saludos desde GADUAI 👋", cuerpo, url: "/" }).catch(() => {});
+}
+
 // ---------- colegios ----------
 // Creación y búsqueda quedan solo para el panel de administrador de GADUAI (ver
 // requireAdminKey) — un colegio ya no puede autoactivarse desde la pantalla pública.
@@ -168,6 +185,26 @@ app.post("/api/colegios/:id/insignia", requireAdminKey, asyncRoute(async (req, r
     [req.params.id, (dataUri || "").trim() || null]
   );
   if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  res.json({ ok: true });
+}));
+
+// ---------- notificaciones push del navegador (Web Push) ----------
+// Pública: el frontend la necesita para armar la suscripción antes de saber si hay sesión.
+app.get("/api/push-public-key", (req, res) => {
+  res.json({ publicKey: process.env.VAPID_PUBLIC_KEY || null });
+});
+
+app.post("/api/colegios/:id/push-subscripcion", asyncRoute(async (req, res) => {
+  const { subscription, actorCorreo, actorClave } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  if (!subscription || !subscription.endpoint || !subscription.keys) return res.status(400).json({ error: "suscripcion_invalida" });
+  await pool.query(
+    `insert into push_subscripciones (colegio_id, persona, endpoint, p256dh, auth)
+     values ($1,$2,$3,$4,$5)
+     on conflict (endpoint) do update set persona=excluded.persona, colegio_id=excluded.colegio_id`,
+    [req.params.id, actor.nombre, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
+  );
   res.json({ ok: true });
 }));
 
@@ -320,13 +357,10 @@ app.post("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
   // Avisos en la campanita del círculo de la promesa (solo tareas): al responsable que le
   // asignaron algo, y al remitente confirmando que quedó registrado — best-effort.
   if ((b.tipo || "tarea") === "tarea") {
-    const fechaHoy = new Date().toLocaleString("es-CL");
     if (b.responsable && b.responsable.trim()) {
-      pool.query("insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,'Sistema',$2,$3,$4)",
-        [itemId, b.responsable.trim(), `Nueva tarea asignada: ${titulo}`, fechaHoy]).catch(() => {});
+      crearAlerta(req.params.id, itemId, b.responsable.trim(), `Nueva tarea asignada: ${titulo}`).catch(() => {});
     }
-    pool.query("insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,'Sistema',$2,$3,$4)",
-      [itemId, actor.nombre, `Registraste la tarea: ${titulo}`, fechaHoy]).catch(() => {});
+    crearAlerta(req.params.id, itemId, actor.nombre, `Registraste la tarea: ${titulo}`).catch(() => {});
   }
 }));
 
@@ -450,16 +484,12 @@ app.post("/api/colegios/:id/timeline/:itemId/circulo", asyncRoute(async (req, re
   res.json({ ok: true, circuloEstado: nuevoEstado || estado });
 
   // Avisos en la campanita del remitente/responsable según el paso — best-effort.
-  const fechaAlerta = new Date().toLocaleString("es-CL");
   if (accion === "aceptar") {
-    pool.query("insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,'Sistema',$2,$3,$4)",
-      [item.id, item.persona, `${actor.nombre} aceptó la tarea: ${item.titulo}`, fechaAlerta]).catch(() => {});
+    crearAlerta(req.params.id, item.id, item.persona, `${actor.nombre} aceptó la tarea: ${item.titulo}`).catch(() => {});
   } else if (accion === "ok") {
-    pool.query("insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,'Sistema',$2,$3,$4)",
-      [item.id, item.persona, `${actor.nombre} marcó como realizada la tarea: ${item.titulo}`, fechaAlerta]).catch(() => {});
+    crearAlerta(req.params.id, item.id, item.persona, `${actor.nombre} marcó como realizada la tarea: ${item.titulo}`).catch(() => {});
   } else if (accion === "cerrar" && item.responsable) {
-    pool.query("insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,'Sistema',$2,$3,$4)",
-      [item.id, item.responsable, `Se cerró tu tarea: ${item.titulo}`, fechaAlerta]).catch(() => {});
+    crearAlerta(req.params.id, item.id, item.responsable, `Se cerró tu tarea: ${item.titulo}`).catch(() => {});
   }
 
   // Correo de cierre con el historial de chat, igual que el de Hitos — best-effort.
@@ -503,10 +533,7 @@ app.post("/api/colegios/:id/timeline/:itemId/alertar", asyncRoute(async (req, re
   const { destinatario, mensaje, actorCorreo, actorClave } = req.body || {};
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
-  await pool.query(
-    "insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,$2,$3,$4,$5)",
-    [req.params.itemId, actor.nombre, destinatario || "—", mensaje || null, new Date().toLocaleString("es-CL")]
-  );
+  await crearAlerta(req.params.id, req.params.itemId, destinatario || "—", mensaje || null, { autor: actor.nombre });
   res.json({ ok: true });
 }));
 
@@ -530,13 +557,13 @@ app.post("/api/colegios/:id/alertas/marcar-leidas", asyncRoute(async (req, res) 
 // hoy) — este endpoint revisa las tres condiciones en cada corrida, así que correrlo dos
 // veces el mismo día (8am y 9am) es inofensivo.
 const ETAPAS_VENCIMIENTO = [
-  { dias: 2, etapa: "2dias", texto: "Quedan 2 días para vencer" },
-  { dias: 1, etapa: "1dia", texto: "Queda 1 día para vencer" },
-  { dias: 0, etapa: "hoy", texto: "Vence hoy" },
+  { dias: 2, etapa: "2dias", texto: "Quedan 2 días para vencer", plazo: "2 días" },
+  { dias: 1, etapa: "1dia", texto: "Queda 1 día para vencer", plazo: "1 día" },
+  { dias: 0, etapa: "hoy", texto: "Vence hoy", plazo: "hoy" },
 ];
 app.post("/tasks/vencimientos", requireTasksSecret, asyncRoute(async (req, res) => {
   let revisados = 0, avisos = 0, correos = 0;
-  for (const { dias, etapa, texto } of ETAPAS_VENCIMIENTO) {
+  for (const { dias, etapa, texto, plazo } of ETAPAS_VENCIMIENTO) {
     const r = await pool.query(
       `select * from items where tipo='tarea' and fecha = current_date + $1::int and circulo_estado <> 'cerrado'`,
       [dias]
@@ -546,10 +573,7 @@ app.post("/tasks/vencimientos", requireTasksSecret, asyncRoute(async (req, res) 
       if (it.recordatorio_etapa === etapa) continue;
       if (!it.responsable) { await pool.query("update items set recordatorio_etapa=$1 where id=$2", [etapa, it.id]); continue; }
       const mensaje = `${texto}: ${it.titulo}`;
-      await pool.query(
-        "insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,'Sistema',$2,$3,$4)",
-        [it.id, it.responsable, mensaje, new Date().toLocaleString("es-CL")]
-      );
+      await crearAlerta(it.colegio_id, it.id, it.responsable, mensaje, { vencimiento: { evento: it.titulo, plazo } });
       avisos++;
       const u = await pool.query("select correo from usuarios where colegio_id=$1 and nombre=$2", [it.colegio_id, it.responsable]);
       if (u.rows[0]) {
@@ -603,8 +627,7 @@ app.post("/api/sistema/avisos", requireAdminKey, asyncRoute(async (req, res) => 
     // queda 'Rojo' así que el sostenedor lo ve igual aunque el perfil objetivo sea Director/a.
     const usuarios = await pool.query("select nombre from usuarios where colegio_id=$1 and perfil in ($2,$3)", [colegio, "Director/a de colegio", PERFIL_MASTER]);
     for (const u of usuarios.rows) {
-      await pool.query("insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,'Sistema',$2,$3,$4)",
-        [itemId, u.nombre, titulo, new Date().toLocaleString("es-CL")]);
+      await crearAlerta(colegio, itemId, u.nombre, titulo);
     }
   } else if (tipo === "relato_por_vencer") {
     // Prioriza a la persona exacta que recepcionó el caso en Relacionai (cruce por nombre);
@@ -614,8 +637,8 @@ app.post("/api/sistema/avisos", requireAdminKey, asyncRoute(async (req, res) => 
       destinatarios = (await pool.query("select nombre, correo from usuarios where colegio_id=$1 and perfil=$2", [colegio, PERFIL_CONVIVENCIA])).rows;
     }
     for (const u of destinatarios) {
-      await pool.query("insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,'Sistema',$2,$3,$4)",
-        [itemId, u.nombre, titulo, new Date().toLocaleString("es-CL")]);
+      const plazo = dias === 2 ? "2 días" : dias === 1 ? "1 día" : dias === 0 ? "hoy" : "pronto";
+      await crearAlerta(colegio, itemId, u.nombre, titulo, { vencimiento: { evento: `el relato del caso ${caso}`, plazo } });
       await enviarCorreo({
         to: u.correo,
         asunto: titulo,

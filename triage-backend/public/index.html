@@ -165,6 +165,7 @@
       <p class="text-[11px] text-slate-500 mb-4">Todos comparten el mismo Timeline del colegio, sincronizado entre dispositivos.</p>
       <div id="menu-perfiles" class="space-y-1.5"></div>
       <button id="btn-usuarios" onclick="abrirUsuarios()" hidden class="w-full mt-5 text-[11px] text-cyan-300 border border-cyan-500/30 rounded-lg py-2"><i class="fa-solid fa-users-gear mr-1"></i> Administrar usuarios (máster)</button>
+      <button id="btn-activar-push" onclick="activarPush()" class="w-full mt-3 text-[11px] text-amber-300 border border-amber-500/30 rounded-lg py-2"><i class="fa-solid fa-bell mr-1"></i> Activar notificaciones del celular</button>
       <button onclick="toggleMenu();cerrarSesion()" class="w-full mt-3 text-[11px] text-rose-400 border border-rose-500/30 rounded-lg py-2">Cerrar sesión</button>
     </div>
   </div>
@@ -499,6 +500,32 @@ async function renderMenuPerfiles(){
 }
 
 function toggleMenu(){ const m=document.getElementById("menu-lateral"); m.hidden=!m.hidden; }
+
+/* ---------- notificaciones push del navegador (Fase 5) ---------- */
+// applicationServerKey necesita un Uint8Array, no el string base64url que da el servidor.
+function urlBase64ToUint8Array(base64String){
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c=>c.charCodeAt(0)));
+}
+async function activarPush(){
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+    toast("Este navegador no soporta notificaciones push. En iPhone, agrega GADUAI a la pantalla de inicio primero.");
+    return;
+  }
+  try{
+    const permiso = await Notification.requestPermission();
+    if(permiso !== "granted"){ toast("No se concedió el permiso de notificaciones."); return; }
+    const { publicKey } = await api("/api/push-public-key");
+    if(!publicKey){ toast("Las notificaciones push todavía no están configuradas en el servidor."); return; }
+    const registro = await navigator.serviceWorker.ready;
+    let sub = await registro.pushManager.getSubscription();
+    if(!sub) sub = await registro.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+    await api(`/api/colegios/${STATE.colegioId}/push-subscripcion`, {method:"POST", body: JSON.stringify(actorBody({subscription: sub.toJSON()}))});
+    toast("Notificaciones activadas ✅");
+  }catch(e){ toast("No se pudo activar las notificaciones (revisa los permisos del navegador)."); }
+}
 
 function cerrarSesion(){
   if(pollTimer) clearInterval(pollTimer);
