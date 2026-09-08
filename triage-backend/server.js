@@ -538,7 +538,7 @@ app.post("/tasks/vencimientos", requireTasksSecret, asyncRoute(async (req, res) 
   let revisados = 0, avisos = 0, correos = 0;
   for (const { dias, etapa, texto } of ETAPAS_VENCIMIENTO) {
     const r = await pool.query(
-      `select * from items where tipo='tarea' and fecha = current_date + $1 and circulo_estado <> 'cerrado'`,
+      `select * from items where tipo='tarea' and fecha = current_date + $1::int and circulo_estado <> 'cerrado'`,
       [dias]
     );
     revisados += r.rows.length;
