@@ -162,3 +162,19 @@ create table if not exists normativa (
   texto text not null,
   creado_en timestamptz not null default now()
 );
+
+-- ---------- Monitor Vital v2: sugerencias diaria/semanal/mensual por persona ----------
+-- No se regenera el mismo texto mientras siga vigente y sin completar (así "se acumula para
+-- el otro día" en vez de duplicarse); al completarla queda en el historial, no se borra.
+create table if not exists monitor_tareas (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  persona text not null,
+  periodo text not null,
+  texto text not null,
+  fecha_generada date not null,
+  completada boolean not null default false,
+  fecha_completada timestamptz,
+  creado_en timestamptz not null default now()
+);
+create index if not exists monitor_tareas_colegio_persona_idx on monitor_tareas(colegio_id, persona);

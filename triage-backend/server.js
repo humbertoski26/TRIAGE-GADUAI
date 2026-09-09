@@ -776,6 +776,97 @@ app.post("/api/colegios/:id/chat-ia", asyncRoute(async (req, res) => {
   res.json({ respuesta });
 }));
 
+// ---------- Monitor Vital v2: sugerencias diaria/semanal/mensual ----------
+// El máster y el director de colegio miran el triage completo del colegio (más su propio
+// hilo); el resto de los perfiles solo ve lo que ya le aparece en su Timeline.
+const PERFIL_DIRECTOR_COLEGIO = "Director/a de colegio";
+function itemsVisiblesSql(perfil) {
+  if (perfil === PERFIL_MASTER || perfil === PERFIL_DIRECTOR_COLEGIO) {
+    return "select * from items where colegio_id=$1 and revisado=false and (triage='Rojo' or perfil=$2 or persona=$3 or responsable=$3 or $3 = any(copiados)) order by fecha asc";
+  }
+  return "select * from items where colegio_id=$1 and revisado=false and (perfil=$2 or persona=$3 or responsable=$3 or $3 = any(copiados)) order by fecha asc";
+}
+function diasHasta(fecha) {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const f = new Date(`${fecha}`.slice(0, 10) + "T12:00:00");
+  return Math.round((f - hoy) / 86400000);
+}
+function generarSugerenciasMonitor(items) {
+  const sugerencias = [];
+  for (const it of items) {
+    const dias = diasHasta(it.fecha);
+    if (it.triage === "Rojo" && dias <= 0) {
+      sugerencias.push({ periodo: "diaria", texto: `Atender hoy: "${it.titulo}" (vence ${it.fecha})` });
+    } else if (it.triage === "Naranjo" && dias > 0 && dias <= 7) {
+      sugerencias.push({ periodo: "semanal", texto: `Esta semana: "${it.titulo}" vence el ${it.fecha}` });
+    }
+  }
+  const pendientesMes = items.filter(it => diasHasta(it.fecha) <= 30).length;
+  const urgentesMes = items.filter(it => it.triage === "Rojo" && diasHasta(it.fecha) <= 30).length;
+  if (pendientesMes > 0) {
+    sugerencias.push({
+      periodo: "mensual",
+      texto: `Este mes hay ${pendientesMes} tarea(s) pendiente(s) en tu Timeline${urgentesMes ? ` (${urgentesMes} urgente(s))` : ""} — revisa el avance general.`
+    });
+  }
+  return sugerencias;
+}
+
+app.get("/api/colegios/:id/monitor", asyncRoute(async (req, res) => {
+  const { perfil, persona } = req.query;
+  if (!perfil || !persona) return res.status(400).json({ error: "perfil_y_persona_requeridos" });
+  const items = (await pool.query(itemsVisiblesSql(perfil), [req.params.id, perfil, persona])).rows;
+  const sugerencias = generarSugerenciasMonitor(items);
+
+  const activas = (await pool.query(
+    "select id, periodo, texto from monitor_tareas where colegio_id=$1 and persona=$2 and completada=false",
+    [req.params.id, persona]
+  )).rows;
+  const textosActivos = new Set(activas.map(a => `${a.periodo}::${a.texto}`));
+  for (const s of sugerencias) {
+    const clave = `${s.periodo}::${s.texto}`;
+    if (!textosActivos.has(clave)) {
+      await pool.query(
+        "insert into monitor_tareas (colegio_id, persona, periodo, texto, fecha_generada) values ($1,$2,$3,$4, current_date)",
+        [req.params.id, persona, s.periodo, s.texto]
+      );
+    }
+  }
+  const textosVigentes = new Set(sugerencias.map(s => `${s.periodo}::${s.texto}`));
+  const vencidas = activas.filter(a => !textosVigentes.has(`${a.periodo}::${a.texto}`)).map(a => a.id);
+  if (vencidas.length) {
+    await pool.query("delete from monitor_tareas where id = any($1)", [vencidas]);
+  }
+
+  const r = await pool.query(
+    "select id, periodo, texto from monitor_tareas where colegio_id=$1 and persona=$2 and completada=false order by periodo, id",
+    [req.params.id, persona]
+  );
+  res.json({ tareas: r.rows, hayCritico: items.some(it => it.triage === "Rojo" && diasHasta(it.fecha) <= 0) });
+}));
+
+app.post("/api/colegios/:id/monitor/:tareaId/completar", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  const r = await pool.query(
+    "update monitor_tareas set completada=true, fecha_completada=now() where id=$1 and colegio_id=$2 and persona=$3 returning id",
+    [req.params.tareaId, req.params.id, actor.nombre]
+  );
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrada" });
+  res.json({ ok: true });
+}));
+
+app.get("/api/colegios/:id/monitor/historial", asyncRoute(async (req, res) => {
+  const { persona } = req.query;
+  if (!persona) return res.status(400).json({ error: "persona_requerida" });
+  const r = await pool.query(
+    "select id, periodo, texto, fecha_completada from monitor_tareas where colegio_id=$1 and persona=$2 and completada=true order by fecha_completada desc limit 200",
+    [req.params.id, persona]
+  );
+  res.json(r.rows);
+}));
+
 // El frontend la consulta al iniciar si la URL no trae ?colegio= — solo devuelve algo en
 // despliegues dedicados a un colegio (DEFAULT_COLEGIO_ID configurado).
 app.get("/api/config", (req, res) => {

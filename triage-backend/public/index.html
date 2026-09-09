@@ -99,6 +99,13 @@
   .gaduai-btn-accent:hover{background:#4759b8}
   .gaduai-btn-cyan{background:#0ea5e9}
   .gaduai-btn-cyan:hover{background:#0284c7}
+  .monitor-vital-pill{color:#6ee7b7;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3)}
+  .monitor-vital-pill.critico{color:#fda4af;background:rgba(225,29,72,.15);border:1px solid rgba(225,29,72,.5);animation:monitorPulso 1.6s ease-in-out infinite}
+  @keyframes monitorPulso{0%,100%{box-shadow:0 0 0 0 rgba(225,29,72,.5)}50%{box-shadow:0 0 0 5px rgba(225,29,72,0)}}
+  #monitor-vital-count:not(.hidden){display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;border-radius:9999px;background:#e11d48;color:#fff;font-size:9px;padding:0 4px;margin-left:2px}
+  .monitor-tarea{display:flex;align-items:flex-start;gap:10px;background:#020617;border:1px solid #1e293b;border-radius:12px;padding:10px 12px}
+  .monitor-check{flex:none;width:20px;height:20px;border-radius:9999px;border:2px solid #475569;cursor:pointer;margin-top:1px}
+  .monitor-check:hover{border-color:#10b981}
   .logo-orb{background:radial-gradient(circle at 35% 30%,#22d3ee,#4338ca 65%,#1e1b4b);box-shadow:0 0 30px -4px rgba(56,189,248,.7)}
   .react-btn{transition:.15s;cursor:pointer}
   .react-btn:hover{transform:scale(1.15)}
@@ -186,6 +193,7 @@
       <div class="flex items-center gap-2 flex-wrap">
         <span id="sync-indicator" class="text-[10px] text-emerald-400" title="Sincronizado con el servidor"><i class="fa-solid fa-cloud"></i></span>
         <span id="hitos-count" class="text-[11px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-3 py-1">0 hitos</span>
+        <button id="btn-monitor-vital" onclick="abrirMonitorVital()" title="Monitor Vital" class="monitor-vital-pill relative text-[11px] font-bold rounded-full px-3 py-1 flex items-center gap-1.5"><i class="fa-solid fa-heart-pulse"></i> Monitor Vital <span id="monitor-vital-count" class="hidden"></span></button>
         <button onclick="abrirAlertas()" class="relative text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1"><i class="fa-solid fa-bell"></i> <span id="alertas-count">0</span></button>
         <button onclick="cerrarSesion()" class="text-[11px] text-slate-500 hover:text-rose-400"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
       </div>
@@ -336,6 +344,32 @@
       <input id="ia-input" placeholder="Escriba su consulta..." class="flex-1 bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white" onkeydown="if(event.key==='Enter')enviarMensajeIA()">
       <button onclick="enviarMensajeIA()" class="bg-indigo-600 text-white px-3 rounded-xl text-xs font-bold"><i class="fa-solid fa-paper-plane"></i></button>
     </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: MONITOR VITAL ============ -->
+<div id="modal-monitor" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-2">
+      <div>
+        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-heart-pulse text-emerald-400"></i> Monitor Vital</h3>
+        <p class="text-[11px] text-slate-500">Qué atender hoy, esta semana y este mes — según tu Timeline.</p>
+      </div>
+      <button onclick="cerrarModalId('modal-monitor')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div id="monitor-secciones" class="space-y-5 mt-3"></div>
+    <button onclick="abrirHistorialMonitor()" class="w-full mt-4 text-[11px] text-slate-400 border border-slate-800 rounded-lg py-2"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Historial de tareas realizadas</button>
+  </div>
+</div>
+
+<!-- ============ MODAL: HISTORIAL MONITOR VITAL ============ -->
+<div id="modal-monitor-historial" class="hidden fixed inset-0 z-[120] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-3">
+      <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-slate-300"></i> Tareas realizadas</h3>
+      <button onclick="cerrarModalId('modal-monitor-historial')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div id="monitor-historial-lista" class="space-y-2"></div>
   </div>
 </div>
 
@@ -810,9 +844,78 @@ async function cargarTimeline(){
     timelineCache = nuevos;
     if(cambio) pintarTimeline();
     actualizarBadgeAlertas();
+    actualizarMonitorPill();
   }catch(e){
     document.getElementById("sync-indicator").innerHTML = '<i class="fa-solid fa-cloud-slash"></i>';
     document.getElementById("sync-indicator").className = "text-[10px] text-rose-400";
+  }
+}
+
+/* ---------- Monitor Vital v2 ---------- */
+function diasHastaCliente(fechaStr){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const f = new Date(fechaStr + "T12:00:00");
+  return Math.round((f - hoy) / 86400000);
+}
+function actualizarMonitorPill(){
+  const criticos = timelineCache.filter(it => it.triage === "Rojo" && diasHastaCliente(it.fecha) <= 0 && !it.revisado);
+  const btn = document.getElementById("btn-monitor-vital");
+  const count = document.getElementById("monitor-vital-count");
+  if(!btn) return;
+  btn.classList.toggle("critico", criticos.length > 0);
+  if(criticos.length){ count.textContent = criticos.length; count.classList.remove("hidden"); }
+  else { count.classList.add("hidden"); }
+}
+const MONITOR_PERIODOS = {diaria:"Hoy", semanal:"Esta semana", mensual:"Este mes"};
+async function abrirMonitorVital(){
+  document.getElementById("modal-monitor").classList.remove("hidden");
+  document.getElementById("monitor-secciones").innerHTML = '<p class="text-[11px] text-slate-500 text-center py-6">Cargando…</p>';
+  try{
+    const q = new URLSearchParams({perfil: STATE.perfil||"", persona: STATE.persona||""});
+    const data = await api(`/api/colegios/${STATE.colegioId}/monitor?${q}`);
+    renderMonitorSecciones(data.tareas);
+  }catch(e){
+    document.getElementById("monitor-secciones").innerHTML = '<p class="text-[11px] text-rose-400 text-center py-6">No se pudo cargar el Monitor Vital.</p>';
+  }
+}
+function renderMonitorSecciones(tareas){
+  const cont = document.getElementById("monitor-secciones");
+  const porPeriodo = {diaria:[], semanal:[], mensual:[]};
+  tareas.forEach(t => { if(porPeriodo[t.periodo]) porPeriodo[t.periodo].push(t); });
+  cont.innerHTML = Object.entries(MONITOR_PERIODOS).map(([clave, titulo]) => `
+    <div>
+      <p class="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-2">${titulo}</p>
+      <div class="space-y-2">
+        ${porPeriodo[clave].length ? porPeriodo[clave].map(t => `
+          <div class="monitor-tarea">
+            <div class="monitor-check" onclick="completarTareaMonitor(${t.id})" title="Marcar como hecha"></div>
+            <p class="text-xs text-slate-300 flex-1">${esc(t.texto)}</p>
+          </div>`).join("") : '<p class="text-[10px] text-slate-600">Sin pendientes.</p>'}
+      </div>
+    </div>`).join("");
+}
+async function completarTareaMonitor(id){
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/monitor/${id}/completar`, {method:"POST", body: JSON.stringify(actorBody())});
+    await abrirMonitorVital();
+    await cargarTimeline();
+    toast("Tarea marcada como hecha");
+  }catch(e){ toast("No se pudo marcar la tarea"); }
+}
+async function abrirHistorialMonitor(){
+  document.getElementById("modal-monitor-historial").classList.remove("hidden");
+  const cont = document.getElementById("monitor-historial-lista");
+  cont.innerHTML = '<p class="text-[11px] text-slate-500 text-center py-6">Cargando…</p>';
+  try{
+    const q = new URLSearchParams({persona: STATE.persona||""});
+    const historial = await api(`/api/colegios/${STATE.colegioId}/monitor/historial?${q}`);
+    cont.innerHTML = historial.length ? historial.map(t => `
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
+        <p class="text-xs text-slate-300">${esc(t.texto)}</p>
+        <p class="text-[9px] text-slate-500 mt-1">${MONITOR_PERIODOS[t.periodo]||t.periodo} · completada ${new Date(t.fecha_completada).toLocaleString("es-CL")}</p>
+      </div>`).join("") : '<p class="text-[11px] text-slate-500 text-center py-6">Aún no has completado tareas del Monitor Vital.</p>';
+  }catch(e){
+    cont.innerHTML = '<p class="text-[11px] text-rose-400 text-center py-6">No se pudo cargar el historial.</p>';
   }
 }
 
@@ -1284,7 +1387,7 @@ async function guardarEntrevista(){
   toast("Entrevista guardada y descargada.");
 }
 
-document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista","modal-circulo","modal-ia"].forEach(cerrarModalId); } });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista","modal-circulo","modal-ia","modal-monitor","modal-monitor-historial"].forEach(cerrarModalId); } });
 init();
 </script>
 </body>
