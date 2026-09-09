@@ -895,6 +895,9 @@ app.get("/api/colegios/:id/monitor", asyncRoute(async (req, res) => {
   const porcentaje = Math.max(20, 100 - criticos.length * 15 - prioritarios.length * 5);
 
   res.json({
+    debugItemsCount: items.length,
+    debugSql: itemsVisiblesSql(perfil),
+    debugParams: [req.params.id, perfil, persona],
     tareas: r.rows,
     hayCritico: criticos.length > 0,
     estado,
