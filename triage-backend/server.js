@@ -14,6 +14,7 @@ const express = require("express");
 const { Pool } = require("pg");
 const { enviarCorreo } = require("./email");
 const { enviarPush } = require("./push");
+const Anthropic = require("@anthropic-ai/sdk");
 
 const PORT = process.env.PORT || 3000;
 const connectionString = process.env.DATABASE_URL;
@@ -60,6 +61,12 @@ const pool = new Pool({
   connectionString,
   ssl: connectionString.includes("localhost") ? false : { rejectUnauthorized: false }
 });
+
+// IA GADUAI: respaldo conversacional con Claude cuando el contexto propio del colegio no
+// alcanza. Sin ANTHROPIC_API_KEY configurada, el botón sigue mostrando el historial pero la
+// ruta de chat responde "ia_no_configurada" en vez de romper el resto del backend.
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+if (!anthropic) console.warn("ANTHROPIC_API_KEY no configurada: IA GADUAI queda deshabilitada.");
 
 const app = express();
 app.use((req, res, next) => {
@@ -658,6 +665,115 @@ app.post("/api/sistema/avisos", requireAdminKey, asyncRoute(async (req, res) => 
     }
   }
   res.json({ ok: true });
+}));
+
+// ---------- documentos del colegio (alimentan el cerebro de IA GADUAI) ----------
+// Subir/eliminar es solo del máster (mismo criterio que administrar usuarios); cualquier
+// perfil puede listarlos para saber qué tiene cargado el colegio.
+app.get("/api/colegios/:id/documentos", asyncRoute(async (req, res) => {
+  const r = await pool.query(
+    "select id, tipo, nombre, archivo_nombre, subido_por, creado_en from documentos where colegio_id=$1 order by creado_en desc",
+    [req.params.id]
+  );
+  res.json(r.rows);
+}));
+
+app.post("/api/colegios/:id/documentos", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, tipo, nombre, archivoNombre, archivoData } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor || actor.perfil !== PERFIL_MASTER) return res.status(403).json({ error: "solo_master" });
+  if (!tipo || !nombre) return res.status(400).json({ error: "campos_requeridos" });
+  const r = await pool.query(
+    "insert into documentos (colegio_id, tipo, nombre, archivo_nombre, archivo_data, subido_por) values ($1,$2,$3,$4,$5,$6) returning id, tipo, nombre, archivo_nombre, subido_por, creado_en",
+    [req.params.id, tipo, nombre.trim(), archivoNombre || null, archivoData || null, actor.nombre]
+  );
+  res.json(r.rows[0]);
+}));
+
+app.delete("/api/colegios/:id/documentos/:docId", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor || actor.perfil !== PERFIL_MASTER) return res.status(403).json({ error: "solo_master" });
+  await pool.query("delete from documentos where id=$1 and colegio_id=$2", [req.params.docId, req.params.id]);
+  res.json({ ok: true });
+}));
+
+// ---------- IA GADUAI: chat con el "cerebro" del colegio ----------
+// El contexto (documentos propios + normativa nacional) va como bloque cacheado del sistema:
+// no cambia entre preguntas de un mismo colegio, así Anthropic solo cobra precio completo la
+// primera vez y el resto son lecturas de caché (~90% más barato) — ver prompt caching.
+async function armarContextoIA(colegioId) {
+  const docs = await pool.query(
+    "select tipo, nombre from documentos where colegio_id=$1 order by creado_en asc",
+    [colegioId]
+  );
+  const normativa = await pool.query(
+    "select titulo, texto from normativa order by id asc"
+  );
+  let contexto = "Eres GADUAI, el asistente de inteligencia organizacional de este colegio. " +
+    "Respondes preguntas de cualquier perfil (director, UTP, inspector general, convivencia, dupla psicosocial, docentes) " +
+    "usando el reglamento y documentos propios del colegio, y la normativa educacional chilena vigente que se te entrega abajo. " +
+    "Sé claro, breve y práctico, en español de Chile. Si la pregunta requiere un criterio legal o profesional que no puedas " +
+    "resolver con este contexto, dilo con honestidad en vez de inventar una respuesta.\n\n";
+  if (docs.rows.length) {
+    contexto += "=== Documentos cargados por este colegio (referencia por nombre; el máster los administra en Configuración) ===\n";
+    contexto += docs.rows.map(d => `- [${d.tipo}] ${d.nombre}`).join("\n") + "\n\n";
+  }
+  if (normativa.rows.length) {
+    contexto += "=== Normativa nacional ===\n";
+    for (const n of normativa.rows) contexto += `\n[${n.titulo}]\n${n.texto}\n`;
+  }
+  return contexto;
+}
+
+app.get("/api/colegios/:id/chat-ia", asyncRoute(async (req, res) => {
+  const { persona } = req.query;
+  if (!persona) return res.status(400).json({ error: "persona_requerida" });
+  const r = await pool.query(
+    "select rol, contenido, fuente, creado_en from chat_ia where colegio_id=$1 and persona=$2 order by creado_en asc",
+    [req.params.id, persona]
+  );
+  res.json(r.rows);
+}));
+
+app.post("/api/colegios/:id/chat-ia", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, mensaje } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  if (!mensaje || !mensaje.trim()) return res.status(400).json({ error: "mensaje_requerido" });
+
+  await pool.query(
+    "insert into chat_ia (colegio_id, persona, rol, contenido, fuente) values ($1,$2,'user',$3,'gaduai')",
+    [req.params.id, actor.nombre, mensaje.trim()]
+  );
+
+  if (!anthropic) return res.status(503).json({ error: "ia_no_configurada" });
+
+  let respuesta;
+  try {
+    const contexto = await armarContextoIA(req.params.id);
+    const historial = await pool.query(
+      "select rol, contenido from chat_ia where colegio_id=$1 and persona=$2 order by creado_en asc limit 20",
+      [req.params.id, actor.nombre]
+    );
+    const completion = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 1024,
+      system: [{ type: "text", text: contexto, cache_control: { type: "ephemeral" } }],
+      messages: historial.rows.map(h => ({ role: h.rol === "user" ? "user" : "assistant", content: h.contenido }))
+    });
+    respuesta = completion.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim()
+      || "No tengo una respuesta clara para eso todavía.";
+  } catch (err) {
+    console.error("Error llamando a Claude:", err.message);
+    respuesta = "No pude conectarme con el respaldo de IA en este momento. Intenta de nuevo en unos minutos.";
+  }
+
+  await pool.query(
+    "insert into chat_ia (colegio_id, persona, rol, contenido, fuente) values ($1,$2,'assistant',$3,'claude')",
+    [req.params.id, actor.nombre, respuesta]
+  );
+  res.json({ respuesta });
 }));
 
 // El frontend la consulta al iniciar si la URL no trae ?colegio= — solo devuelve algo en
