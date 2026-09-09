@@ -867,6 +867,77 @@ app.get("/api/colegios/:id/monitor/historial", asyncRoute(async (req, res) => {
   res.json(r.rows);
 }));
 
+// ---------- Buscador restringido: directorio de personas ----------
+// Permiso especial: solo estos 4 perfiles pueden buscar/ver fichas, chequeado en el servidor
+// (no basta con ocultar el botón en el frontend, porque son datos sensibles de menores/RUT).
+const PERFILES_BUSCADOR = [PERFIL_MASTER, "Director/a de colegio", "UTP", "Inspector General"];
+async function actorConAccesoBuscador(colegioId, correo, clave) {
+  const actor = await verificarActor(colegioId, correo, clave);
+  if (!actor || !PERFILES_BUSCADOR.includes(actor.perfil)) return null;
+  return actor;
+}
+
+// Búsqueda y ficha van por POST (no GET) aunque sean lecturas: así la clave del actor nunca
+// viaja en la URL/query string (no queda en logs ni en el historial del navegador).
+app.post("/api/colegios/:id/directorio/buscar", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, q } = req.body || {};
+  const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  const termino = (q || "").trim();
+  if (termino.length < 2) return res.json([]);
+  const r = await pool.query(
+    "select id, tipo, nombre, rut, detalle from directorio_personas where colegio_id=$1 and (nombre ilike $2 or rut ilike $2) order by nombre asc limit 30",
+    [req.params.id, `%${termino}%`]
+  );
+  res.json(r.rows);
+}));
+
+app.post("/api/colegios/:id/directorio", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, tipo, nombre, rut, detalle } = req.body || {};
+  const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  if (!tipo || !nombre || !nombre.trim()) return res.status(400).json({ error: "campos_requeridos" });
+  const r = await pool.query(
+    "insert into directorio_personas (colegio_id, tipo, nombre, rut, detalle, creado_por) values ($1,$2,$3,$4,$5,$6) returning id, tipo, nombre, rut, detalle",
+    [req.params.id, tipo, nombre.trim(), rut || null, detalle || null, actor.nombre]
+  );
+  res.json(r.rows[0]);
+}));
+
+app.post("/api/colegios/:id/directorio/:personaId/ver", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave } = req.body || {};
+  const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  const persona = await pool.query(
+    "select id, tipo, nombre, rut, detalle from directorio_personas where id=$1 and colegio_id=$2",
+    [req.params.personaId, req.params.id]
+  );
+  if (!persona.rows.length) return res.status(404).json({ error: "no_encontrada" });
+  const historial = await pool.query(
+    "select id, tipo, titulo, descripcion, autor, perfil, archivo_nombre, archivo_data, creado_en from historial_persona where persona_id=$1 order by creado_en desc",
+    [req.params.personaId]
+  );
+  res.json({ ...persona.rows[0], historial: historial.rows });
+}));
+
+app.post("/api/colegios/:id/directorio/:personaId/historial", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, tipo, titulo, descripcion, archivoNombre, archivoData } = req.body || {};
+  const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  if (!tipo || !titulo || !titulo.trim()) return res.status(400).json({ error: "campos_requeridos" });
+  const persona = await pool.query(
+    "select id from directorio_personas where id=$1 and colegio_id=$2",
+    [req.params.personaId, req.params.id]
+  );
+  if (!persona.rows.length) return res.status(404).json({ error: "no_encontrada" });
+  const r = await pool.query(
+    `insert into historial_persona (persona_id, tipo, titulo, descripcion, autor, perfil, archivo_nombre, archivo_data)
+     values ($1,$2,$3,$4,$5,$6,$7,$8) returning id, tipo, titulo, descripcion, autor, perfil, archivo_nombre, archivo_data, creado_en`,
+    [req.params.personaId, tipo, titulo.trim(), descripcion || null, actor.nombre, actor.perfil, archivoNombre || null, archivoData || null]
+  );
+  res.json(r.rows[0]);
+}));
+
 // El frontend la consulta al iniciar si la URL no trae ?colegio= — solo devuelve algo en
 // despliegues dedicados a un colegio (DEFAULT_COLEGIO_ID configurado).
 app.get("/api/config", (req, res) => {

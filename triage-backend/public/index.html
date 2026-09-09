@@ -203,6 +203,7 @@
       <button onclick="abrirEntrevistaFormal()" title="Entrevista formal" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-file-signature"></i> Entrevista</button>
       <a id="btn-ir-relacionai" href="#" target="_blank" rel="noopener" hidden title="Ir a Relacionai" class="gaduai-btn-cyan text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-arrow-up-right-from-square"></i> Relacionai</a>
       <button onclick="abrirIA()" title="IA GADUAI" class="gaduai-gradient text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-brain"></i> IA GADUAI</button>
+      <button id="btn-buscador" hidden onclick="abrirBuscador()" title="Buscador" class="bg-slate-800 border border-slate-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> Buscador</button>
     </div>
   </header>
   <div class="bg-slate-950/95 border-b border-slate-800 py-2.5">
@@ -373,6 +374,54 @@
   </div>
 </div>
 
+<!-- ============ MODAL: BUSCADOR (restringido) ============ -->
+<div id="modal-buscador" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-3">
+      <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-magnifying-glass text-indigo-400"></i> Buscador</h3>
+      <button onclick="cerrarModalId('modal-buscador')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <input id="buscador-input" oninput="filtrarBuscador()" type="text" placeholder="Apellido o RUT…" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white mb-3" autocomplete="off">
+    <div id="buscador-resultados" class="space-y-1.5 max-h-64 overflow-y-auto"></div>
+    <button onclick="mostrarFormAgregarPersona()" class="w-full mt-3 text-[11px] text-slate-400 border border-slate-800 rounded-lg py-2"><i class="fa-solid fa-plus mr-1"></i> Agregar persona al directorio</button>
+    <div id="buscador-form-agregar" class="hidden mt-3 space-y-2 bg-slate-950 border border-slate-800 rounded-xl p-3">
+      <select id="nueva-persona-tipo" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+        <option value="funcionario">Funcionario/a</option>
+        <option value="estudiante">Estudiante</option>
+      </select>
+      <input id="nueva-persona-nombre" type="text" placeholder="Nombre completo" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+      <input id="nueva-persona-rut" type="text" placeholder="RUT" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+      <input id="nueva-persona-detalle" type="text" placeholder="Cargo o curso" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+      <button onclick="agregarPersona()" class="w-full gaduai-btn-accent text-white text-xs font-bold py-2 rounded-lg">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: FICHA DE PERSONA ============ -->
+<div id="modal-ficha-persona" class="hidden fixed inset-0 z-[120] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-3">
+      <div>
+        <h3 id="ficha-nombre" class="text-base font-black text-white"></h3>
+        <p id="ficha-detalle" class="text-[11px] text-slate-500"></p>
+      </div>
+      <button onclick="cerrarModalId('modal-ficha-persona')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div id="ficha-historial" class="space-y-2 mb-3"></div>
+    <div class="space-y-2 bg-slate-950 border border-slate-800 rounded-xl p-3">
+      <select id="nuevo-hist-tipo" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+        <option value="entrevista">Entrevista</option>
+        <option value="anotacion">Anotación</option>
+        <option value="dato">Dato relevante</option>
+      </select>
+      <input id="nuevo-hist-titulo" type="text" placeholder="Título" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+      <textarea id="nuevo-hist-desc" placeholder="Detalle…" rows="2" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"></textarea>
+      <input id="nuevo-hist-archivo" type="file" class="w-full text-[11px] text-slate-400">
+      <button onclick="agregarHistorialPersona()" class="w-full gaduai-btn-accent text-white text-xs font-bold py-2 rounded-lg">Agregar al historial</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ MODAL: MINUTA ============ -->
 <div id="modal-minuta" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
   <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
@@ -498,6 +547,7 @@ const PERFILES = [
   "Docente"
 ];
 const PERFIL_MASTER = PERFILES[0];
+const PERFILES_BUSCADOR = [PERFIL_MASTER, "Director/a de colegio", "UTP", "Inspector General"];
 
 // Tonos intermedios (no los más claros ni los más oscuros de cada paleta) para que el texto
 // coloreado inline (ej. la línea "Rojo · vence ... · registró ...") se lea bien tanto en
@@ -640,6 +690,7 @@ async function entrarApp(){
   document.getElementById("app-perfil-label").textContent = STATE.perfil;
   document.getElementById("app-colegio-label").textContent = STATE.colegio.nombre;
   document.getElementById("btn-usuarios").hidden = !STATE.isMaster;
+  document.getElementById("btn-buscador").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
   actualizarLinkRelacionai();
   await Promise.all([renderMenuPerfiles(), cargarTimeline()]);
   if(pollTimer) clearInterval(pollTimer);
@@ -917,6 +968,96 @@ async function abrirHistorialMonitor(){
   }catch(e){
     cont.innerHTML = '<p class="text-[11px] text-rose-400 text-center py-6">No se pudo cargar el historial.</p>';
   }
+}
+
+/* ---------- Buscador restringido ---------- */
+let buscadorTimer = null;
+let fichaPersonaActual = null;
+function abrirBuscador(){
+  document.getElementById("modal-buscador").classList.remove("hidden");
+  document.getElementById("buscador-input").value = "";
+  document.getElementById("buscador-resultados").innerHTML = "";
+  document.getElementById("buscador-form-agregar").classList.add("hidden");
+  document.getElementById("buscador-input").focus();
+}
+function mostrarFormAgregarPersona(){
+  document.getElementById("buscador-form-agregar").classList.toggle("hidden");
+}
+function filtrarBuscador(){
+  clearTimeout(buscadorTimer);
+  const q = document.getElementById("buscador-input").value.trim();
+  const cont = document.getElementById("buscador-resultados");
+  if(q.length < 2){ cont.innerHTML = ""; return; }
+  buscadorTimer = setTimeout(async () => {
+    try{
+      const resultados = await api(`/api/colegios/${STATE.colegioId}/directorio/buscar`, {method:"POST", body: JSON.stringify(actorBody({q}))});
+      cont.innerHTML = resultados.length ? resultados.map(p => `
+        <div onclick="abrirFichaPersona(${p.id})" class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 cursor-pointer hover:border-indigo-500">
+          <p class="text-xs font-bold text-white">${esc(p.nombre)}</p>
+          <p class="text-[10px] text-slate-500">${p.tipo==="estudiante"?"Estudiante":"Funcionario/a"}${p.detalle?` · ${esc(p.detalle)}`:""}${p.rut?` · ${esc(p.rut)}`:""}</p>
+        </div>`).join("") : '<p class="text-[11px] text-slate-500 text-center py-4">Sin resultados.</p>';
+    }catch(e){ cont.innerHTML = '<p class="text-[11px] text-rose-400 text-center py-4">No se pudo buscar.</p>'; }
+  }, 300);
+}
+async function agregarPersona(){
+  const tipo = document.getElementById("nueva-persona-tipo").value;
+  const nombre = document.getElementById("nueva-persona-nombre").value.trim();
+  const rut = document.getElementById("nueva-persona-rut").value.trim();
+  const detalle = document.getElementById("nueva-persona-detalle").value.trim();
+  if(!nombre) return toast("Escribe el nombre");
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/directorio`, {method:"POST", body: JSON.stringify(actorBody({tipo, nombre, rut, detalle}))});
+    document.getElementById("nueva-persona-nombre").value = "";
+    document.getElementById("nueva-persona-rut").value = "";
+    document.getElementById("nueva-persona-detalle").value = "";
+    document.getElementById("buscador-form-agregar").classList.add("hidden");
+    document.getElementById("buscador-input").value = nombre;
+    filtrarBuscador();
+    toast("Persona agregada al directorio");
+  }catch(e){ toast("No se pudo agregar"); }
+}
+const HIST_TIPOS = {entrevista:"Entrevista", anotacion:"Anotación", dato:"Dato relevante"};
+async function abrirFichaPersona(id){
+  try{
+    const ficha = await api(`/api/colegios/${STATE.colegioId}/directorio/${id}/ver`, {method:"POST", body: JSON.stringify(actorBody())});
+    fichaPersonaActual = id;
+    document.getElementById("modal-buscador").classList.add("hidden");
+    document.getElementById("modal-ficha-persona").classList.remove("hidden");
+    document.getElementById("ficha-nombre").textContent = ficha.nombre;
+    document.getElementById("ficha-detalle").textContent = `${ficha.tipo==="estudiante"?"Estudiante":"Funcionario/a"}${ficha.detalle?` · ${ficha.detalle}`:""}${ficha.rut?` · ${ficha.rut}`:""}`;
+    const cont = document.getElementById("ficha-historial");
+    cont.innerHTML = ficha.historial.length ? ficha.historial.map(h => `
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
+        <p class="text-[10px] uppercase tracking-wide text-indigo-400 font-bold">${HIST_TIPOS[h.tipo]||h.tipo}</p>
+        <p class="text-xs font-bold text-white mt-0.5">${esc(h.titulo)}</p>
+        ${h.descripcion ? `<p class="text-xs text-slate-400 mt-1">${esc(h.descripcion)}</p>` : ""}
+        ${h.archivo_nombre ? `<a href="${h.archivo_data}" download="${esc(h.archivo_nombre)}" class="text-[10px] text-cyan-400 mt-1 inline-block"><i class="fa-solid fa-paperclip mr-1"></i>${esc(h.archivo_nombre)}</a>` : ""}
+        <p class="text-[9px] text-slate-500 mt-1">${esc(h.autor)} (${esc(h.perfil)}) · ${new Date(h.creado_en).toLocaleString("es-CL")}</p>
+      </div>`).join("") : '<p class="text-[11px] text-slate-500 text-center py-4">Sin historial todavía.</p>';
+  }catch(e){ toast("No se pudo abrir la ficha"); }
+}
+async function agregarHistorialPersona(){
+  if(!fichaPersonaActual) return;
+  const tipo = document.getElementById("nuevo-hist-tipo").value;
+  const titulo = document.getElementById("nuevo-hist-titulo").value.trim();
+  const descripcion = document.getElementById("nuevo-hist-desc").value.trim();
+  const archivoInput = document.getElementById("nuevo-hist-archivo");
+  if(!titulo) return toast("Escribe un título");
+  let archivoNombre = null, archivoData = null;
+  if(archivoInput.files[0]){
+    archivoNombre = archivoInput.files[0].name;
+    archivoData = await leerArchivoComoDataUrl(archivoInput.files[0]);
+  }
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/directorio/${fichaPersonaActual}/historial`, {
+      method:"POST", body: JSON.stringify(actorBody({tipo, titulo, descripcion, archivoNombre, archivoData}))
+    });
+    document.getElementById("nuevo-hist-titulo").value = "";
+    document.getElementById("nuevo-hist-desc").value = "";
+    archivoInput.value = "";
+    await abrirFichaPersona(fichaPersonaActual);
+    toast("Agregado al historial");
+  }catch(e){ toast("No se pudo agregar al historial"); }
 }
 
 async function reaccionar(id, tipo){
@@ -1387,7 +1528,7 @@ async function guardarEntrevista(){
   toast("Entrevista guardada y descargada.");
 }
 
-document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista","modal-circulo","modal-ia","modal-monitor","modal-monitor-historial"].forEach(cerrarModalId); } });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista","modal-circulo","modal-ia","modal-monitor","modal-monitor-historial","modal-buscador","modal-ficha-persona"].forEach(cerrarModalId); } });
 init();
 </script>
 </body>

@@ -178,3 +178,34 @@ create table if not exists monitor_tareas (
   creado_en timestamptz not null default now()
 );
 create index if not exists monitor_tareas_colegio_persona_idx on monitor_tareas(colegio_id, persona);
+
+-- ---------- Buscador restringido: directorio de personas (funcionarios/estudiantes) ----------
+-- Solo lo consultan 4 perfiles (chequeo real en el servidor, no solo un botón oculto en el
+-- frontend): Director ejecutivo/máster, Director/a de colegio, UTP e Inspector General.
+create table if not exists directorio_personas (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  tipo text not null,            -- 'funcionario' | 'estudiante'
+  nombre text not null,
+  rut text,
+  detalle text,                  -- cargo (funcionario) o curso (estudiante)
+  creado_por text not null,
+  creado_en timestamptz not null default now()
+);
+create index if not exists directorio_personas_colegio_idx on directorio_personas(colegio_id);
+create index if not exists directorio_personas_nombre_idx on directorio_personas(colegio_id, nombre);
+create index if not exists directorio_personas_rut_idx on directorio_personas(colegio_id, rut);
+
+create table if not exists historial_persona (
+  id bigserial primary key,
+  persona_id bigint not null references directorio_personas(id) on delete cascade,
+  tipo text not null,            -- 'entrevista' | 'anotacion' | 'dato'
+  titulo text not null,
+  descripcion text,
+  autor text not null,
+  perfil text not null,
+  archivo_nombre text,
+  archivo_data text,
+  creado_en timestamptz not null default now()
+);
+create index if not exists historial_persona_persona_idx on historial_persona(persona_id);
