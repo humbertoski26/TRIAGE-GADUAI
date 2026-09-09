@@ -543,7 +543,23 @@ function aplicarTema(tema){
 async function cambiarTema(){
   STATE.tema = STATE.tema==="claro" ? "oscuro" : "claro";
   aplicarTema(STATE.tema);
+  actualizarLinkRelacionai();
   try{ await api(`/api/colegios/${STATE.colegioId}/usuarios/tema`, {method:"POST", body: JSON.stringify(actorBody({tema: STATE.tema}))}); }catch(e){}
+}
+
+// Relacionai debe abrir siempre en el mismo tema que GADUAI — se manda como ?tema= en el
+// link (además del token SSO cuando corresponde), y se recalcula cada vez que el tema
+// cambia (no solo al entrar) para que el link quede al día antes de cruzar.
+function actualizarLinkRelacionai(){
+  const btnRelacionai = document.getElementById("btn-ir-relacionai");
+  if(STATE.colegio && STATE.colegio.relacionai_url){
+    const base = STATE.colegio.relacionai_url.replace(/\/$/, "");
+    const tema = encodeURIComponent(STATE.tema || "oscuro");
+    btnRelacionai.href = STATE.relacionaiSsoToken
+      ? `${base}/sso?token=${encodeURIComponent(STATE.relacionaiSsoToken)}&tema=${tema}`
+      : `${base}/encargado/login?tema=${tema}`;
+    btnRelacionai.hidden = false;
+  } else { btnRelacionai.hidden = true; }
 }
 
 async function entrarApp(){
@@ -554,12 +570,7 @@ async function entrarApp(){
   document.getElementById("app-perfil-label").textContent = STATE.perfil;
   document.getElementById("app-colegio-label").textContent = STATE.colegio.nombre;
   document.getElementById("btn-usuarios").hidden = !STATE.isMaster;
-  const btnRelacionai = document.getElementById("btn-ir-relacionai");
-  if(STATE.colegio.relacionai_url){
-    const base = STATE.colegio.relacionai_url.replace(/\/$/, "");
-    btnRelacionai.href = STATE.relacionaiSsoToken ? `${base}/sso?token=${encodeURIComponent(STATE.relacionaiSsoToken)}` : base;
-    btnRelacionai.hidden = false;
-  } else { btnRelacionai.hidden = true; }
+  actualizarLinkRelacionai();
   await Promise.all([renderMenuPerfiles(), cargarTimeline()]);
   if(pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(cargarTimeline, 5000); // sincronización con otros dispositivos
