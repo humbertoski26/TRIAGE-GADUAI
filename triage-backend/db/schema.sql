@@ -126,3 +126,39 @@ create table if not exists entrevistas (
   creado_en timestamptz not null default now()
 );
 create index if not exists entrevistas_colegio_idx on entrevistas(colegio_id);
+
+-- ---------- IA GADUAI: documentos del colegio, normativa nacional y chat ----------
+
+create table if not exists documentos (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  tipo text not null,
+  nombre text not null,
+  archivo_nombre text,
+  archivo_data text,
+  subido_por text not null,
+  creado_en timestamptz not null default now()
+);
+create index if not exists documentos_colegio_idx on documentos(colegio_id);
+
+create table if not exists chat_ia (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  persona text not null,
+  rol text not null,
+  contenido text not null,
+  fuente text not null default 'gaduai',
+  creado_en timestamptz not null default now()
+);
+create index if not exists chat_ia_colegio_persona_idx on chat_ia(colegio_id, persona);
+
+create table if not exists normativa (
+  id serial primary key,
+  titulo text not null,
+  tipo text,
+  categoria text,
+  aplica_publico boolean not null default true,
+  aplica_privado boolean not null default true,
+  texto text not null,
+  creado_en timestamptz not null default now()
+);
