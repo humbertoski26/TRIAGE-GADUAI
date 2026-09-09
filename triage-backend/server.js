@@ -100,7 +100,7 @@ function generarSsoToken(correo, nombre, perfil) {
 async function verificarActor(colegioId, correo, clave) {
   if (!correo || !clave) return null;
   const r = await pool.query(
-    "select nombre, correo, perfil from usuarios where colegio_id=$1 and lower(correo)=lower($2) and clave=$3",
+    "select nombre, correo, perfil, tema from usuarios where colegio_id=$1 and lower(correo)=lower($2) and clave=$3",
     [colegioId, correo, clave]
   );
   return r.rows[0] || null;
@@ -262,6 +262,17 @@ app.delete("/api/colegios/:id/usuarios/:usuarioId", asyncRoute(async (req, res) 
   await pool.query("delete from usuarios where id=$1 and colegio_id=$2 and perfil<>$3", [
     req.params.usuarioId, req.params.id, PERFIL_MASTER
   ]);
+  res.json({ ok: true });
+}));
+
+// Cada quien cambia su propia preferencia de tema — no requiere ser máster, solo credenciales
+// válidas de esa misma cuenta. Se guarda por cuenta (no por dispositivo) a propósito.
+app.post("/api/colegios/:id/usuarios/tema", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, tema } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  if (tema !== "claro" && tema !== "oscuro") return res.status(400).json({ error: "tema_invalido" });
+  await pool.query("update usuarios set tema=$1 where colegio_id=$2 and lower(correo)=lower($3)", [tema, req.params.id, actorCorreo]);
   res.json({ ok: true });
 }));
 

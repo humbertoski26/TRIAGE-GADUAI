@@ -20,11 +20,62 @@
   // la próxima vez, sin pasar por la portada.
   document.getElementById("pwa-manifest").href = "/manifest.webmanifest" + location.search;
   if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
+  // Aplica el tema guardado en este dispositivo ANTES de pintar nada, para no mostrar un
+  // parpadeo de oscuro→claro — la cuenta (server) es la fuente de verdad real y se reconcilia
+  // más abajo en entrarApp(), esto es solo para la primera pintura.
+  try{ document.documentElement.dataset.theme = localStorage.getItem("gaduai-tema")==="claro" ? "claro" : "oscuro"; }catch(e){}
 </script>
 <style>
   :root{color-scheme:dark}
   html,body{background:#020617;margin:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+
+  /* ---------- Fase 6: modo claro/oscuro ----------
+     En vez de tocar cada una de las ~230 clases de Tailwind ya escritas en el HTML/JS
+     (bg-slate-*, text-slate-*, text-white, etc.), se sobreescriben esas mismas clases con
+     variables CSS cuando [data-theme="claro"] está activo en <html> — cero cambios en las
+     plantillas, mismo aspecto de hoy por defecto (oscuro). */
+  :root[data-theme="claro"]{color-scheme:light}
+  :root[data-theme="claro"] html,:root[data-theme="claro"] body{background:#f8fafc}
+  :root[data-theme="claro"] .bg-slate-950{background-color:#f8fafc!important}
+  :root[data-theme="claro"] .bg-slate-950\/80,
+  :root[data-theme="claro"] .bg-slate-950\/90,
+  :root[data-theme="claro"] .bg-slate-950\/95{background-color:#f8fafcf2!important}
+  :root[data-theme="claro"] .bg-slate-900,
+  :root[data-theme="claro"] .bg-slate-900\/70{background-color:#ffffff!important}
+  :root[data-theme="claro"] .bg-slate-800{background-color:#f1f5f9!important}
+  :root[data-theme="claro"] .bg-slate-700{background-color:#e2e8f0!important}
+  :root[data-theme="claro"] .bg-slate-600\/20{background-color:#e2e8f0!important}
+  :root[data-theme="claro"] .bg-slate-500\/10{background-color:#e2e8f080!important}
+  :root[data-theme="claro"] .border-slate-800{border-color:#e2e8f0!important}
+  :root[data-theme="claro"] .border-slate-700{border-color:#cbd5e1!important}
+  :root[data-theme="claro"] .border-slate-500\/40{border-color:#94a3b866!important}
+  :root[data-theme="claro"] .text-white{color:#0f172a!important}
+  :root[data-theme="claro"] .text-slate-200,
+  :root[data-theme="claro"] .text-slate-300{color:#334155!important}
+  :root[data-theme="claro"] .text-slate-400{color:#475569!important}
+  :root[data-theme="claro"] .text-slate-500{color:#64748b!important}
+  :root[data-theme="claro"] .text-slate-600{color:#94a3b8!important}
+  :root[data-theme="claro"] ::-webkit-scrollbar-thumb{background:#cbd5e1}
+  :root[data-theme="claro"] .triage-card:hover{border-color:#94a3b8}
+  /* Colores de acento (badges, íconos) pensados para fondo oscuro — se oscurecen un poco
+     para que no queden lavados sobre blanco, sin dejar de leerse bien sobre oscuro. */
+  :root[data-theme="claro"] .text-emerald-200,
+  :root[data-theme="claro"] .text-emerald-300{color:#047857!important}
+  :root[data-theme="claro"] .text-emerald-400{color:#059669!important}
+  :root[data-theme="claro"] .text-rose-300{color:#be123c!important}
+  :root[data-theme="claro"] .text-rose-400{color:#e11d48!important}
+  :root[data-theme="claro"] .text-amber-200,
+  :root[data-theme="claro"] .text-amber-300{color:#b45309!important}
+  :root[data-theme="claro"] .text-amber-400{color:#d97706!important}
+  :root[data-theme="claro"] .text-sky-300{color:#0369a1!important}
+  :root[data-theme="claro"] .text-sky-400{color:#0284c7!important}
+  :root[data-theme="claro"] .text-cyan-200,
+  :root[data-theme="claro"] .text-cyan-300{color:#0e7490!important}
+  :root[data-theme="claro"] .text-cyan-400{color:#0891b2!important}
+  :root[data-theme="claro"] .text-indigo-300,
+  :root[data-theme="claro"] .text-indigo-400{color:#4338ca!important}
+  :root[data-theme="claro"] .text-pink-400{color:#db2777!important}
   ::-webkit-scrollbar{width:8px;height:8px}
   ::-webkit-scrollbar-thumb{background:#334155;border-radius:99px}
   ::-webkit-scrollbar-track{background:transparent}
@@ -166,6 +217,7 @@
       <div id="menu-perfiles" class="space-y-1.5"></div>
       <button id="btn-usuarios" onclick="abrirUsuarios()" hidden class="w-full mt-5 text-[11px] text-cyan-300 border border-cyan-500/30 rounded-lg py-2"><i class="fa-solid fa-users-gear mr-1"></i> Administrar usuarios (máster)</button>
       <button id="btn-activar-push" onclick="activarPush()" class="w-full mt-3 text-[11px] text-amber-300 border border-amber-500/30 rounded-lg py-2"><i class="fa-solid fa-bell mr-1"></i> Activar notificaciones del celular</button>
+      <button id="btn-tema" onclick="cambiarTema()" class="w-full mt-3 text-[11px] text-sky-300 border border-sky-500/30 rounded-lg py-2"><i class="fa-solid fa-sun mr-1"></i> Modo claro</button>
       <button onclick="toggleMenu();cerrarSesion()" class="w-full mt-3 text-[11px] text-rose-400 border border-rose-500/30 rounded-lg py-2">Cerrar sesión</button>
     </div>
   </div>
@@ -376,11 +428,14 @@ const PERFILES = [
 ];
 const PERFIL_MASTER = PERFILES[0];
 
+// Tonos intermedios (no los más claros ni los más oscuros de cada paleta) para que el texto
+// coloreado inline (ej. la línea "Rojo · vence ... · registró ...") se lea bien tanto en
+// modo oscuro como en modo claro, sin depender del tema activo en JS.
 const TRIAGE = {
-  Rojo:   {orden:0, color:"#fb7185", icon:"🔴", nombre:"Crítico",     desc:"Urgente + importante · Actuar ahora"},
-  Azul:   {orden:1, color:"#38bdf8", icon:"🔵", nombre:"Estratégico", desc:"No urgente + importante · Planificar"},
-  Naranjo:{orden:2, color:"#fbbf24", icon:"🟠", nombre:"Delegable",   desc:"Urgente + no importante · Resolver/delegar"},
-  Gris:   {orden:3, color:"#94a3b8", icon:"⚪", nombre:"Diferible",   desc:"No urgente + no importante · Programar/eliminar"}
+  Rojo:   {orden:0, color:"#e11d48", icon:"🔴", nombre:"Crítico",     desc:"Urgente + importante · Actuar ahora"},
+  Azul:   {orden:1, color:"#0284c7", icon:"🔵", nombre:"Estratégico", desc:"No urgente + importante · Planificar"},
+  Naranjo:{orden:2, color:"#d97706", icon:"🟠", nombre:"Delegable",   desc:"Urgente + no importante · Resolver/delegar"},
+  Gris:   {orden:3, color:"#64748b", icon:"⚪", nombre:"Diferible",   desc:"No urgente + no importante · Programar/eliminar"}
 };
 
 let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, filtroTipo:"todos", filtroColor:"todos" };
@@ -444,7 +499,7 @@ async function init(){
       const r = await api(`/api/colegios/${sesion.colegioId}/login`, {method:"POST", body: JSON.stringify({correo:sesion.correo, clave:sesion.clave})});
       STATE.colegio = colegio; STATE.colegioId = colegio.id;
       STATE.correo = sesion.correo; STATE.clave = sesion.clave;
-      STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken;
+      STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken; STATE.tema = r.usuario.tema;
       await entrarApp();
       return;
     }catch(e){ borrarSesion(); }
@@ -470,13 +525,30 @@ async function ingresar(){
   try{
     const r = await api(`/api/colegios/${STATE.colegioId}/login`, {method:"POST", body: JSON.stringify({correo, clave})});
     STATE.correo = correo; STATE.clave = clave;
-    STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken;
+    STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken; STATE.tema = r.usuario.tema;
     guardarSesion();
     await entrarApp();
   }catch(e){ toast("Correo o clave incorrectos para este colegio"); }
 }
 
+/* ---------- modo claro/oscuro (Fase 6) — guardado por cuenta, no por dispositivo ---------- */
+function aplicarTema(tema){
+  const t = tema==="claro" ? "claro" : "oscuro";
+  document.documentElement.dataset.theme = t;
+  try{ localStorage.setItem("gaduai-tema", t); }catch(e){}
+  const btn = document.getElementById("btn-tema");
+  if(btn) btn.innerHTML = t==="claro" ? '<i class="fa-solid fa-moon mr-1"></i> Modo oscuro' : '<i class="fa-solid fa-sun mr-1"></i> Modo claro';
+}
+async function cambiarTema(){
+  STATE.tema = STATE.tema==="claro" ? "oscuro" : "claro";
+  aplicarTema(STATE.tema);
+  try{ await api(`/api/colegios/${STATE.colegioId}/usuarios/tema`, {method:"POST", body: JSON.stringify(actorBody({tema: STATE.tema}))}); }catch(e){}
+}
+
 async function entrarApp(){
+  // La cuenta (servidor) manda sobre lo que hubiera guardado en este dispositivo — así un
+  // cambio de tema hecho en otro celular/computador se refleja acá al entrar.
+  aplicarTema(STATE.tema);
   mostrarPantalla("pantalla-app");
   document.getElementById("app-perfil-label").textContent = STATE.perfil;
   document.getElementById("app-colegio-label").textContent = STATE.colegio.nombre;

@@ -22,6 +22,9 @@ create table if not exists usuarios (
   creado_en timestamptz not null default now(),
   unique (colegio_id, correo)
 );
+-- Preferencia de tema guardada por cuenta (no por dispositivo) — 'oscuro' por defecto para
+-- no cambiar el aspecto de nadie hasta que alguien elija modo claro.
+alter table usuarios add column if not exists tema text not null default 'oscuro';
 
 create table if not exists items (
   id bigserial primary key,
