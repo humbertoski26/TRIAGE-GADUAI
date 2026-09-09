@@ -162,6 +162,9 @@ create table if not exists normativa (
   texto text not null,
   creado_en timestamptz not null default now()
 );
+-- Permite volver a cargar/actualizar la normativa (POST /api/sistema/normativa) sin duplicar
+-- filas: "on conflict (titulo)" necesita este índice único.
+create unique index if not exists normativa_titulo_idx on normativa(titulo);
 
 -- ---------- Monitor Vital v2: sugerencias diaria/semanal/mensual por persona ----------
 -- No se regenera el mismo texto mientras siga vigente y sin completar (así "se acumula para

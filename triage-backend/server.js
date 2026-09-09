@@ -49,6 +49,17 @@ function requireTasksSecret(req, res, next) {
 }
 // Nombre de perfil usado por Relacionai al avisar sobre relatos (aviso automático cruzado).
 const PERFIL_CONVIVENCIA = "Encargado de Convivencia Educativa";
+
+// Para cargar/actualizar la normativa nacional que alimenta el cerebro de IA GADUAI, sin
+// exponer un canal de escritura directa a la base de datos. Mismo patrón que TASKS_SECRET:
+// si no está configurada, la ruta protegida responde 403 siempre.
+const NORMATIVA_SEED_KEY = process.env.NORMATIVA_SEED_KEY;
+function requireNormativaKey(req, res, next) {
+  if (!NORMATIVA_SEED_KEY || req.header("X-Normativa-Key") !== NORMATIVA_SEED_KEY) {
+    return res.status(403).json({ error: "no_autorizado" });
+  }
+  next();
+}
 // En un despliegue dedicado a un solo colegio (ej. gaduai-nuevo-rumbo), esto evita depender
 // de que el link exacto con ?colegio=<id> se haya guardado tal cual — un ícono instalado a
 // medias, un bookmark viejo, o abrir solo el dominio, igual cae en el colegio correcto.
@@ -936,6 +947,23 @@ app.post("/api/colegios/:id/directorio/:personaId/historial", asyncRoute(async (
     [req.params.personaId, tipo, titulo.trim(), descripcion || null, actor.nombre, actor.perfil, archivoNombre || null, archivoData || null]
   );
   res.json(r.rows[0]);
+}));
+
+app.post("/api/sistema/normativa", requireNormativaKey, asyncRoute(async (req, res) => {
+  const items = Array.isArray(req.body) ? req.body : (req.body || {}).items;
+  if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: "items_requerido" });
+  for (const it of items) {
+    if (!it.titulo || !it.texto) continue;
+    await pool.query(
+      `insert into normativa (titulo, tipo, categoria, aplica_publico, aplica_privado, texto)
+       values ($1,$2,$3,$4,$5,$6)
+       on conflict (titulo) do update set
+         tipo=excluded.tipo, categoria=excluded.categoria,
+         aplica_publico=excluded.aplica_publico, aplica_privado=excluded.aplica_privado, texto=excluded.texto`,
+      [it.titulo, it.tipo || null, it.categoria || null, it.aplicaPublico !== false, it.aplicaPrivado !== false, it.texto]
+    );
+  }
+  res.json({ ok: true, cargados: items.length });
 }));
 
 // El frontend la consulta al iniciar si la URL no trae ?colegio= — solo devuelve algo en
