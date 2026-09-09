@@ -810,7 +810,11 @@ function itemsVisiblesSql(perfil) {
 }
 function diasHasta(fecha) {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const f = new Date(`${fecha}`.slice(0, 10) + "T12:00:00");
+  // `pg` entrega las columnas `date` como objeto Date (no como texto) — su `${...}` da
+  // "Tue Sep 08 2026..." (no parseable), así que hay que pasar por toISOString() primero.
+  // También acepta ya-string (por si alguna vez cambia el parser), slice(0,10) sirve para ambos.
+  const fechaTexto = fecha instanceof Date ? fecha.toISOString() : String(fecha);
+  const f = new Date(fechaTexto.slice(0, 10) + "T12:00:00");
   return Math.round((f - hoy) / 86400000);
 }
 function generarSugerenciasMonitor(items) {
@@ -895,9 +899,6 @@ app.get("/api/colegios/:id/monitor", asyncRoute(async (req, res) => {
   const porcentaje = Math.max(20, 100 - criticos.length * 15 - prioritarios.length * 5);
 
   res.json({
-    debugItemsCount: items.length,
-    debugSql: itemsVisiblesSql(perfil),
-    debugParams: [req.params.id, perfil, persona],
     tareas: r.rows,
     hayCritico: criticos.length > 0,
     estado,

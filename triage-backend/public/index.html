@@ -985,7 +985,10 @@ async function cargarTimeline(){
 /* ---------- Fase 9: PULSO GADUAI (antes "Monitor Vital v2") ---------- */
 function diasHastaCliente(fechaStr){
   const hoy = new Date(); hoy.setHours(0,0,0,0);
-  const f = new Date(fechaStr + "T12:00:00");
+  // El servidor manda la fecha como ISO completo ("2026-09-08T00:00:00.000Z"), no como
+  // "YYYY-MM-DD" — hay que recortar antes de pegarle una hora nueva, si no queda un string
+  // inválido ("...000ZT12:00:00") que Date() no puede parsear (bug real, ya corregido).
+  const f = new Date(String(fechaStr).slice(0,10) + "T12:00:00");
   return Math.round((f - hoy) / 86400000);
 }
 function actualizarPulsoBoton(){
