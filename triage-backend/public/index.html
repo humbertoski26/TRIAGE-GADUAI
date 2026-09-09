@@ -99,10 +99,35 @@
   .gaduai-btn-accent:hover{background:#4759b8}
   .gaduai-btn-cyan{background:#0ea5e9}
   .gaduai-btn-cyan:hover{background:#0284c7}
-  .monitor-vital-pill{color:#6ee7b7;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3)}
-  .monitor-vital-pill.critico{color:#fda4af;background:rgba(225,29,72,.15);border:1px solid rgba(225,29,72,.5);animation:monitorPulso 1.6s ease-in-out infinite}
-  @keyframes monitorPulso{0%,100%{box-shadow:0 0 0 0 rgba(225,29,72,.5)}50%{box-shadow:0 0 0 5px rgba(225,29,72,0)}}
-  #monitor-vital-count:not(.hidden){display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;border-radius:9999px;background:#e11d48;color:#fff;font-size:9px;padding:0 4px;margin-left:2px}
+  /* ---------- Fase 9: PULSO GADUAI (antes "Monitor Vital") ----------
+     Botón más grande que sus vecinos (Entrevista/Relacionai/IA GADUAI/Buscador) a propósito
+     — es el primero y el más importante de la fila. El electro (SVG) usa dos trazos con el
+     mismo `d`: uno tenue fijo de fondo y uno brillante que recorre el trazo en loop vía
+     stroke-dashoffset (pathLength="100" evita tener que calcular el largo real del path). El
+     color (verde=estable / rojo=atención) viene de `color` en el contenedor, heredado por
+     `stroke:currentColor` — así una sola clase `.critico` cambia electro + fondo + halo. */
+  .pulso-btn{display:flex;align-items:center;gap:10px;padding:12px 20px;border-radius:18px;background:#031814;border:1px solid rgba(16,185,129,.4);color:#a7f3d0}
+  .pulso-btn:hover{border-color:rgba(16,185,129,.7)}
+  .pulso-btn .pulso-label{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}
+  .pulso-btn .pulso-label b{font-size:14px;font-weight:900;letter-spacing:.02em;color:#fff}
+  .pulso-btn .pulso-label span{font-size:9.5px;color:#6ee7b7;font-weight:700}
+  .pulso-btn.critico{background:#210a10;border-color:rgba(225,29,72,.55);color:#fda4af;animation:pulsoBtnCritico 1.7s ease-in-out infinite}
+  .pulso-btn.critico .pulso-label b{color:#fff}
+  .pulso-btn.critico .pulso-label span{color:#fda4af}
+  @keyframes pulsoBtnCritico{0%,100%{box-shadow:0 0 0 0 rgba(225,29,72,.45)}50%{box-shadow:0 0 0 7px rgba(225,29,72,0)}}
+  .pulso-electro{width:38px;height:22px;flex:none;color:#10b981}
+  .pulso-btn.critico .pulso-electro{color:#e11d48}
+  .pulso-electro path{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .pulso-electro path.fondo{stroke:currentColor;opacity:.22}
+  .pulso-electro path.trazo{stroke:currentColor;stroke-dasharray:22 100;animation:pulsoTrazo 1.6s linear infinite}
+  @keyframes pulsoTrazo{to{stroke-dashoffset:-122}}
+  #pulso-gaduai-count:not(.hidden){display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;border-radius:9999px;background:#e11d48;color:#fff;font-size:10px;font-weight:800;padding:0 4px;margin-left:2px}
+  :root[data-theme="claro"] .pulso-btn{background:#ecfdf5;border-color:#6ee7b7}
+  :root[data-theme="claro"] .pulso-btn .pulso-label b{color:#064e3b}
+  :root[data-theme="claro"] .pulso-btn .pulso-label span{color:#047857}
+  :root[data-theme="claro"] .pulso-btn.critico{background:#fef2f2;border-color:#fca5a5}
+  :root[data-theme="claro"] .pulso-btn.critico .pulso-label b{color:#7f1d1d}
+  :root[data-theme="claro"] .pulso-btn.critico .pulso-label span{color:#b91c1c}
   .monitor-tarea{display:flex;align-items:flex-start;gap:10px;background:#020617;border:1px solid #1e293b;border-radius:12px;padding:10px 12px}
   .monitor-check{flex:none;width:20px;height:20px;border-radius:9999px;border:2px solid #475569;cursor:pointer;margin-top:1px}
   .monitor-check:hover{border-color:#10b981}
@@ -193,13 +218,20 @@
       <div class="flex items-center gap-2 flex-wrap">
         <span id="sync-indicator" class="text-[10px] text-emerald-400" title="Sincronizado con el servidor"><i class="fa-solid fa-cloud"></i></span>
         <span id="hitos-count" class="text-[11px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-3 py-1">0 hitos</span>
-        <button id="btn-monitor-vital" onclick="abrirMonitorVital()" title="Monitor Vital" class="monitor-vital-pill relative text-[11px] font-bold rounded-full px-3 py-1 flex items-center gap-1.5"><i class="fa-solid fa-heart-pulse"></i> Monitor Vital <span id="monitor-vital-count" class="hidden"></span></button>
         <button onclick="abrirAlertas()" class="relative text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1"><i class="fa-solid fa-bell"></i> <span id="alertas-count">0</span></button>
         <button onclick="cerrarSesion()" class="text-[11px] text-slate-500 hover:text-rose-400"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
       </div>
     </div>
     <p class="text-[10px] text-slate-500 mt-2">Alimentado por Director/a, Inspector/a General, UTP, Convivencia, Dupla y Docentes del colegio · ordenado de lo más próximo a vencer a lo último solicitado.</p>
     <div class="flex items-center gap-2 mt-3">
+      <button id="btn-pulso-gaduai" onclick="abrirMonitorVital()" title="PULSO GADUAI" class="pulso-btn">
+        <svg class="pulso-electro" viewBox="0 0 120 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path class="fondo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
+          <path class="trazo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
+        </svg>
+        <span class="pulso-label"><b>PULSO GADUAI</b><span>Panorama del colegio</span></span>
+        <span id="pulso-gaduai-count" class="hidden"></span>
+      </button>
       <button onclick="abrirEntrevistaFormal()" title="Entrevista formal" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-file-signature"></i> Entrevista</button>
       <a id="btn-ir-relacionai" href="#" target="_blank" rel="noopener" hidden title="Ir a Relacionai" class="gaduai-btn-cyan text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-arrow-up-right-from-square"></i> Relacionai</a>
       <button onclick="abrirIA()" title="IA GADUAI" class="gaduai-gradient text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-brain"></i> IA GADUAI</button>
@@ -348,22 +380,70 @@
   </div>
 </div>
 
-<!-- ============ MODAL: MONITOR VITAL ============ -->
+<!-- ============ MODAL: PULSO GADUAI ============ -->
 <div id="modal-monitor" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
-  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
-    <div class="flex justify-between items-start mb-2">
+  <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-3">
       <div>
-        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-heart-pulse text-emerald-400"></i> Monitor Vital</h3>
-        <p class="text-[11px] text-slate-500">Qué atender hoy, esta semana y este mes — según tu Timeline.</p>
+        <h3 class="text-base font-black text-white flex items-center gap-2">
+          <svg class="pulso-electro" style="width:28px;height:18px" viewBox="0 0 120 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path class="fondo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
+            <path class="trazo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
+          </svg>
+          PULSO GADUAI
+        </h3>
+        <p id="pulso-estado-frase" class="text-[11px] text-slate-500 mt-1">Cargando…</p>
       </div>
       <button onclick="cerrarModalId('modal-monitor')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
     </div>
-    <div id="monitor-secciones" class="space-y-5 mt-3"></div>
+
+    <div class="flex items-center justify-between gap-3 bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 mb-4">
+      <div>
+        <p id="pulso-periodo-label" class="text-sm font-black text-white">Hoy</p>
+        <p class="text-[10px] text-slate-500">Esto es lo que requiere tu atención para avanzar.</p>
+      </div>
+      <div class="text-right">
+        <p id="pulso-porcentaje" class="text-2xl font-black text-emerald-400">--%</p>
+        <p class="text-[9px] text-slate-500">gestión bajo control</p>
+      </div>
+    </div>
+
+    <div class="flex gap-1.5 bg-slate-950 border border-slate-800 p-1 rounded-xl mb-4 w-max">
+      <button class="tab-btn pulso-tab text-[11px] font-bold px-3 py-1.5 rounded-lg bg-emerald-600 text-white" data-dias="0" onclick="cambiarPeriodoPulso(0,this)">HOY</button>
+      <button class="tab-btn pulso-tab text-[11px] font-bold px-3 py-1.5 rounded-lg text-slate-500" data-dias="7" onclick="cambiarPeriodoPulso(7,this)">SEMANA</button>
+      <button class="tab-btn pulso-tab text-[11px] font-bold px-3 py-1.5 rounded-lg text-slate-500" data-dias="30" onclick="cambiarPeriodoPulso(30,this)">MES</button>
+    </div>
+
+    <div class="grid grid-cols-4 gap-2 mb-5">
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-center">
+        <p id="pulso-m-hoy" class="text-lg font-black text-white">0</p><p class="text-[9px] text-slate-500">Tareas hoy</p>
+      </div>
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-center">
+        <p id="pulso-m-prioritarias" class="text-lg font-black text-white">0</p><p class="text-[9px] text-slate-500">Prioridades</p>
+      </div>
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-center">
+        <p id="pulso-m-decisiones" class="text-lg font-black text-white">0</p><p class="text-[9px] text-slate-500">Decisiones</p>
+      </div>
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-center cursor-pointer hover:border-amber-500/50" onclick="cerrarModalId('modal-monitor');abrirAlertas()">
+        <p id="pulso-m-alertas" class="text-lg font-black text-amber-300">0</p><p class="text-[9px] text-slate-500">Alertas</p>
+      </div>
+    </div>
+
+    <p class="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-2">🎯 Requiere tu atención</p>
+    <div id="pulso-atencion" class="space-y-2 mb-5"></div>
+
+    <div id="pulso-decisiones-wrap">
+      <p class="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-2">🧭 Decisiones pendientes</p>
+      <div id="pulso-decisiones" class="space-y-2 mb-5"></div>
+    </div>
+
+    <p class="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-2">Sugerencias del sistema</p>
+    <div id="monitor-secciones" class="space-y-5"></div>
     <button onclick="abrirHistorialMonitor()" class="w-full mt-4 text-[11px] text-slate-400 border border-slate-800 rounded-lg py-2"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Historial de tareas realizadas</button>
   </div>
 </div>
 
-<!-- ============ MODAL: HISTORIAL MONITOR VITAL ============ -->
+<!-- ============ MODAL: HISTORIAL PULSO GADUAI ============ -->
 <div id="modal-monitor-historial" class="hidden fixed inset-0 z-[120] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
   <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
     <div class="flex justify-between items-start mb-3">
@@ -895,39 +975,108 @@ async function cargarTimeline(){
     timelineCache = nuevos;
     if(cambio) pintarTimeline();
     actualizarBadgeAlertas();
-    actualizarMonitorPill();
+    actualizarPulsoBoton();
   }catch(e){
     document.getElementById("sync-indicator").innerHTML = '<i class="fa-solid fa-cloud-slash"></i>';
     document.getElementById("sync-indicator").className = "text-[10px] text-rose-400";
   }
 }
 
-/* ---------- Monitor Vital v2 ---------- */
+/* ---------- Fase 9: PULSO GADUAI (antes "Monitor Vital v2") ---------- */
 function diasHastaCliente(fechaStr){
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const f = new Date(fechaStr + "T12:00:00");
   return Math.round((f - hoy) / 86400000);
 }
-function actualizarMonitorPill(){
+function actualizarPulsoBoton(){
   const criticos = timelineCache.filter(it => it.triage === "Rojo" && diasHastaCliente(it.fecha) <= 0 && !it.revisado);
-  const btn = document.getElementById("btn-monitor-vital");
-  const count = document.getElementById("monitor-vital-count");
+  const btn = document.getElementById("btn-pulso-gaduai");
+  const count = document.getElementById("pulso-gaduai-count");
   if(!btn) return;
   btn.classList.toggle("critico", criticos.length > 0);
   if(criticos.length){ count.textContent = criticos.length; count.classList.remove("hidden"); }
   else { count.classList.add("hidden"); }
 }
 const MONITOR_PERIODOS = {diaria:"Hoy", semanal:"Esta semana", mensual:"Este mes"};
+const PULSO_NIVEL = {
+  critico:   {texto:"CRÍTICO",     clase:"bg-rose-500/15 text-rose-300"},
+  hoy:       {texto:"HOY",         clase:"bg-sky-500/15 text-sky-300"},
+  prioritario:{texto:"PRIORITARIO",clase:"bg-amber-500/15 text-amber-300"},
+  listo:     {texto:"EN CURSO",    clase:"bg-slate-500/15 text-slate-400"}
+};
+let pulsoData = null; // guarda la última respuesta para poder cambiar de tab sin re-pedir al servidor
 async function abrirMonitorVital(){
   document.getElementById("modal-monitor").classList.remove("hidden");
   document.getElementById("monitor-secciones").innerHTML = '<p class="text-[11px] text-slate-500 text-center py-6">Cargando…</p>';
+  document.getElementById("pulso-atencion").innerHTML = '';
+  document.getElementById("pulso-decisiones").innerHTML = '';
+  document.getElementById("pulso-estado-frase").textContent = "Cargando…";
   try{
     const q = new URLSearchParams({perfil: STATE.perfil||"", persona: STATE.persona||""});
     const data = await api(`/api/colegios/${STATE.colegioId}/monitor?${q}`);
+    pulsoData = data;
     renderMonitorSecciones(data.tareas);
+    renderPulsoResumen(data);
+    renderPulsoAtencion(0); // arranca en la tab "Hoy"
   }catch(e){
-    document.getElementById("monitor-secciones").innerHTML = '<p class="text-[11px] text-rose-400 text-center py-6">No se pudo cargar el Monitor Vital.</p>';
+    document.getElementById("monitor-secciones").innerHTML = '<p class="text-[11px] text-rose-400 text-center py-6">No se pudo cargar PULSO GADUAI.</p>';
+    document.getElementById("pulso-estado-frase").textContent = "No se pudo cargar.";
   }
+}
+function renderPulsoResumen(data){
+  const estable = data.estado !== "atencion";
+  document.getElementById("pulso-estado-frase").textContent = estable
+    ? "El colegio está funcionando sin nudos críticos pendientes."
+    : "Hay ítems críticos que merecen tu atención hoy.";
+  const pct = document.getElementById("pulso-porcentaje");
+  pct.textContent = `${data.porcentaje}%`;
+  pct.className = "text-2xl font-black " + (estable ? "text-emerald-400" : "text-rose-400");
+  document.getElementById("pulso-m-hoy").textContent = data.metricas.hoy;
+  document.getElementById("pulso-m-prioritarias").textContent = data.metricas.prioritarias;
+  document.getElementById("pulso-m-decisiones").textContent = data.metricas.decisiones;
+  document.getElementById("pulso-m-alertas").textContent = data.metricas.alertas;
+  const contDec = document.getElementById("pulso-decisiones");
+  const wrapDec = document.getElementById("pulso-decisiones-wrap");
+  if(data.decisionesPendientes.length){
+    wrapDec.hidden = false;
+    contDec.innerHTML = data.decisionesPendientes.map(d => `
+      <div class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5">
+        <p class="text-xs font-bold text-white">${esc(d.titulo)}</p>
+        <p class="text-[10px] text-slate-500 mt-0.5">${esc(d.detalle)}</p>
+      </div>`).join("");
+  } else { wrapDec.hidden = true; }
+}
+function cambiarPeriodoPulso(dias, el){
+  document.querySelectorAll(".pulso-tab").forEach(b => b.classList.remove("bg-emerald-600","text-white"));
+  document.querySelectorAll(".pulso-tab").forEach(b => b.classList.add("text-slate-500"));
+  el.classList.remove("text-slate-500");
+  el.classList.add("bg-emerald-600","text-white");
+  const etiquetas = {0:"Hoy", 7:"Esta semana", 30:"Este mes"};
+  document.getElementById("pulso-periodo-label").textContent = etiquetas[dias] || "Hoy";
+  renderPulsoAtencion(dias);
+}
+function renderPulsoAtencion(dias){
+  if(!pulsoData) return;
+  const cont = document.getElementById("pulso-atencion");
+  const items = pulsoData.atencion.filter(it => diasHastaCliente(it.fecha) <= dias);
+  cont.innerHTML = items.length ? items.map(it => {
+    const color = (TRIAGE[it.triage] || TRIAGE.Gris).color;
+    const nivel = PULSO_NIVEL[it.nivel] || PULSO_NIVEL.listo;
+    // Igual que en el Timeline principal: solo las Tareas abren el Círculo de la promesa —
+    // los Hitos no tienen modal propio, así que su tarjeta acá queda solo informativa.
+    const clicable = it.tipo === "tarea";
+    const claseClick = clicable ? "cursor-pointer hover:border-slate-600" : "";
+    const onclickAttr = clicable ? ("onclick=\"cerrarModalId('modal-monitor');abrirCirculo(" + it.id + ")\"") : "";
+    return `
+    <div class="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 ${claseClick}" ${onclickAttr}>
+      <span class="w-2.5 h-2.5 rounded-full flex-none" style="background:${color}"></span>
+      <div class="flex-1 min-w-0">
+        <p class="text-xs font-bold text-white truncate">${esc(it.titulo)}</p>
+        <p class="text-[10px] text-slate-500">Vence ${it.fecha}${it.tipo === "hito" ? " · Hito" : ""}</p>
+      </div>
+      <span class="text-[9px] font-black px-2 py-1 rounded-md flex-none ${nivel.clase}">${nivel.texto}</span>
+    </div>`;
+  }).join("") : '<p class="text-[10px] text-slate-600">Nada pendiente en este período.</p>';
 }
 function renderMonitorSecciones(tareas){
   const cont = document.getElementById("monitor-secciones");
@@ -964,7 +1113,7 @@ async function abrirHistorialMonitor(){
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
         <p class="text-xs text-slate-300">${esc(t.texto)}</p>
         <p class="text-[9px] text-slate-500 mt-1">${MONITOR_PERIODOS[t.periodo]||t.periodo} · completada ${new Date(t.fecha_completada).toLocaleString("es-CL")}</p>
-      </div>`).join("") : '<p class="text-[11px] text-slate-500 text-center py-6">Aún no has completado tareas del Monitor Vital.</p>';
+      </div>`).join("") : '<p class="text-[11px] text-slate-500 text-center py-6">Aún no has completado tareas de PULSO GADUAI.</p>';
   }catch(e){
     cont.innerHTML = '<p class="text-[11px] text-rose-400 text-center py-6">No se pudo cargar el historial.</p>';
   }

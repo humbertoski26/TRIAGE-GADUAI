@@ -787,7 +787,7 @@ app.post("/api/colegios/:id/chat-ia", asyncRoute(async (req, res) => {
   res.json({ respuesta });
 }));
 
-// ---------- Monitor Vital v2: sugerencias diaria/semanal/mensual ----------
+// ---------- PULSO GADUAI (antes "Monitor Vital v2"): sugerencias diaria/semanal/mensual ----------
 // El máster y el director de colegio miran el triage completo del colegio (más su propio
 // hilo); el resto de los perfiles solo ve lo que ya le aparece en su Timeline.
 const PERFIL_DIRECTOR_COLEGIO = "Director/a de colegio";
@@ -823,6 +823,17 @@ function generarSugerenciasMonitor(items) {
   return sugerencias;
 }
 
+// Nivel de un ítem para la tarjeta "Requiere tu atención" de PULSO GADUAI — mismo criterio de
+// urgencia que ya usa generarSugerenciasMonitor, solo que acá se etiqueta el ítem real en vez
+// de armar una frase.
+function nivelAtencion(it) {
+  const dias = diasHasta(it.fecha);
+  if (it.triage === "Rojo" && dias <= 0) return "critico";
+  if (dias === 0) return "hoy";
+  if (it.triage === "Naranjo" && dias > 0 && dias <= 7) return "prioritario";
+  return "listo";
+}
+
 app.get("/api/colegios/:id/monitor", asyncRoute(async (req, res) => {
   const { perfil, persona } = req.query;
   if (!perfil || !persona) return res.status(400).json({ error: "perfil_y_persona_requeridos" });
@@ -853,7 +864,47 @@ app.get("/api/colegios/:id/monitor", asyncRoute(async (req, res) => {
     "select id, periodo, texto from monitor_tareas where colegio_id=$1 and persona=$2 and completada=false order by periodo, id",
     [req.params.id, persona]
   );
-  res.json({ tareas: r.rows, hayCritico: items.some(it => it.triage === "Rojo" && diasHasta(it.fecha) <= 0) });
+
+  // ---------- PULSO GADUAI: datos reales para el electro, el hero y las tarjetas ----------
+  const criticos = items.filter(it => it.triage === "Rojo" && diasHasta(it.fecha) <= 0);
+  const prioritarios = items.filter(it => it.triage === "Naranjo" && diasHasta(it.fecha) > 0 && diasHasta(it.fecha) <= 7);
+  const hoyItems = items.filter(it => diasHasta(it.fecha) === 0);
+  // "Decisión pendiente": tarea Rojo/Naranjo sin cerrar en el círculo de la promesa, abierta
+  // hace más de 3 días — un atasco real, reutiliza columnas ya existentes desde la Fase 3.
+  const decisionesPendientes = items.filter(it =>
+    it.tipo === "tarea" && (it.triage === "Rojo" || it.triage === "Naranjo") &&
+    it.circulo_estado !== "cerrado" && diasHasta(it.creado_en || it.fecha) <= -3
+  );
+  const alertasNoLeidas = (await pool.query(
+    "select count(*)::int as n from alertas where destinatario=$1 and leida=false",
+    [persona]
+  )).rows[0].n;
+
+  const estado = criticos.length > 0 ? "atencion" : "estable";
+  const porcentaje = Math.max(20, 100 - criticos.length * 15 - prioritarios.length * 5);
+
+  res.json({
+    tareas: r.rows,
+    hayCritico: criticos.length > 0,
+    estado,
+    porcentaje,
+    metricas: {
+      hoy: hoyItems.length,
+      prioritarias: prioritarios.length,
+      decisiones: decisionesPendientes.length,
+      alertas: alertasNoLeidas
+    },
+    atencion: items
+      .filter(it => diasHasta(it.fecha) <= 30)
+      .sort((a, b) => diasHasta(a.fecha) - diasHasta(b.fecha))
+      .slice(0, 20)
+      .map(it => ({ id: it.id, titulo: it.titulo, fecha: it.fecha, triage: it.triage, tipo: it.tipo, nivel: nivelAtencion(it) })),
+    decisionesPendientes: decisionesPendientes.map(it => ({
+      id: it.id,
+      titulo: it.titulo,
+      detalle: `${it.triage === "Rojo" ? "Crítico" : "Prioritario"} · sin cerrar hace más de 3 días`
+    }))
+  });
 }));
 
 app.post("/api/colegios/:id/monitor/:tareaId/completar", asyncRoute(async (req, res) => {
