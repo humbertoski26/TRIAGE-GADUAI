@@ -60,6 +60,17 @@ function requireNormativaKey(req, res, next) {
   }
   next();
 }
+// Para sembrar/actualizar ítems de ejemplo que alimentan PULSO GADUAI cuando no hay suficiente
+// data real todavía (demo para probar/mostrar el producto) — mismo patrón que las claves de
+// arriba. Los ítems de ejemplo siempre parten con "[Demo]" en el título para poder limpiarlos
+// o volver a sembrarlos sin duplicar (la ruta borra sus propios ejemplos antes de recrearlos).
+const SEED_DEMO_KEY = process.env.SEED_DEMO_KEY;
+function requireSeedKey(req, res, next) {
+  if (!SEED_DEMO_KEY || req.header("X-Seed-Key") !== SEED_DEMO_KEY) {
+    return res.status(403).json({ error: "no_autorizado" });
+  }
+  next();
+}
 // En un despliegue dedicado a un solo colegio (ej. gaduai-nuevo-rumbo), esto evita depender
 // de que el link exacto con ?colegio=<id> se haya guardado tal cual — un ícono instalado a
 // medias, un bookmark viejo, o abrir solo el dominio, igual cae en el colegio correcto.
@@ -927,6 +938,73 @@ app.get("/api/colegios/:id/monitor/historial", asyncRoute(async (req, res) => {
     [req.params.id, persona]
   );
   res.json(r.rows);
+}));
+
+// Siembra/renueva un puñado de ítems de ejemplo (marcados "[Demo]") para que PULSO GADUAI
+// tenga algo real que mostrar mientras el colegio todavía no tiene suficiente actividad
+// propia — cubre los 4 niveles que ya distingue el electro/las tarjetas (crítico, vence hoy,
+// prioritario, decisión pendiente) más un par de alertas no leídas. Idempotente: primero
+// borra sus propios ejemplos anteriores, así se puede volver a llamar para refrescar fechas
+// sin ir acumulando duplicados. Usa colegios/usuarios reales de este despliegue (un solo
+// colegio por base de datos) en vez de datos inventados sueltos.
+app.post("/api/sistema/seed-demo-pulso", requireSeedKey, asyncRoute(async (req, res) => {
+  const colegioRow = await pool.query("select id from colegios limit 1");
+  if (!colegioRow.rows.length) return res.status(404).json({ error: "sin_colegio" });
+  const colegioId = colegioRow.rows[0].id;
+
+  async function actorPorPerfil(perfil, fallback) {
+    const r = await pool.query("select nombre from usuarios where colegio_id=$1 and perfil=$2 order by creado_en limit 1", [colegioId, perfil]);
+    return r.rows[0] ? r.rows[0].nombre : fallback;
+  }
+  const director = await actorPorPerfil(PERFIL_DIRECTOR_COLEGIO, "Directora del colegio");
+  const convivencia = await actorPorPerfil(PERFIL_CONVIVENCIA, "Encargada de Convivencia");
+  const utp = await actorPorPerfil("UTP", "Jefe/a UTP");
+
+  await pool.query("delete from items where colegio_id=$1 and titulo like '[Demo]%'", [colegioId]);
+
+  function fechaOffset(dias) {
+    const d = new Date(); d.setDate(d.getDate() + dias);
+    return d.toISOString().slice(0, 10);
+  }
+  const hoyTexto = new Date().toLocaleDateString("es-CL");
+  const demo = [
+    { triage: "Rojo", titulo: "[Demo] Revisar situación de asistencia de un curso",
+      descripcion: "Ejemplo de tarea crítica ya vencida — bórrala apenas tengas un caso real así.",
+      fecha: fechaOffset(-1), persona: director, perfil: PERFIL_DIRECTOR_COLEGIO, responsable: convivencia },
+    { triage: "Azul", titulo: "[Demo] Responder solicitud de un apoderado",
+      descripcion: "Ejemplo de tarea que vence hoy mismo (nivel \"Hoy\", no crítico).",
+      fecha: fechaOffset(0), persona: director, perfil: PERFIL_DIRECTOR_COLEGIO, responsable: convivencia },
+    { triage: "Naranjo", titulo: "[Demo] Validar planificación de la próxima semana",
+      descripcion: "Ejemplo de tarea prioritaria dentro de esta semana.",
+      fecha: fechaOffset(4), persona: utp, perfil: "UTP", responsable: convivencia },
+    { triage: "Naranjo", titulo: "[Demo] Aprobar cambio de horario de un curso",
+      descripcion: "Ejemplo de decisión que lleva varios días sin resolverse.",
+      fecha: fechaOffset(2), persona: director, perfil: PERFIL_DIRECTOR_COLEGIO, responsable: director, backdate: -5 },
+    { triage: "Azul", titulo: "[Demo] Enviar informe de gestión mensual",
+      descripcion: "Ejemplo de tarea de gestión general, sin urgencia.",
+      fecha: fechaOffset(10), persona: director, perfil: PERFIL_DIRECTOR_COLEGIO, responsable: director }
+  ];
+
+  const ids = [];
+  for (const d of demo) {
+    const r = await pool.query(
+      `insert into items (colegio_id, tipo, triage, titulo, descripcion, fecha, responsable, persona, perfil, creado)
+       values ($1,'tarea',$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
+      [colegioId, d.triage, d.titulo, d.descripcion, d.fecha, d.responsable, d.persona, d.perfil, hoyTexto]
+    );
+    ids.push(r.rows[0].id);
+    if (d.backdate) {
+      await pool.query("update items set creado_en = now() + make_interval(days => $2::int) where id=$1", [r.rows[0].id, d.backdate]);
+    }
+  }
+
+  await pool.query("delete from alertas where destinatario=$1 and mensaje like '[Demo]%'", [director]);
+  await pool.query(
+    "insert into alertas (item_id, autor, destinatario, mensaje, fecha) values ($1,'Sistema',$2,$3,$4)",
+    [ids[0], director, "[Demo] Vence hoy: revisar situación de asistencia", new Date().toLocaleString("es-CL")]
+  );
+
+  res.json({ ok: true, colegioId, itemsCreados: ids.length, actores: { director, convivencia, utp } });
 }));
 
 // ---------- Buscador restringido: directorio de personas ----------
