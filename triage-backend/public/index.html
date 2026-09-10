@@ -77,6 +77,24 @@
   :root[data-theme="claro"] .text-indigo-300,
   :root[data-theme="claro"] .text-indigo-400{color:#4338ca!important}
   :root[data-theme="claro"] .text-pink-400{color:#db2777!important}
+  /* Botones con fondo de color fijo (no cambian entre temas) — la regla de arriba
+     (.text-white → oscuro) es para texto sobre el fondo CLARO de la página, pero acá el
+     fondo del botón sigue siendo oscuro/saturado en ambos temas, así que el texto debe
+     seguir blanco. Sin esto, en modo claro quedaba texto oscuro sobre fondo oscuro
+     (ilegible) en el login, el header, Buscador, el Círculo de la promesa, los filtros de
+     tabs y las tarjetas resaltadas del menú — se juntan acá en vez de repetir la regla
+     suelta en cada botón. Selector compuesto (dos clases, sin espacio) = más específico
+     que la regla de arriba, gana aunque ambas usen !important. */
+  :root[data-theme="claro"] .gaduai-gradient.text-white,
+  :root[data-theme="claro"] .gaduai-btn-accent.text-white,
+  :root[data-theme="claro"] .gaduai-btn-cyan.text-white,
+  :root[data-theme="claro"] .gaduai-btn-indigo.text-white,
+  :root[data-theme="claro"] .gaduai-btn-violet.text-white,
+  :root[data-theme="claro"] .bg-indigo-600.text-white,
+  :root[data-theme="claro"] .bg-indigo-600\/30.text-white,
+  :root[data-theme="claro"] .bg-emerald-600.text-white,
+  :root[data-theme="claro"] .bg-rose-600.text-white,
+  :root[data-theme="claro"] .bg-sky-600.text-white{color:#fff!important}
   ::-webkit-scrollbar{width:8px;height:8px}
   ::-webkit-scrollbar-thumb{background:#334155;border-radius:99px}
   ::-webkit-scrollbar-track{background:transparent}
@@ -99,6 +117,8 @@
   .gaduai-btn-accent:hover{background:#4759b8}
   .gaduai-btn-cyan{background:#0ea5e9}
   .gaduai-btn-cyan:hover{background:#0284c7}
+  .gaduai-btn-violet{background:#7c3aed}
+  .gaduai-btn-violet:hover{background:#6d28d9}
   /* ---------- Fase 9: PULSO GADUAI (antes "Monitor Vital") ----------
      Botón más grande que sus vecinos (Entrevista/Relacionai/IA GADUAI/Buscador) a propósito
      — es el primero y el más importante de la fila. El electro (SVG) usa dos trazos con el
@@ -235,7 +255,7 @@
       <button onclick="abrirEntrevistaFormal()" title="Entrevista formal" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-file-signature"></i> Entrevista</button>
       <a id="btn-ir-relacionai" href="#" target="_blank" rel="noopener" hidden title="Ir a Relacionai" class="gaduai-btn-cyan text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-arrow-up-right-from-square"></i> Relacionai</a>
       <button onclick="abrirIA()" title="IA GADUAI" class="gaduai-gradient text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-brain"></i> IA GADUAI</button>
-      <button id="btn-buscador" hidden onclick="abrirBuscador()" title="Buscador" class="bg-slate-800 border border-slate-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> Buscador</button>
+      <button id="btn-buscador" hidden onclick="abrirBuscador()" title="Buscador" class="gaduai-btn-violet text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> Buscador</button>
     </div>
   </header>
   <div class="bg-slate-950/95 border-b border-slate-800 py-2.5">
