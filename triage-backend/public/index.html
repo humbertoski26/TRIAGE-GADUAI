@@ -1075,7 +1075,7 @@ function renderPulsoAtencion(dias){
       <span class="w-2.5 h-2.5 rounded-full flex-none" style="background:${color}"></span>
       <div class="flex-1 min-w-0">
         <p class="text-xs font-bold text-white truncate">${esc(it.titulo)}</p>
-        <p class="text-[10px] text-slate-500">Vence ${it.fecha}${it.tipo === "hito" ? " · Hito" : ""}</p>
+        <p class="text-[10px] text-slate-500">Vence ${String(it.fecha).slice(0,10)}${it.tipo === "hito" ? " · Hito" : ""}</p>
       </div>
       <span class="text-[9px] font-black px-2 py-1 rounded-md flex-none ${nivel.clase}">${nivel.texto}</span>
     </div>`;
@@ -1249,11 +1249,12 @@ function pintarTimeline(){
   document.getElementById("timeline-empty").hidden = items.length>0;
   cont.innerHTML = items.map(h=>{
     const cfg = TRIAGE[h.triage];
-    const today = new Date(); today.setHours(0,0,0,0);
-    const due = new Date(h.fecha+"T12:00:00");
-    const diff = Math.round((due-today)/86400000);
+    // Bug real corregido (Fase 9): esto usaba `h.fecha+"T12:00:00"` directo, pero el servidor
+    // manda fecha como ISO completo ("...T00:00:00.000Z") — concatenar daba un string
+    // inválido y diff siempre era NaN, por eso "Vencido"/"Vence hoy" nunca se pintaban.
+    const diff = diasHastaCliente(h.fecha);
     const dueClass = diff<0 ? "text-rose-400" : diff===0 ? "text-amber-300" : "text-sky-300";
-    const dueText = diff<0 ? `Vencido hace ${Math.abs(diff)}d` : diff===0 ? "Vence hoy" : `Vence ${h.fecha}`;
+    const dueText = diff<0 ? `Vencido hace ${Math.abs(diff)}d` : diff===0 ? "Vence hoy" : `Vence ${String(h.fecha).slice(0,10)}`;
     const react = h.react || {like:0,dislike:0,ok:0,heart:0,done:false};
     const estado = h.tipo==='hito' ? (react.done ? "Cumplido" : "Pendiente") : (h.revisado ? "Revisado" : "Nuevo, sin revisar");
     return `<div ${h.tipo==='tarea'?`onclick="abrirCirculo(${h.id})"`:''} class="bg-slate-900/70 border ${h.tipo==='hito' && !react.done ? 'border-rose-500/40':'border-slate-800'} rounded-2xl p-4 triage-card fade-in ${h.tipo==='tarea'?'cursor-pointer':''}">
@@ -1268,7 +1269,7 @@ function pintarTimeline(){
         <span class="text-[10px] font-mono font-bold ${dueClass}">${dueText}</span>
       </div>
       ${h.desc?`<p class="text-xs text-slate-400 mt-1">${esc(h.desc)}</p>`:""}
-      <p class="text-[11px] mt-2" style="color:${cfg.color}">${h.triage} · vence ${h.fecha} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
+      <p class="text-[11px] mt-2" style="color:${cfg.color}">${h.triage} · vence ${String(h.fecha).slice(0,10)} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
       ${h.archivoNombre ? `<a href="${h.archivoData}" download="${esc(h.archivoNombre)}" class="text-[10px] text-indigo-300 underline mt-1 inline-block"><i class="fa-solid fa-paperclip"></i> ${esc(h.archivoNombre)}</a>` : ""}
       ${h.tipo==='tarea' ? `<div class="flex items-center gap-2 mt-3 flex-wrap">${circuloIconTrail(h)}</div>` : `
       <div class="flex items-center gap-3 mt-3 text-sm">
@@ -1454,7 +1455,7 @@ function textoMinuta(h){
     `Colegio: ${STATE.colegio.nombre}`,
     `Tipo: ${h.tipo==='hito'?'Hito':'Tarea'} · Triage ${h.triage} (${cfg.nombre})`,
     `Título: ${h.titulo}`,
-    `Fecha compromiso: ${h.fecha}`,
+    `Fecha compromiso: ${String(h.fecha).slice(0,10)}`,
     `${h.tipo==='hito'?'Creado por':'Registrado por'}: ${h.persona} (${h.perfil})`,
     `Responsable: ${h.responsable||'—'}`,
     h.copiados && h.copiados.length ? `Copiado a: ${h.copiados.join(', ')}` : null,

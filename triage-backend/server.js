@@ -817,14 +817,20 @@ function diasHasta(fecha) {
   const f = new Date(fechaTexto.slice(0, 10) + "T12:00:00");
   return Math.round((f - hoy) / 86400000);
 }
+// Fecha en "YYYY-MM-DD" limpio para mostrar en textos — mismo cuidado que diasHasta() con
+// el objeto Date que entrega pg (su toString() da "Tue Sep 08 2026...", no sirve para UI).
+function fechaSoloDia(fecha) {
+  const fechaTexto = fecha instanceof Date ? fecha.toISOString() : String(fecha);
+  return fechaTexto.slice(0, 10);
+}
 function generarSugerenciasMonitor(items) {
   const sugerencias = [];
   for (const it of items) {
     const dias = diasHasta(it.fecha);
     if (it.triage === "Rojo" && dias <= 0) {
-      sugerencias.push({ periodo: "diaria", texto: `Atender hoy: "${it.titulo}" (vence ${it.fecha})` });
+      sugerencias.push({ periodo: "diaria", texto: `Atender hoy: "${it.titulo}" (vence ${fechaSoloDia(it.fecha)})` });
     } else if (it.triage === "Naranjo" && dias > 0 && dias <= 7) {
-      sugerencias.push({ periodo: "semanal", texto: `Esta semana: "${it.titulo}" vence el ${it.fecha}` });
+      sugerencias.push({ periodo: "semanal", texto: `Esta semana: "${it.titulo}" vence el ${fechaSoloDia(it.fecha)}` });
     }
   }
   const pendientesMes = items.filter(it => diasHasta(it.fecha) <= 30).length;
