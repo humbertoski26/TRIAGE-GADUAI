@@ -113,12 +113,19 @@ function slug(s) {
 }
 const PERFIL_MASTER = "Director ejecutivo/máster";
 
-// SSO hacia Relacionai: Encargado de Convivencia y Director (de colegio o ejecutivo/máster)
-// entran a Relacionai sin clave aparte — Relacionai valida este token con el mismo secreto
-// compartido (SSO_SHARED_SECRET) y abre sesión directo. Si no está configurado, simplemente
-// no se emite token y el botón de Relacionai pide su login normal, como antes.
+// SSO hacia Relacionai: Director (de colegio o ejecutivo/máster), Encargado de Convivencia,
+// Dupla psicosocial e Inspector General entran a Relacionai sin clave aparte — Relacionai
+// valida este token con el mismo secreto compartido (SSO_SHARED_SECRET) y abre sesión
+// directo. UTP y Docente quedan explícitamente fuera: ni token SSO ni botón visible (ver
+// actualizarLinkRelacionai() en el frontend, que oculta el botón si no hay token).
 const SSO_SHARED_SECRET = process.env.SSO_SHARED_SECRET;
-const PERFILES_SSO_RELACIONAI = ["Encargado de Convivencia Educativa", "Director/a de colegio", PERFIL_MASTER];
+const PERFILES_SSO_RELACIONAI = [
+  PERFIL_MASTER,
+  "Director/a de colegio",
+  "Encargado de Convivencia Educativa",
+  "Dupla psicosocial",
+  "Inspector General"
+];
 function generarSsoToken(correo, nombre, perfil) {
   const payload = { correo, nombre, perfil, exp: Date.now() + 2 * 60 * 1000 };
   const b64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -902,13 +909,15 @@ app.get("/api/colegios/:id/monitor", asyncRoute(async (req, res) => {
   )).rows[0].n;
 
   const estado = criticos.length > 0 ? "atencion" : "estable";
-  const porcentaje = Math.max(20, 100 - criticos.length * 15 - prioritarios.length * 5);
+  // "Saturación" (no "gestión bajo control"): describe cuánto hay encima, no evalúa a la
+  // persona — 0 = tranquilo, 100 = muy cargado. Sube con cada crítico/prioritario/vence-hoy.
+  const saturacion = Math.min(100, criticos.length * 20 + prioritarios.length * 8 + hoyItems.length * 5);
 
   res.json({
     tareas: r.rows,
     hayCritico: criticos.length > 0,
     estado,
-    porcentaje,
+    saturacion,
     metricas: {
       hoy: hoyItems.length,
       prioritarias: prioritarios.length,

@@ -111,7 +111,7 @@
   .pulso-btn .pulso-label{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}
   .pulso-btn .pulso-label b{font-size:14px;font-weight:900;letter-spacing:.02em;color:#fff}
   .pulso-btn .pulso-label span{font-size:9.5px;color:#6ee7b7;font-weight:700}
-  .pulso-btn.critico{background:#210a10;border-color:rgba(225,29,72,.55);color:#fda4af;animation:pulsoBtnCritico 1.7s ease-in-out infinite}
+  .pulso-btn.critico{background:#210a10;border-color:rgba(225,29,72,.55);color:#fda4af;animation:pulsoBtnCritico 2.6s ease-in-out infinite}
   .pulso-btn.critico .pulso-label b{color:#fff}
   .pulso-btn.critico .pulso-label span{color:#fda4af}
   @keyframes pulsoBtnCritico{0%,100%{box-shadow:0 0 0 0 rgba(225,29,72,.45)}50%{box-shadow:0 0 0 7px rgba(225,29,72,0)}}
@@ -119,7 +119,7 @@
   .pulso-btn.critico .pulso-electro{color:#e11d48}
   .pulso-electro path{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
   .pulso-electro path.fondo{stroke:currentColor;opacity:.22}
-  .pulso-electro path.trazo{stroke:currentColor;stroke-dasharray:22 100;animation:pulsoTrazo 1.6s linear infinite}
+  .pulso-electro path.trazo{stroke:currentColor;stroke-dasharray:22 100;animation:pulsoTrazo 3s linear infinite}
   @keyframes pulsoTrazo{to{stroke-dashoffset:-122}}
   #pulso-gaduai-count:not(.hidden){display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;border-radius:9999px;background:#e11d48;color:#fff;font-size:10px;font-weight:800;padding:0 4px;margin-left:2px}
   :root[data-theme="claro"] .pulso-btn{background:#ecfdf5;border-color:#6ee7b7}
@@ -404,7 +404,7 @@
       </div>
       <div class="text-right">
         <p id="pulso-porcentaje" class="text-2xl font-black text-emerald-400">--%</p>
-        <p class="text-[9px] text-slate-500">gestión bajo control</p>
+        <p class="text-[9px] text-slate-500">Saturación</p>
       </div>
     </div>
 
@@ -752,12 +752,14 @@ async function cambiarTema(){
 // cambia (no solo al entrar) para que el link quede al día antes de cruzar.
 function actualizarLinkRelacionai(){
   const btnRelacionai = document.getElementById("btn-ir-relacionai");
-  if(STATE.colegio && STATE.colegio.relacionai_url){
+  // Solo los perfiles con SSO (Director ejecutivo/máster, Director/a de colegio, Encargado de
+  // Convivencia, Dupla psicosocial, Inspector General — ver PERFILES_SSO_RELACIONAI en el
+  // servidor) tienen acceso al botón. UTP y Docente no lo ven — no es solo "les pide clave",
+  // el botón directamente no aparece.
+  if(STATE.colegio && STATE.colegio.relacionai_url && STATE.relacionaiSsoToken){
     const base = STATE.colegio.relacionai_url.replace(/\/$/, "");
     const tema = encodeURIComponent(STATE.tema || "oscuro");
-    btnRelacionai.href = STATE.relacionaiSsoToken
-      ? `${base}/sso?token=${encodeURIComponent(STATE.relacionaiSsoToken)}&tema=${tema}`
-      : `${base}/encargado/login?tema=${tema}`;
+    btnRelacionai.href = `${base}/sso?token=${encodeURIComponent(STATE.relacionaiSsoToken)}&tema=${tema}`;
     btnRelacionai.hidden = false;
   } else { btnRelacionai.hidden = true; }
 }
@@ -1018,9 +1020,9 @@ async function abrirMonitorVital(){
     const q = new URLSearchParams({perfil: STATE.perfil||"", persona: STATE.persona||""});
     const data = await api(`/api/colegios/${STATE.colegioId}/monitor?${q}`);
     pulsoData = data;
-    renderMonitorSecciones(data.tareas);
     renderPulsoResumen(data);
-    renderPulsoAtencion(0); // arranca en la tab "Hoy"
+    renderPulsoAtencion(0); // arranca en la tab "Hoy" — el pulso del día primero, nada más,
+    renderMonitorSecciones(data.tareas, 0); // para que no sea agobiante al entrar
   }catch(e){
     document.getElementById("monitor-secciones").innerHTML = '<p class="text-[11px] text-rose-400 text-center py-6">No se pudo cargar PULSO GADUAI.</p>';
     document.getElementById("pulso-estado-frase").textContent = "No se pudo cargar.";
@@ -1032,7 +1034,7 @@ function renderPulsoResumen(data){
     ? "El colegio está funcionando sin nudos críticos pendientes."
     : "Hay ítems críticos que merecen tu atención hoy.";
   const pct = document.getElementById("pulso-porcentaje");
-  pct.textContent = `${data.porcentaje}%`;
+  pct.textContent = `${data.saturacion}%`;
   pct.className = "text-2xl font-black " + (estable ? "text-emerald-400" : "text-rose-400");
   document.getElementById("pulso-m-hoy").textContent = data.metricas.hoy;
   document.getElementById("pulso-m-prioritarias").textContent = data.metricas.prioritarias;
@@ -1042,8 +1044,10 @@ function renderPulsoResumen(data){
   const wrapDec = document.getElementById("pulso-decisiones-wrap");
   if(data.decisionesPendientes.length){
     wrapDec.hidden = false;
+    // Todo lo que llega acá ya es tipo "tarea" (filtrado en el servidor) — siempre lleva a
+    // su Círculo de la promesa para seguir trabajándola, sin condición extra.
     contDec.innerHTML = data.decisionesPendientes.map(d => `
-      <div class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5">
+      <div class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 cursor-pointer hover:border-slate-600" onclick="cerrarModalId('modal-monitor');abrirCirculo(${d.id})">
         <p class="text-xs font-bold text-white">${esc(d.titulo)}</p>
         <p class="text-[10px] text-slate-500 mt-0.5">${esc(d.detalle)}</p>
       </div>`).join("");
@@ -1057,6 +1061,7 @@ function cambiarPeriodoPulso(dias, el){
   const etiquetas = {0:"Hoy", 7:"Esta semana", 30:"Este mes"};
   document.getElementById("pulso-periodo-label").textContent = etiquetas[dias] || "Hoy";
   renderPulsoAtencion(dias);
+  if(pulsoData) renderMonitorSecciones(pulsoData.tareas, dias);
 }
 function renderPulsoAtencion(dias){
   if(!pulsoData) return;
@@ -1081,11 +1086,15 @@ function renderPulsoAtencion(dias){
     </div>`;
   }).join("") : '<p class="text-[10px] text-slate-600">Nada pendiente en este período.</p>';
 }
-function renderMonitorSecciones(tareas){
+// dias sigue la misma escala de las tabs (0=Hoy, 7=Semana, 30=Mes) — muestra solo las
+// secciones que ya corresponden a ese período, así la primera pantalla (Hoy) no es
+// agobiante y semanal/mensual aparecen solo si la persona los pide.
+function renderMonitorSecciones(tareas, dias){
   const cont = document.getElementById("monitor-secciones");
   const porPeriodo = {diaria:[], semanal:[], mensual:[]};
   tareas.forEach(t => { if(porPeriodo[t.periodo]) porPeriodo[t.periodo].push(t); });
-  cont.innerHTML = Object.entries(MONITOR_PERIODOS).map(([clave, titulo]) => `
+  const periodosVisibles = dias >= 30 ? ["diaria","semanal","mensual"] : dias >= 7 ? ["diaria","semanal"] : ["diaria"];
+  cont.innerHTML = Object.entries(MONITOR_PERIODOS).filter(([clave]) => periodosVisibles.includes(clave)).map(([clave, titulo]) => `
     <div>
       <p class="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-2">${titulo}</p>
       <div class="space-y-2">
