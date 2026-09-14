@@ -247,6 +247,15 @@ app.post("/api/colegios/:id/relacionai-url", requireAdminKey, asyncRoute(async (
   res.json(r.rows[0]);
 }));
 
+// Elimina un colegio completo (cascade se lleva usuarios, items y todo lo asociado) — para
+// limpiar colegios de prueba, sobre todo en el despliegue compartido donde varios colegios
+// conviven en la misma base de datos.
+app.delete("/api/colegios/:id", requireAdminKey, asyncRoute(async (req, res) => {
+  const r = await pool.query("delete from colegios where id=$1 returning id, nombre", [req.params.id]);
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  res.json({ ok: true, eliminado: r.rows[0] });
+}));
+
 // Pública a propósito: es la que usa el link con ?colegio=<id> para mostrar el nombre antes
 // de loguearse. No expone la lista completa, solo un colegio puntual si se sabe su id.
 app.get("/api/colegios/:id", asyncRoute(async (req, res) => {
