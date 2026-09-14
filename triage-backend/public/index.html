@@ -129,16 +129,16 @@
      stroke-dashoffset (pathLength="100" evita tener que calcular el largo real del path). El
      color (verde=estable / rojo=atención) viene de `color` en el contenedor, heredado por
      `stroke:currentColor` — así una sola clase `.critico` cambia electro + fondo + halo. */
-  .pulso-btn{display:flex;align-items:center;gap:10px;padding:12px 20px;border-radius:18px;background:#031814;border:1px solid rgba(16,185,129,.4);color:#a7f3d0}
+  .pulso-btn{display:flex;align-items:center;gap:14px;padding:22px 24px;border-radius:20px;background:#031814;border:1px solid rgba(16,185,129,.4);color:#a7f3d0}
   .pulso-btn:hover{border-color:rgba(16,185,129,.7)}
-  .pulso-btn .pulso-label{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}
-  .pulso-btn .pulso-label b{font-size:14px;font-weight:900;letter-spacing:.02em;color:#fff}
-  .pulso-btn .pulso-label span{font-size:9.5px;color:#6ee7b7;font-weight:700}
+  .pulso-btn .pulso-label{display:flex;flex-direction:column;align-items:flex-start;line-height:1.2}
+  .pulso-btn .pulso-label b{font-size:19px;font-weight:900;letter-spacing:.02em;color:#fff}
+  .pulso-btn .pulso-label span{font-size:11.5px;color:#6ee7b7;font-weight:700}
   .pulso-btn.critico{background:#210a10;border-color:rgba(225,29,72,.55);color:#fda4af;animation:pulsoBtnCritico 2.6s ease-in-out infinite}
   .pulso-btn.critico .pulso-label b{color:#fff}
   .pulso-btn.critico .pulso-label span{color:#fda4af}
   @keyframes pulsoBtnCritico{0%,100%{box-shadow:0 0 0 0 rgba(225,29,72,.45)}50%{box-shadow:0 0 0 7px rgba(225,29,72,0)}}
-  .pulso-electro{width:38px;height:22px;flex:none;color:#10b981}
+  .pulso-electro{width:60px;height:34px;flex:none;color:#10b981}
   .pulso-btn.critico .pulso-electro{color:#e11d48}
   .pulso-electro path{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
   .pulso-electro path.fondo{stroke:currentColor;opacity:.22}
@@ -243,11 +243,11 @@
   </header>
 
   <div class="max-w-[1500px] mx-auto px-4 py-5 pb-16">
-    <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr_1.35fr] gap-4 items-start">
+    <div class="grid grid-cols-1 lg:grid-cols-[280px_1.5fr_1fr] gap-4 items-start">
 
-      <!-- ============ COLUMNA IZQUIERDA: Pulso GADUAI (arriba) + panel (abajo) ============ -->
-      <div class="order-3 lg:order-1 space-y-4 lg:sticky lg:top-20">
-        <button id="btn-pulso-gaduai" onclick="abrirMonitorVital()" title="PULSO GADUAI" class="pulso-btn w-full">
+      <!-- ============ COLUMNA IZQUIERDA: Pulso GADUAI (más espacio) + panel (abajo) ============ -->
+      <div class="order-3 lg:order-1 flex flex-col gap-4 lg:sticky lg:top-20 lg:h-[calc(100vh-7rem)]">
+        <button id="btn-pulso-gaduai" onclick="abrirMonitorVital()" title="PULSO GADUAI" class="pulso-btn w-full lg:flex-[1.4] lg:items-center">
           <svg class="pulso-electro" viewBox="0 0 120 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <path class="fondo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
             <path class="trazo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
@@ -256,7 +256,7 @@
           <span id="pulso-gaduai-count" class="hidden"></span>
         </button>
 
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 lg:flex-1 lg:overflow-y-auto">
           <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Perfiles conectados</p>
           <div id="menu-perfiles" class="space-y-1 mb-3 max-h-32 overflow-y-auto"></div>
           <button id="btn-tema" onclick="cambiarTema()" class="w-full text-[11px] text-sky-300 border border-sky-500/30 rounded-lg py-2"><i class="fa-solid fa-sun mr-1"></i> Modo claro</button>
@@ -266,29 +266,29 @@
         </div>
       </div>
 
-      <!-- ============ COLUMNA CENTRO: botones + entrada inteligente ============ -->
+      <!-- ============ COLUMNA CENTRO: botones + entrada inteligente (caja grande) ============ -->
       <div class="order-1 lg:order-2 space-y-4">
         <div class="flex flex-wrap items-center gap-2">
-          <button onclick="abrirEntrevistaFormal()" title="Entrevista formal" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-file-signature"></i> Entrevista</button>
-          <a id="btn-ir-relacionai" href="#" target="_blank" rel="noopener" hidden title="Ir a Relacionai" class="gaduai-btn-cyan text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-arrow-up-right-from-square"></i> Relacionai</a>
-          <button onclick="abrirIA()" title="IA GADUAI" class="gaduai-gradient text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-brain"></i> IA GADUAI</button>
-          <button id="btn-buscador" hidden onclick="abrirBuscador()" title="Buscador" class="gaduai-btn-violet text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> Buscador</button>
-          <button onclick="abrirAgenda()" title="Agenda / Calendario" class="gaduai-btn-lime text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-calendar-days"></i> Agenda</button>
+          <button onclick="abrirEntrevistaFormal()" title="Entrevista formal" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-file-signature"></i> Entrevista</button>
+          <a id="btn-ir-relacionai" href="#" target="_blank" rel="noopener" hidden title="Ir a Relacionai" class="gaduai-btn-cyan text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-arrow-up-right-from-square"></i> Relacionai</a>
+          <button onclick="abrirIA()" title="IA GADUAI" class="gaduai-gradient text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-brain"></i> IA GADUAI</button>
+          <button id="btn-buscador" hidden onclick="abrirBuscador()" title="Buscador" class="gaduai-btn-violet text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-magnifying-glass"></i> Buscador</button>
+          <button onclick="abrirAgenda()" title="Agenda / Calendario" class="gaduai-btn-lime text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-calendar-days"></i> Agenda</button>
         </div>
 
-        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center">
-          <h2 class="text-xl font-black text-white">Hola, <span id="ei-saludo-nombre"></span></h2>
-          <p class="text-sm text-slate-400 mb-4">¿En qué te ayudo hoy?</p>
-          <textarea id="ei-texto" rows="4" placeholder="Cuéntame qué está pasando... ej. Faltó el profesor Juan Pérez, el 7°B quedó sin clases" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-3 text-left"></textarea>
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8 lg:p-10 text-center">
+          <h2 class="text-2xl lg:text-3xl font-black text-white">Hola, <span id="ei-saludo-nombre"></span></h2>
+          <p class="text-base text-slate-400 mb-5">¿En qué te ayudo hoy?</p>
+          <textarea id="ei-texto" rows="7" placeholder="Cuéntame qué está pasando... ej. Faltó el profesor Juan Pérez, el 7°B quedó sin clases" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-sm text-white mb-4 text-left"></textarea>
           <div class="flex gap-2 mb-3">
-            <button id="ei-btn-mic" onclick="eiToggleDictado()" title="Dictar" class="w-11 h-11 flex-none rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center text-base"><i class="fa-solid fa-microphone"></i></button>
-            <button id="ei-btn-analizar" onclick="eiAnalizar()" class="flex-1 gaduai-gradient text-white text-sm font-bold rounded-xl"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Analizar con GADUAI</button>
+            <button id="ei-btn-mic" onclick="eiToggleDictado()" title="Dictar" class="w-14 h-14 flex-none rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center text-lg"><i class="fa-solid fa-microphone"></i></button>
+            <button id="ei-btn-analizar" onclick="eiAnalizar()" class="flex-1 gaduai-gradient text-white text-base font-bold rounded-xl"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Analizar con GADUAI</button>
           </div>
           <button onclick="abrirModal()" class="w-full text-[11px] text-slate-500 hover:text-slate-300">✏️ Prefiero llenarlo manualmente</button>
         </div>
       </div>
 
-      <!-- ============ COLUMNA DERECHA: hitos + campanita + Timeline ============ -->
+      <!-- ============ COLUMNA DERECHA: hitos + campanita + Timeline (más angosta) ============ -->
       <div class="order-2 lg:order-3">
         <div class="flex items-start justify-between gap-2 mb-2">
           <div class="min-w-0">
