@@ -414,6 +414,7 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
     perfil: it.perfil,
     creado: it.creado,
     creadoEn: it.creado_en,
+    reunionHora: it.reunion_hora,
     revisado: it.revisado,
     archivoNombre: it.archivo_nombre,
     archivoData: it.archivo_data,
@@ -1448,6 +1449,10 @@ async function agendaAgendarReunionAutomatica(colegioId, itemId, actor, responsa
     }
     return;
   }
+  // La fecha del ítem pasa a ser la fecha real encontrada por la Agenda (no la fecha en la que
+  // se escribió la entrada) — así el Timeline muestra cuándo quedó agendada de verdad la
+  // reunión, con su hora, tal como pidió Humberto.
+  await pool.query("update items set fecha=$1, reunion_hora=$2 where id=$3", [bloque.fecha, bloque.hora, itemId]);
   for (const p of personas) {
     await pool.query(
       `insert into agenda_bloques (colegio_id, persona, fecha, hora, estado, titulo, modalidad, item_id, origen)

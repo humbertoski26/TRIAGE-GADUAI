@@ -71,6 +71,11 @@ alter table items add column if not exists fecha_final date;
 alter table items add column if not exists relacionai_sugerido boolean not null default false;
 alter table items add column if not exists relacionai_motivo text;
 alter table items add column if not exists relacionai_sugerencia text;
+-- Cuando el cerebro GADUAI agenda una reunión automática (ver agendaAgendarReunionAutomatica en
+-- server.js), `fecha` se actualiza a la fecha real encontrada en la Agenda y `reunion_hora`
+-- guarda la hora — así el Timeline muestra cuándo quedó agendada de verdad la reunión, no la
+-- fecha en la que se escribió la entrada.
+alter table items add column if not exists reunion_hora text;
 
 -- Bitácora estructurada del círculo de la promesa (distinta del chat libre): un mensaje +
 -- adjunto opcional por cada paso (aceptar, rechazar, ok, cerrar, like).

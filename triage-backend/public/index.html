@@ -74,6 +74,7 @@
   :root[data-theme="claro"] .text-cyan-200,
   :root[data-theme="claro"] .text-cyan-300{color:#0e7490!important}
   :root[data-theme="claro"] .text-cyan-400{color:#0891b2!important}
+  :root[data-theme="claro"] .text-lime-300{color:#3f6212!important}
   :root[data-theme="claro"] .text-indigo-300,
   :root[data-theme="claro"] .text-indigo-400{color:#4338ca!important}
   :root[data-theme="claro"] .text-pink-400{color:#db2777!important}
@@ -329,6 +330,17 @@
       </div>
 
     </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: CONFIRMAR REUNIÓN (Fase 16b) ============ -->
+<div id="modal-confirmar-reunion" class="hidden fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 fade-in text-center">
+    <div class="w-12 h-12 rounded-full bg-lime-600/20 flex items-center justify-center text-lime-300 text-xl mx-auto mb-3"><i class="fa-solid fa-people-group"></i></div>
+    <h3 class="text-base font-black text-white mb-1">¿Quieres reunirte?</h3>
+    <p class="text-xs text-slate-400 mb-5">Detecté que quieres coordinar una reunión. Si confirmas, GADUAI convoca a todos y agenda automáticamente en la fecha más próxima que le sirva a cada uno.</p>
+    <button onclick="confirmarReunion(true)" class="w-full gaduai-btn-lime text-white text-sm font-bold py-3 rounded-xl mb-2"><i class="fa-solid fa-calendar-check mr-1"></i> Sí, agendar automáticamente</button>
+    <button onclick="confirmarReunion(false)" class="w-full text-[11px] text-slate-500 hover:text-slate-300">No, solo registrarlo</button>
   </div>
 </div>
 
@@ -1697,18 +1709,23 @@ function pintarTimeline(){
     const dueText = diff<0 ? `Vencido hace ${Math.abs(diff)}d` : diff===0 ? "Vence hoy" : `Vence ${String(h.fecha).slice(0,10)}`;
     const react = h.react || {like:0,dislike:0,ok:0,heart:0,done:false};
     const estado = h.tipo==='hito' ? (react.done ? "Cumplido" : "Pendiente") : (h.revisado ? "Revisado" : "Nuevo, sin revisar");
-    return `<div ${h.tipo==='tarea'?`onclick="abrirCirculo(${h.id})"`:''} class="bg-slate-900/70 border ${h.tipo==='hito' && !react.done ? 'border-rose-500/40':'border-slate-800'} rounded-2xl p-4 triage-card fade-in ${h.tipo==='tarea'?'cursor-pointer':''}">
+    // Al cerrarse (círculo de la promesa para tareas, "Marcar cumplido" para hitos) la tarjeta
+    // se ve más transparente — señal visual de que ya no requiere atención.
+    const terminado = h.tipo==='tarea' ? h.circuloEstado==='cerrado' : !!react.done;
+    return `<div ${h.tipo==='tarea'?`onclick="abrirCirculo(${h.id})"`:''} class="bg-slate-900/70 border ${h.tipo==='hito' && !react.done ? 'border-rose-500/40':'border-slate-800'} rounded-2xl p-4 triage-card fade-in ${h.tipo==='tarea'?'cursor-pointer':''} ${terminado?'opacity-60':''}">
       <div class="flex justify-between gap-2 items-start flex-wrap">
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full inline-block" style="background:${cfg.color}"></span>
           <p class="text-sm font-black text-white">${esc(h.titulo)}</p>
           ${h.tipo==='hito'?'<span class="text-[9px] font-bold uppercase bg-slate-700 text-slate-200 rounded px-1.5 py-0.5">Hito</span>':''}
+          ${h.reunionHora?'<span class="text-[9px] font-bold uppercase bg-lime-600/20 text-lime-300 rounded px-1.5 py-0.5"><i class="fa-solid fa-calendar-days mr-0.5"></i>Reunión agendada</span>':''}
           ${!h.revisado?'<span class="text-[9px] font-bold uppercase bg-rose-600 text-white rounded-full px-2 py-0.5">Nuevo</span>':''}
           ${h.soloLectura?'<span class="text-[9px] font-bold uppercase bg-slate-700 text-slate-400 rounded px-1.5 py-0.5" title="Visible como sostenedor — lo resuelve el Director/a de colegio"><i class="fa-solid fa-eye mr-1"></i>Solo lectura</span>':''}
         </div>
         <span class="text-[10px] font-mono font-bold ${dueClass}">${dueText}</span>
       </div>
       ${h.desc?`<p class="text-xs text-slate-400 mt-1">${esc(h.desc)}</p>`:""}
+      ${h.reunionHora?`<p class="text-[11px] font-bold text-lime-300 mt-1"><i class="fa-solid fa-calendar-check mr-1"></i>Reunión agendada: ${String(h.fecha).slice(0,10)} a las ${esc(h.reunionHora)}</p>`:""}
       <p class="text-[11px] mt-2" style="color:${cfg.color}">${h.triage} · creado ${esc(h.creado||'—')} · vence ${String(h.fecha).slice(0,10)}${h.fechaFinal?` (hasta ${String(h.fechaFinal).slice(0,10)})`:''} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
       ${h.archivoNombre ? `<a href="${h.archivoData}" download="${esc(h.archivoNombre)}" class="text-[10px] text-indigo-300 underline mt-1 inline-block"><i class="fa-solid fa-paperclip"></i> ${esc(h.archivoNombre)}</a>` : ""}
       ${h.tipo==='tarea' ? `<div class="flex items-center gap-2 mt-3 flex-wrap">${circuloIconTrail(h)}</div>` : `
@@ -1919,6 +1936,7 @@ function eiToggleDictado(){
   eiDictando = true;
   btnMic.classList.remove("bg-slate-800","text-slate-300"); btnMic.classList.add("bg-rose-600","text-white");
 }
+let eiPropuestaPendiente = null, eiTextoPendiente = "";
 async function eiAnalizar(){
   const texto = document.getElementById("ei-texto").value.trim();
   if(!texto){ toast("Escribe o dicta qué está pasando"); return; }
@@ -1927,7 +1945,12 @@ async function eiAnalizar(){
   try{
     const r = await api(`/api/colegios/${STATE.colegioId}/interpretar`, {method:"POST", body: JSON.stringify(actorBody({texto}))});
     document.getElementById("ei-texto").value = "";
-    if(r.ok){ await abrirModal(r.propuesta, texto); }
+    if(r.ok && r.propuesta.agendarReunion){
+      // GADUAI detectó "reunión"/"juntar" — se pregunta antes de agendar solo, en vez de
+      // hacerlo directo, para que la persona confirme que de verdad quiere coordinar ahora.
+      eiPropuestaPendiente = r.propuesta; eiTextoPendiente = texto;
+      document.getElementById("modal-confirmar-reunion").classList.remove("hidden");
+    } else if(r.ok){ await abrirModal(r.propuesta, texto); }
     else { toast("No se pudo interpretar automáticamente — completa el formulario"); await abrirModal(null, texto); }
   }catch(e){
     toast("No se pudo interpretar automáticamente — completa el formulario");
@@ -1936,6 +1959,13 @@ async function eiAnalizar(){
   }finally{
     btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Analizar con GADUAI';
   }
+}
+async function confirmarReunion(agendar){
+  document.getElementById("modal-confirmar-reunion").classList.add("hidden");
+  const propuesta = eiPropuestaPendiente, texto = eiTextoPendiente;
+  eiPropuestaPendiente = null; eiTextoPendiente = "";
+  if(!agendar && propuesta) propuesta.agendarReunion = false;
+  await abrirModal(propuesta, texto);
 }
 function renderFormPersonasListas(){
   const filaResponsable = p => `<label class="flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer hover:bg-slate-900 ${formResponsable===p.nombre?'bg-indigo-600/15':''}" data-nombre="${esc(p.nombre)}">
