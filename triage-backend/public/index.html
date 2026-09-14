@@ -243,10 +243,10 @@
   </header>
 
   <div class="max-w-[1500px] mx-auto px-4 py-5 pb-16">
-    <div class="grid grid-cols-1 lg:grid-cols-[280px_1.5fr_1fr] gap-4 items-start">
+    <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 items-start">
 
       <!-- ============ COLUMNA IZQUIERDA: Pulso GADUAI (más espacio) + panel (abajo) ============ -->
-      <div class="order-3 lg:order-1 flex flex-col gap-4 lg:sticky lg:top-20 lg:h-[calc(100vh-7rem)]">
+      <div class="order-2 lg:order-1 flex flex-col gap-4 lg:sticky lg:top-20 lg:h-[calc(100vh-7rem)]">
         <button id="btn-pulso-gaduai" onclick="abrirMonitorVital()" title="PULSO GADUAI" class="pulso-btn w-full lg:flex-[1.4] lg:items-center">
           <svg class="pulso-electro" viewBox="0 0 120 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <path class="fondo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
@@ -266,7 +266,7 @@
         </div>
       </div>
 
-      <!-- ============ COLUMNA CENTRO: botones + entrada inteligente (caja grande) ============ -->
+      <!-- ============ COLUMNA PRINCIPAL: botones + entrada inteligente + Timeline debajo ============ -->
       <div class="order-1 lg:order-2 space-y-4">
         <div class="flex flex-wrap items-center gap-2">
           <button onclick="abrirEntrevistaFormal()" title="Entrevista formal" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-file-signature"></i> Entrevista</button>
@@ -286,42 +286,46 @@
           </div>
           <button onclick="abrirModal()" class="w-full text-[11px] text-slate-500 hover:text-slate-300">✏️ Prefiero llenarlo manualmente</button>
         </div>
-      </div>
 
-      <!-- ============ COLUMNA DERECHA: hitos + campanita + Timeline (más angosta) ============ -->
-      <div class="order-2 lg:order-3">
-        <div class="flex items-start justify-between gap-2 mb-2">
-          <div class="min-w-0">
-            <p class="text-sm font-black text-white">Timeline</p>
-            <p class="text-[11px] text-slate-500">Lo que está ocurriendo en tu organización.</p>
+        <!-- El Timeline empieza justo después de la caja de pregunta, que se queda con todo el
+             protagonismo — el botón es vistoso a propósito porque la sección de abajo va sin
+             fondo (transparente), y este botón marca dónde empieza. -->
+        <button id="btn-mostrar-timeline" onclick="toggleTimelineSeccion()" class="w-full brand-gradient text-white text-sm font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2"><i class="fa-solid fa-stream"></i> Mostrar Timeline</button>
+
+        <div id="timeline-seccion" hidden>
+          <div class="flex items-start justify-between gap-2 mb-2">
+            <div class="min-w-0">
+              <p class="text-sm font-black text-white">Timeline</p>
+              <p class="text-[11px] text-slate-500">Lo que está ocurriendo en tu organización.</p>
+            </div>
+            <div class="flex items-center gap-2 flex-none">
+              <span id="hitos-count" class="text-[11px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-3 py-1">0 hitos</span>
+              <button onclick="abrirAlertas()" class="relative text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1"><i class="fa-solid fa-bell"></i> <span id="alertas-count">0</span></button>
+            </div>
           </div>
-          <div class="flex items-center gap-2 flex-none">
-            <span id="hitos-count" class="text-[11px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-3 py-1">0 hitos</span>
-            <button onclick="abrirAlertas()" class="relative text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1"><i class="fa-solid fa-bell"></i> <span id="alertas-count">0</span></button>
+          <div class="flex items-center gap-1.5 flex-wrap mb-3">
+            <button onclick="filtrarTipo('todos')" data-tipo="todos" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-indigo-600 text-white">Todos</button>
+            <button onclick="filtrarTipo('tarea')" data-tipo="tarea" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300"><i class="fa-solid fa-clipboard-list mr-1"></i>Tareas</button>
+            <button onclick="filtrarTipo('hito')" data-tipo="hito" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300"><i class="fa-solid fa-exclamation mr-1"></i>Hitos</button>
+            <div class="flex items-center gap-1.5 ml-1" id="filtro-triage">
+              <button onclick="filtrarColor('todos')" data-f="todos" class="filtro-btn px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-white ring-2 ring-white">Color</button>
+              <button onclick="filtrarColor('Rojo')" data-f="Rojo" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-rose-600/20" title="Rojo · Crítico">🔴</button>
+              <button onclick="filtrarColor('Azul')" data-f="Azul" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-sky-600/20" title="Azul · Estratégico">🔵</button>
+              <button onclick="filtrarColor('Naranjo')" data-f="Naranjo" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-amber-600/20" title="Naranjo · Delegable">🟠</button>
+              <button onclick="filtrarColor('Gris')" data-f="Gris" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-slate-600/20" title="Gris · Diferible">⚪</button>
+            </div>
+            <select id="filtro-vencimiento" onchange="filtrarVencimiento(this.value)" class="ml-1 px-2 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700 outline-none">
+              <option value="todas">Vencimiento: todas</option>
+              <option value="vencidas">Vencidas</option>
+              <option value="hoy">Vencen hoy</option>
+              <option value="semana">Esta semana</option>
+              <option value="mes">Este mes</option>
+            </select>
           </div>
+          <p class="text-[10px] text-slate-500 mb-3">Alimentado por Director/a, Inspector/a General, UTP, Convivencia, Dupla y Docentes del colegio.</p>
+          <div id="timeline-container" class="space-y-3"></div>
+          <p id="timeline-empty" class="text-center text-xs text-slate-600 py-14" hidden>Aún no hay hitos ni tareas en el Timeline. Cuéntale a GADUAI qué está pasando para registrar el primero.</p>
         </div>
-        <div class="flex items-center gap-1.5 flex-wrap mb-3">
-          <button onclick="filtrarTipo('todos')" data-tipo="todos" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-indigo-600 text-white">Todos</button>
-          <button onclick="filtrarTipo('tarea')" data-tipo="tarea" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300"><i class="fa-solid fa-clipboard-list mr-1"></i>Tareas</button>
-          <button onclick="filtrarTipo('hito')" data-tipo="hito" class="tab-btn px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300"><i class="fa-solid fa-exclamation mr-1"></i>Hitos</button>
-          <div class="flex items-center gap-1.5 ml-1" id="filtro-triage">
-            <button onclick="filtrarColor('todos')" data-f="todos" class="filtro-btn px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-white ring-2 ring-white">Color</button>
-            <button onclick="filtrarColor('Rojo')" data-f="Rojo" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-rose-600/20" title="Rojo · Crítico">🔴</button>
-            <button onclick="filtrarColor('Azul')" data-f="Azul" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-sky-600/20" title="Azul · Estratégico">🔵</button>
-            <button onclick="filtrarColor('Naranjo')" data-f="Naranjo" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-amber-600/20" title="Naranjo · Delegable">🟠</button>
-            <button onclick="filtrarColor('Gris')" data-f="Gris" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-slate-600/20" title="Gris · Diferible">⚪</button>
-          </div>
-          <select id="filtro-vencimiento" onchange="filtrarVencimiento(this.value)" class="ml-1 px-2 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700 outline-none">
-            <option value="todas">Vencimiento: todas</option>
-            <option value="vencidas">Vencidas</option>
-            <option value="hoy">Vencen hoy</option>
-            <option value="semana">Esta semana</option>
-            <option value="mes">Este mes</option>
-          </select>
-        </div>
-        <p class="text-[10px] text-slate-500 mb-3">Alimentado por Director/a, Inspector/a General, UTP, Convivencia, Dupla y Docentes del colegio.</p>
-        <div id="timeline-container" class="space-y-3"></div>
-        <p id="timeline-empty" class="text-center text-xs text-slate-600 py-14" hidden>Aún no hay hitos ni tareas en el Timeline. Cuéntale a GADUAI qué está pasando para registrar el primero.</p>
       </div>
 
     </div>
@@ -1132,6 +1136,17 @@ function filtrarColor(v){
 function filtrarVencimiento(v){
   STATE.filtroVencimiento=v;
   pintarTimeline();
+}
+// La caja de pregunta es el protagonista de la pantalla de inicio; el Timeline queda plegado
+// debajo hasta que la persona lo pide, y desde ahí se puede seguir haciendo scroll como antes.
+function toggleTimelineSeccion(){
+  const seccion = document.getElementById("timeline-seccion");
+  const btn = document.getElementById("btn-mostrar-timeline");
+  seccion.hidden = !seccion.hidden;
+  btn.innerHTML = seccion.hidden
+    ? '<i class="fa-solid fa-stream"></i> Mostrar Timeline'
+    : '<i class="fa-solid fa-eye-slash"></i> Ocultar Timeline';
+  if(!seccion.hidden) seccion.scrollIntoView({behavior:"smooth", block:"start"});
 }
 
 async function cargarTimeline(){
