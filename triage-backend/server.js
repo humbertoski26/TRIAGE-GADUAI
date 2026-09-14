@@ -415,6 +415,7 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
     creado: it.creado,
     creadoEn: it.creado_en,
     reunionHora: it.reunion_hora,
+    reunionLugar: it.reunion_lugar,
     revisado: it.revisado,
     archivoNombre: it.archivo_nombre,
     archivoData: it.archivo_data,
@@ -475,7 +476,7 @@ app.post("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
   // detecta "reunión"/"juntar" en la entrada inteligente (ver detectaReunion), el hito llega
   // acá con agendarReunion=true igual que una tarea con el checkbox marcado.
   if (b.agendarReunion) {
-    agendaAgendarReunionAutomatica(req.params.id, itemId, actor, b.responsable, b.copiados || [], b.triage || "Rojo", titulo)
+    agendaAgendarReunionAutomatica(req.params.id, itemId, actor, b.responsable, b.copiados || [], b.triage || "Rojo", titulo, b.reunionLugar)
       .catch(err => console.error("agendaAgendarReunionAutomatica:", err));
   }
 }));
@@ -1434,7 +1435,7 @@ async function agendaBuscarBloqueComun(colegioId, quienes, ventanaDias) {
 // 2 días, Azul 4 días, Gris 5 días — la escala que pidió Humberto. Si no hay bloque en común:
 // el Director (de colegio o ejecutivo/máster) igual agenda según su propia disponibilidad y
 // los demás se adaptan; cualquier otro perfil solo recibe el aviso de coordinarlo a mano.
-async function agendaAgendarReunionAutomatica(colegioId, itemId, actor, responsable, copiados, triage, titulo) {
+async function agendaAgendarReunionAutomatica(colegioId, itemId, actor, responsable, copiados, triage, titulo, lugar) {
   const personas = Array.from(new Set([actor.nombre, ...(responsable ? [responsable.trim()] : []), ...(copiados || []).filter(Boolean)]));
   if (personas.length < 2) return;
   const ventanaDias = { Rojo: 1, Naranjo: 2, Azul: 4, Gris: 5 }[triage] ?? 3;
@@ -1453,18 +1454,20 @@ async function agendaAgendarReunionAutomatica(colegioId, itemId, actor, responsa
   }
   // La fecha del ítem pasa a ser la fecha real encontrada por la Agenda (no la fecha en la que
   // se escribió la entrada) — así el Timeline muestra cuándo quedó agendada de verdad la
-  // reunión, con su hora, tal como pidió Humberto.
-  await pool.query("update items set fecha=$1, reunion_hora=$2 where id=$3", [bloque.fecha, bloque.hora, itemId]);
+  // reunión, con su hora y lugar, tal como pidió Humberto.
+  const lugarTexto = (lugar || "").trim() || null;
+  await pool.query("update items set fecha=$1, reunion_hora=$2, reunion_lugar=$3 where id=$4", [bloque.fecha, bloque.hora, lugarTexto, itemId]);
+  const lugarMsg = lugarTexto ? ` en ${lugarTexto}` : "";
   for (const p of personas) {
     await pool.query(
       `insert into agenda_bloques (colegio_id, persona, fecha, hora, estado, titulo, modalidad, item_id, origen)
        values ($1,$2,$3,$4,'reservado',$5,'presencial',$6,'automatico')
        on conflict (colegio_id, persona, fecha, hora) do nothing`,
-      [colegioId, p, bloque.fecha, bloque.hora, `Reunión: ${titulo}`, itemId]
+      [colegioId, p, bloque.fecha, bloque.hora, `Reunión: ${titulo}${lugarMsg}`, itemId]
     );
     const mensaje = forzadoPorDirector
-      ? `No se encontró un bloque en común — reunión agendada el ${bloque.fecha} a las ${bloque.hora} según la disponibilidad de ${actor.nombre}. "${titulo}".`
-      : `Reunión agendada el ${bloque.fecha} a las ${bloque.hora} (presencial, 45 min) con: ${personas.filter(x => x !== p).join(", ")}. "${titulo}".`;
+      ? `No se encontró un bloque en común — reunión agendada el ${bloque.fecha} a las ${bloque.hora}${lugarMsg} según la disponibilidad de ${actor.nombre}. "${titulo}".`
+      : `Reunión agendada el ${bloque.fecha} a las ${bloque.hora}${lugarMsg} (presencial, 45 min) con: ${personas.filter(x => x !== p).join(", ")}. "${titulo}".`;
     crearAlerta(colegioId, itemId, p, mensaje).catch(() => {});
   }
 }

@@ -76,6 +76,10 @@ alter table items add column if not exists relacionai_sugerencia text;
 -- guarda la hora — así el Timeline muestra cuándo quedó agendada de verdad la reunión, no la
 -- fecha en la que se escribió la entrada.
 alter table items add column if not exists reunion_hora text;
+-- Lugar físico de la reunión (ej. "Sala de reuniones"), texto libre opcional que la persona que
+-- convoca puede escribir al marcar "Agendar reunión automática" — se muestra junto a la fecha y
+-- hora en el Timeline. Vacío = presencial sin lugar específico indicado.
+alter table items add column if not exists reunion_lugar text;
 
 -- Bitácora estructurada del círculo de la promesa (distinta del chat libre): un mensaje +
 -- adjunto opcional por cada paso (aceptar, rechazar, ok, cerrar, like).

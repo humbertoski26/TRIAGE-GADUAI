@@ -399,10 +399,14 @@
     <label class="block text-[11px] text-slate-400 mb-1">Copiar a <span class="text-slate-600">(selección múltiple)</span></label>
     <div id="f-copiar-lista" class="space-y-1 mb-5 max-h-40 overflow-y-auto bg-slate-950 border border-slate-700 rounded-xl p-1.5" onclick="const el=event.target.closest('[data-nombre]'); if(el) toggleCopiado(el.dataset.nombre)"></div>
 
-    <label class="flex items-center gap-2 mb-5 text-[11px] text-lime-300 bg-lime-500/10 border border-lime-500/30 rounded-xl p-3 cursor-pointer">
-      <input id="f-agendar-reunion" type="checkbox" class="accent-lime-500 w-4 h-4">
+    <label class="flex items-center gap-2 text-[11px] text-lime-300 bg-lime-500/10 border border-lime-500/30 rounded-t-xl p-3 cursor-pointer">
+      <input id="f-agendar-reunion" type="checkbox" class="accent-lime-500 w-4 h-4" onchange="actualizarBloqueLugarReunion()">
       <span>📅 Agendar reunión automática de 45 min con el responsable y los copiados — GADUAI busca un bloque libre en la Agenda de todos según la urgencia. Se marca solo al detectar "reunión" o "juntar" en la entrada inteligente.</span>
     </label>
+    <div id="bloque-lugar-reunion" class="hidden mb-5 bg-lime-500/10 border border-t-0 border-lime-500/30 rounded-b-xl p-3">
+      <label class="block text-[11px] text-lime-300 mb-1">📍 Lugar de la reunión <span class="text-lime-400/70">(opcional — presencial por defecto)</span></label>
+      <input id="f-reunion-lugar" placeholder="Ej. Sala de reuniones, oficina de Dirección..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white">
+    </div>
 
     <button onclick="registrar()" class="w-full brand-gradient text-white text-sm font-bold py-3 rounded-xl"><i class="fa-solid fa-list-check mr-1"></i> Registrar en GADUAI</button>
   </div>
@@ -1725,7 +1729,7 @@ function pintarTimeline(){
         <span class="text-[10px] font-mono font-bold ${dueClass}">${dueText}</span>
       </div>
       ${h.desc?`<p class="text-xs text-slate-400 mt-1">${esc(h.desc)}</p>`:""}
-      ${h.reunionHora?`<p class="text-[11px] font-bold text-lime-300 mt-1"><i class="fa-solid fa-calendar-check mr-1"></i>Reunión agendada: ${String(h.fecha).slice(0,10)} a las ${esc(h.reunionHora)}</p>`:""}
+      ${h.reunionHora?`<p class="text-[11px] font-bold text-lime-300 mt-1"><i class="fa-solid fa-calendar-check mr-1"></i>Reunión agendada: ${String(h.fecha).slice(0,10)} a las ${esc(h.reunionHora)}${h.reunionLugar?` · <i class="fa-solid fa-location-dot"></i> ${esc(h.reunionLugar)}`:''}</p>`:""}
       <p class="text-[11px] mt-2" style="color:${cfg.color}">${h.triage} · creado ${esc(h.creado||'—')} · vence ${String(h.fecha).slice(0,10)}${h.fechaFinal?` (hasta ${String(h.fechaFinal).slice(0,10)})`:''} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
       ${h.archivoNombre ? `<a href="${h.archivoData}" download="${esc(h.archivoNombre)}" class="text-[10px] text-indigo-300 underline mt-1 inline-block"><i class="fa-solid fa-paperclip"></i> ${esc(h.archivoNombre)}</a>` : ""}
       ${h.tipo==='tarea' ? `<div class="flex items-center gap-2 mt-3 flex-wrap">${circuloIconTrail(h)}</div>` : `
@@ -1891,6 +1895,8 @@ async function abrirModal(propuesta, textoOriginal){
   document.getElementById("f-archivo").value="";
   archivoPendiente = null;
   document.getElementById("f-agendar-reunion").checked = !!(propuesta && propuesta.agendarReunion);
+  document.getElementById("f-reunion-lugar").value="";
+  actualizarBloqueLugarReunion();
   document.getElementById("f-fecha").value = (propuesta && propuesta.fechaSugerida) || new Date().toISOString().slice(0,10);
   document.getElementById("f-fecha-final").value="";
   const usuarios = await api(`/api/colegios/${STATE.colegioId}/usuarios`);
@@ -1906,6 +1912,9 @@ async function abrirModal(propuesta, textoOriginal){
   } else {
     banner.classList.add("hidden");
   }
+}
+function actualizarBloqueLugarReunion(){
+  document.getElementById("bloque-lugar-reunion").classList.toggle("hidden", !document.getElementById("f-agendar-reunion").checked);
 }
 
 /* ---------- Fase 12: entrada inteligente única (Fase 14: ahora vive en la columna central, no en un modal) ---------- */
@@ -2013,7 +2022,8 @@ async function registrar(){
     copiados: [...formCopiados],
     archivoNombre: archivoPendiente ? archivoPendiente.nombre : null,
     archivoData: archivoPendiente ? archivoPendiente.data : null,
-    agendarReunion: document.getElementById("f-agendar-reunion").checked
+    agendarReunion: document.getElementById("f-agendar-reunion").checked,
+    reunionLugar: document.getElementById("f-reunion-lugar").value.trim() || null
   });
   try{
     await api(`/api/colegios/${STATE.colegioId}/timeline`, {method:"POST", body: JSON.stringify(body)});
