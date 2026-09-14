@@ -352,6 +352,7 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
     titulo: it.titulo,
     desc: it.descripcion,
     fecha: it.fecha,
+    fechaFinal: it.fecha_final,
     responsable: it.responsable,
     copiados: it.copiados,
     persona: it.persona,
@@ -378,11 +379,11 @@ app.post("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
   if (!b.titulo || !b.titulo.trim()) return res.status(400).json({ error: "titulo_requerido" });
   const titulo = b.titulo.trim();
   const r = await pool.query(
-    `insert into items (colegio_id, tipo, triage, titulo, descripcion, fecha, responsable, copiados, persona, perfil, creado, archivo_nombre, archivo_data)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) returning id`,
+    `insert into items (colegio_id, tipo, triage, titulo, descripcion, fecha, fecha_final, responsable, copiados, persona, perfil, creado, archivo_nombre, archivo_data)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) returning id`,
     [
       req.params.id, b.tipo || "tarea", b.triage || "Rojo", titulo, b.desc || null,
-      b.fecha, b.responsable || null, b.copiados || [], actor.nombre, actor.perfil,
+      b.fecha, b.fechaFinal || null, b.responsable || null, b.copiados || [], actor.nombre, actor.perfil,
       new Date().toLocaleDateString("es-CL"), b.archivoNombre || null, b.archivoData || null
     ]
   );

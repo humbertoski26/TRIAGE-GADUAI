@@ -54,6 +54,10 @@ alter table items add column if not exists recordatorio_etapa text;
 -- Círculo de la promesa (solo tipo='tarea'): nuevo -> dedo_arriba|dedo_abajo -> manito_ok -> cerrado.
 alter table items add column if not exists circulo_estado text not null default 'nuevo';
 alter table items add column if not exists circulo_like boolean not null default false;
+-- Fecha final opcional, para tareas/hitos que abarcan un período (ej. "semana de puertas
+-- abiertas") — `fecha` sigue siendo la única que usan el triage, las alertas y la Agenda;
+-- esta es solo informativa, se muestra junto a la fecha en el Timeline y en la minuta.
+alter table items add column if not exists fecha_final date;
 
 -- Bitácora estructurada del círculo de la promesa (distinta del chat libre): un mensaje +
 -- adjunto opcional por cada paso (aceptar, rechazar, ok, cerrar, like).

@@ -328,8 +328,16 @@
       <div id="quad-preview" class="mt-2 text-[11px] text-slate-400"></div>
     </div>
 
-    <label class="block text-[11px] text-slate-400 mb-1">Fecha</label>
-    <input id="f-fecha" type="date" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-4">
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <div>
+        <label class="block text-[11px] text-slate-400 mb-1">Fecha</label>
+        <input id="f-fecha" type="date" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white">
+      </div>
+      <div>
+        <label class="block text-[11px] text-slate-400 mb-1">Fecha final <span class="text-slate-600">(opcional)</span></label>
+        <input id="f-fecha-final" type="date" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white">
+      </div>
+    </div>
 
     <label class="block text-[11px] text-slate-400 mb-1">Detalle, contexto o evidencia</label>
     <textarea id="f-desc" rows="3" placeholder="Detalle, contexto o evidencia..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-4"></textarea>
@@ -337,11 +345,11 @@
     <label class="block text-[11px] text-slate-400 mb-1">Adjuntar documento (queda almacenado en el servidor)</label>
     <input id="f-archivo" type="file" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-4">
 
-    <label class="block text-[11px] text-slate-400 mb-1">Responsable de la acción</label>
-    <select id="f-responsable" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-4"></select>
+    <label class="block text-[11px] text-slate-400 mb-1">Responsable de la acción <span class="text-slate-600">(toca un nombre)</span></label>
+    <div id="f-responsable-lista" class="space-y-1 mb-4 max-h-40 overflow-y-auto bg-slate-950 border border-slate-700 rounded-xl p-1.5" onclick="const el=event.target.closest('[data-nombre]'); if(el) elegirResponsable(el.dataset.nombre)"></div>
 
-    <label class="block text-[11px] text-slate-400 mb-1">Copiar a (Ctrl/Cmd+clic = varios)</label>
-    <select id="f-copiar" multiple class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white mb-5 h-24"></select>
+    <label class="block text-[11px] text-slate-400 mb-1">Copiar a <span class="text-slate-600">(selección múltiple)</span></label>
+    <div id="f-copiar-lista" class="space-y-1 mb-5 max-h-40 overflow-y-auto bg-slate-950 border border-slate-700 rounded-xl p-1.5" onclick="const el=event.target.closest('[data-nombre]'); if(el) toggleCopiado(el.dataset.nombre)"></div>
 
     <label class="flex items-center gap-2 mb-5 text-[11px] text-lime-300 bg-lime-500/10 border border-lime-500/30 rounded-xl p-3 cursor-pointer">
       <input id="f-agendar-reunion" type="checkbox" class="accent-lime-500 w-4 h-4">
@@ -1616,7 +1624,7 @@ function pintarTimeline(){
         <span class="text-[10px] font-mono font-bold ${dueClass}">${dueText}</span>
       </div>
       ${h.desc?`<p class="text-xs text-slate-400 mt-1">${esc(h.desc)}</p>`:""}
-      <p class="text-[11px] mt-2" style="color:${cfg.color}">${h.triage} · vence ${String(h.fecha).slice(0,10)} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
+      <p class="text-[11px] mt-2" style="color:${cfg.color}">${h.triage} · vence ${String(h.fecha).slice(0,10)}${h.fechaFinal?` (hasta ${String(h.fechaFinal).slice(0,10)})`:''} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
       ${h.archivoNombre ? `<a href="${h.archivoData}" download="${esc(h.archivoNombre)}" class="text-[10px] text-indigo-300 underline mt-1 inline-block"><i class="fa-solid fa-paperclip"></i> ${esc(h.archivoNombre)}</a>` : ""}
       ${h.tipo==='tarea' ? `<div class="flex items-center gap-2 mt-3 flex-wrap">${circuloIconTrail(h)}</div>` : `
       <div class="flex items-center gap-3 mt-3 text-sm">
@@ -1738,6 +1746,9 @@ async function circuloAccion(itemId, accion, msgId){
 
 /* ---------- modal registrar ---------- */
 let quadSel = "Rojo";
+let formPersonas = [];        // [{nombre, perfil}] disponibles para Responsable/Copiar a
+let formResponsable = null;   // nombre elegido (selección única)
+let formCopiados = new Set(); // nombres elegidos (selección múltiple)
 async function abrirModal(){
   document.getElementById("modal-triage").classList.remove("hidden");
   document.getElementById("f-tipo").value="tarea";
@@ -1747,13 +1758,29 @@ async function abrirModal(){
   archivoPendiente = null;
   document.getElementById("f-agendar-reunion").checked=false;
   document.getElementById("f-fecha").value=new Date().toISOString().slice(0,10);
+  document.getElementById("f-fecha-final").value="";
   const usuarios = await api(`/api/colegios/${STATE.colegioId}/usuarios`);
-  const opciones = usuarios.length ? usuarios.map(u=>`<option value="${esc(u.nombre)}">${esc(u.nombre)} · ${esc(u.perfil)}</option>`).join("") : PERFILES.map(p=>`<option>${esc(p)}</option>`).join("");
-  document.getElementById("f-responsable").innerHTML = opciones;
-  document.getElementById("f-copiar").innerHTML = opciones;
-  document.getElementById("f-responsable").value = STATE.persona;
+  formPersonas = usuarios.length ? usuarios.map(u=>({nombre:u.nombre, perfil:u.perfil})) : PERFILES.map(p=>({nombre:p, perfil:null}));
+  formResponsable = STATE.persona;
+  formCopiados = new Set();
+  renderFormPersonasListas();
   setQuad("Rojo");
 }
+function renderFormPersonasListas(){
+  const filaResponsable = p => `<label class="flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer hover:bg-slate-900 ${formResponsable===p.nombre?'bg-indigo-600/15':''}" data-nombre="${esc(p.nombre)}">
+      <span class="w-4 h-4 rounded-full border-2 flex-none ${formResponsable===p.nombre?'border-indigo-400 bg-indigo-500':'border-slate-600'}"></span>
+      <span class="text-xs text-white flex-1 truncate">${esc(p.nombre)}${p.perfil?` <span class="text-slate-500">· ${esc(p.perfil)}</span>`:''}</span>
+    </label>`;
+  const filaCopiado = p => `<label class="flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer hover:bg-slate-900" data-nombre="${esc(p.nombre)}">
+      <span class="w-4 h-4 rounded border-2 flex-none flex items-center justify-center text-[9px] text-white ${formCopiados.has(p.nombre)?'border-sky-400 bg-sky-500':'border-slate-600'}">${formCopiados.has(p.nombre)?'✓':''}</span>
+      <span class="text-xs text-white flex-1 truncate">${esc(p.nombre)}${p.perfil?` <span class="text-slate-500">· ${esc(p.perfil)}</span>`:''}</span>
+    </label>`;
+  const vacio = '<p class="text-[10px] text-slate-600 p-2">Sin personas registradas todavía.</p>';
+  document.getElementById("f-responsable-lista").innerHTML = formPersonas.map(filaResponsable).join("") || vacio;
+  document.getElementById("f-copiar-lista").innerHTML = formPersonas.map(filaCopiado).join("") || vacio;
+}
+function elegirResponsable(nombre){ formResponsable = nombre; renderFormPersonasListas(); }
+function toggleCopiado(nombre){ formCopiados.has(nombre) ? formCopiados.delete(nombre) : formCopiados.add(nombre); renderFormPersonasListas(); }
 function cerrarModal(){ document.getElementById("modal-triage").classList.add("hidden"); }
 function setQuad(q){
   quadSel = q;
@@ -1780,8 +1807,9 @@ async function registrar(){
     titulo,
     desc: document.getElementById("f-desc").value.trim(),
     fecha: document.getElementById("f-fecha").value || new Date().toISOString().slice(0,10),
-    responsable: document.getElementById("f-responsable").value,
-    copiados: [...document.getElementById("f-copiar").selectedOptions].map(o=>o.value),
+    fechaFinal: document.getElementById("f-fecha-final").value || null,
+    responsable: formResponsable,
+    copiados: [...formCopiados],
     archivoNombre: archivoPendiente ? archivoPendiente.nombre : null,
     archivoData: archivoPendiente ? archivoPendiente.data : null,
     agendarReunion: document.getElementById("f-agendar-reunion").checked
@@ -1804,7 +1832,7 @@ function textoMinuta(h){
     `Colegio: ${STATE.colegio.nombre}`,
     `Tipo: ${h.tipo==='hito'?'Hito':'Tarea'} · Triage ${h.triage} (${cfg.nombre})`,
     `Título: ${h.titulo}`,
-    `Fecha compromiso: ${String(h.fecha).slice(0,10)}`,
+    `Fecha compromiso: ${String(h.fecha).slice(0,10)}${h.fechaFinal ? ` (hasta ${String(h.fechaFinal).slice(0,10)})` : ""}`,
     `${h.tipo==='hito'?'Creado por':'Registrado por'}: ${h.persona} (${h.perfil})`,
     `Responsable: ${h.responsable||'—'}`,
     h.copiados && h.copiados.length ? `Copiado a: ${h.copiados.join(', ')}` : null,
