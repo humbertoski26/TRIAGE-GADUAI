@@ -58,6 +58,12 @@ alter table items add column if not exists circulo_like boolean not null default
 -- abiertas") — `fecha` sigue siendo la única que usan el triage, las alertas y la Agenda;
 -- esta es solo informativa, se muestra junto a la fecha en el Timeline y en la minuta.
 alter table items add column if not exists fecha_final date;
+-- Veredicto del "cerebro" GADUAI (palabras clave + IA con el reglamento como contexto) sobre
+-- si esta tarea es un caso delicado que conviene derivar a Relacionai — ver relacionai_sugerencia
+-- para la decisión del responsable ante esa oferta (null hasta que la responda o la pospone).
+alter table items add column if not exists relacionai_sugerido boolean not null default false;
+alter table items add column if not exists relacionai_motivo text;
+alter table items add column if not exists relacionai_sugerencia text;
 
 -- Bitácora estructurada del círculo de la promesa (distinta del chat libre): un mensaje +
 -- adjunto opcional por cada paso (aceptar, rechazar, ok, cerrar, like).

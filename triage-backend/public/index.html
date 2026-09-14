@@ -685,6 +685,24 @@
   </div>
 </div>
 
+<!-- ============ MODAL: EL CEREBRO GADUAI OFRECE RELACIONAI ============ -->
+<div id="modal-relacionai-sugerencia" class="hidden fixed inset-0 z-[120] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 fade-in">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="w-9 h-9 rounded-full bg-cyan-600/20 flex items-center justify-center text-cyan-400"><i class="fa-solid fa-brain"></i></div>
+      <h3 class="text-sm font-black text-white">El cerebro GADUAI sugiere Relacionai</h3>
+    </div>
+    <p class="text-xs text-slate-300 mb-2">Este caso parece requerir investigación:</p>
+    <p id="relacionai-sug-motivo" class="text-[11px] text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-3 mb-4"></p>
+    <p class="text-xs text-slate-400 mb-4">¿Quieres derivarlo a Relacionai para investigarlo formalmente?</p>
+    <div class="space-y-2">
+      <button onclick="relacionaiSugerenciaElegir('derivado')" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2.5 rounded-xl text-xs"><i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> Sí, usar Relacionai</button>
+      <button onclick="relacionaiSugerenciaElegir('recordar_luego')" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2.5 rounded-xl text-xs">Recuérdamelo más tarde</button>
+      <button onclick="relacionaiSugerenciaElegir('no_necesario')" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 rounded-xl text-xs">No lo necesito usar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ PANTALLA 4: AGENDA PÚBLICA (link para reservar, sin login) ============ -->
 <div id="pantalla-agenda-publica" class="min-h-screen flex items-start justify-center p-4 py-10" hidden>
   <div class="w-full max-w-2xl fade-in">
@@ -1653,6 +1671,7 @@ function pintarTimeline(){
 
 /* ---------- círculo de la promesa (tareas) ---------- */
 let circuloArchivoPendiente = null;
+let relacionaiSugerenciaItemId = null;
 document.addEventListener("change", e=>{
   if(e.target.id && e.target.id.startsWith("circulo-file")){
     const file = e.target.files[0];
@@ -1667,6 +1686,20 @@ function circuloCampos(idSufijo, placeholder){
     <input id="circulo-file${idSufijo}" type="file" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-[10px] text-slate-400 mb-2">`;
 }
 function abrirCirculo(itemId){
+  const h = timelineCache.find(x=>x.id==itemId); if(!h) return;
+  const estadoGate = h.circuloEstado || "nuevo";
+  const esResponsableGate = STATE.persona === h.responsable;
+  const yaAceptada = estadoGate !== "nuevo" && estadoGate !== "dedo_abajo";
+  const sugerenciaPendiente = h.relacionaiSugerencia == null || h.relacionaiSugerencia === "recordar_luego";
+  if(h.tipo==="tarea" && h.relacionaiSugerido && esResponsableGate && STATE.relacionaiSsoToken && yaAceptada && sugerenciaPendiente){
+    relacionaiSugerenciaItemId = itemId;
+    document.getElementById("relacionai-sug-motivo").textContent = h.relacionaiMotivo || "El cerebro GADUAI detectó un caso que conviene investigar.";
+    document.getElementById("modal-relacionai-sugerencia").classList.remove("hidden");
+    return;
+  }
+  pintarCirculo(itemId);
+}
+function pintarCirculo(itemId){
   const h = timelineCache.find(x=>x.id==itemId); if(!h) return;
   circuloArchivoPendiente = null;
   const cfg = TRIAGE[h.triage];
@@ -1742,6 +1775,23 @@ async function circuloAccion(itemId, accion, msgId){
     await cargarTimeline();
     abrirCirculo(itemId);
   }catch(e){ toast("No se pudo registrar la acción"); }
+}
+async function relacionaiSugerenciaElegir(decision){
+  const itemId = relacionaiSugerenciaItemId;
+  if(!itemId) return;
+  try{
+    if(decision === "derivado"){
+      const h = timelineCache.find(x=>x.id==itemId);
+      const { token } = await api(`/api/colegios/${STATE.colegioId}/sso/relacionai-token`, {method:"POST", body: JSON.stringify(actorBody({}))});
+      const base = STATE.colegio.relacionai_url.replace(/\/$/, "");
+      const tema = encodeURIComponent(STATE.tema || "oscuro");
+      window.open(`${base}/sso?token=${encodeURIComponent(token)}&tema=${tema}`, "_blank");
+    }
+    await api(`/api/colegios/${STATE.colegioId}/timeline/${itemId}/relacionai-sugerencia`, {method:"POST", body: JSON.stringify(actorBody({decision}))});
+  }catch(e){ toast("No se pudo registrar tu elección"); }
+  document.getElementById("modal-relacionai-sugerencia").classList.add("hidden");
+  await cargarTimeline();
+  pintarCirculo(itemId);
 }
 
 /* ---------- modal registrar ---------- */

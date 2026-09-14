@@ -364,6 +364,9 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
     react: it.react,
     circuloEstado: it.circulo_estado,
     circuloLike: it.circulo_like,
+    relacionaiSugerido: it.relacionai_sugerido,
+    relacionaiMotivo: it.relacionai_motivo,
+    relacionaiSugerencia: it.relacionai_sugerencia,
     soloLectura: perfil === PERFIL_MASTER && !enHiloPropio(it, perfil, persona || ""),
     chat: chats.filter(c => c.item_id === it.id).map(c => ({ autor: c.autor, perfil: c.perfil, texto: c.texto, fecha: c.fecha })),
     alertas: alertas.filter(a => a.item_id === it.id).map(a => ({ id: a.id, autor: a.autor, destinatario: a.destinatario, mensaje: a.mensaje, fecha: a.fecha, leida: a.leida })),
@@ -413,6 +416,7 @@ app.post("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
       agendaAgendarReunionAutomatica(req.params.id, itemId, actor, b.responsable, b.copiados || [], b.triage || "Rojo", titulo)
         .catch(err => console.error("agendaAgendarReunionAutomatica:", err));
     }
+    evaluarRelacionaiTarea(req.params.id, itemId, titulo, b.desc || "").catch(err => console.error("evaluarRelacionaiTarea:", err));
   }
 }));
 
@@ -565,6 +569,35 @@ app.post("/api/colegios/:id/timeline/:itemId/circulo", asyncRoute(async (req, re
       })
       .catch(() => {});
   }
+}));
+
+// El responsable decide qué hacer con la oferta de Relacionai que le hizo el cerebro GADUAI al
+// aceptar una tarea delicada: derivar, posponer o descartar. Se persiste para no repetirla salvo
+// que haya elegido "recuérdamelo más tarde".
+app.post("/api/colegios/:id/timeline/:itemId/relacionai-sugerencia", asyncRoute(async (req, res) => {
+  const { decision, actorCorreo, actorClave } = req.body || {};
+  if (!["recordar_luego", "no_necesario", "derivado"].includes(decision)) {
+    return res.status(400).json({ error: "decision_invalida" });
+  }
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  const r = await pool.query("select * from items where id=$1 and colegio_id=$2", [req.params.itemId, req.params.id]);
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  if (actor.nombre !== r.rows[0].responsable) return res.status(403).json({ error: "no_autorizado" });
+  await pool.query("update items set relacionai_sugerencia=$1 where id=$2", [decision, req.params.itemId]);
+  res.json({ ok: true });
+}));
+
+// El token SSO normal (generado al hacer login) expira en 2 minutos — insuficiente si la oferta
+// de Relacionai aparece minutos u horas después. Esta ruta emite uno fresco en el momento del clic.
+app.post("/api/colegios/:id/sso/relacionai-token", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  if (!SSO_SHARED_SECRET || !PERFILES_SSO_RELACIONAI.includes(actor.perfil)) {
+    return res.status(403).json({ error: "sin_acceso_relacionai" });
+  }
+  res.json({ token: generarSsoToken(actor.correo, actor.nombre, actor.perfil) });
 }));
 
 // ---------- chat por ítem ----------
@@ -758,6 +791,51 @@ async function armarContextoIA(colegioId) {
     for (const n of normativa.rows) contexto += `\n[${n.titulo}]\n${n.texto}\n`;
   }
   return contexto;
+}
+
+// El cerebro GADUAI ofrece Relacionai cuando una tarea suena a caso delicado que requiere
+// investigación (denuncia, agresión, etc.). Primer filtro: palabras clave, gratis y siempre
+// disponible. Si no hay coincidencia y hay IA configurada, se le pide un veredicto usando el
+// mismo contexto de reglamento/normativa que ya arma armarContextoIA para el chat de IA GADUAI
+// (mismo bloque cacheado, así esta llamada extra sale barata). Best-effort: nunca bloquea la
+// creación de la tarea, se llama de forma asíncrona después de responder al usuario.
+const PALABRAS_CLAVE_RELACIONAI = [
+  "denuncia", "agresion", "agresión", "abuso", "maltrato", "acoso", "bullying",
+  "violencia", "amenaza", "vulneracion", "vulneración", "autolesion", "autolesión",
+  "connotacion sexual", "connotación sexual", "grooming", "discriminacion", "discriminación"
+];
+async function evaluarRelacionaiTarea(colegioId, itemId, titulo, descripcion) {
+  const texto = `${titulo} ${descripcion || ""}`.toLowerCase();
+  if (PALABRAS_CLAVE_RELACIONAI.some(p => texto.includes(p))) {
+    await pool.query(
+      "update items set relacionai_sugerido=true, relacionai_motivo=$1 where id=$2",
+      ["Contiene palabras clave que sugieren un caso a investigar.", itemId]
+    );
+    return;
+  }
+  if (!anthropic) return;
+  try {
+    const contexto = await armarContextoIA(colegioId);
+    const completion = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 100,
+      system: [{ type: "text", text: contexto, cache_control: { type: "ephemeral" } }],
+      messages: [{
+        role: "user",
+        content: `Analiza esta tarea/hito registrado en GADUAI y decide, usando el reglamento y la normativa entregados arriba como criterio, si describe un caso delicado que amerita investigación formal (por ejemplo: una posible denuncia, agresión, maltrato, acoso, vulneración de derechos u otra situación similar que normalmente se deriva a convivencia escolar).\n\nTítulo: ${titulo}\nDescripción: ${descripcion || "(sin descripción)"}\n\nResponde EXACTAMENTE en dos líneas:\nSI o NO\n<motivo breve, máximo 15 palabras>`
+      }]
+    });
+    const texto2 = completion.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+    const [primera, ...resto] = texto2.split("\n");
+    if (/^si\b/i.test((primera || "").trim())) {
+      await pool.query(
+        "update items set relacionai_sugerido=true, relacionai_motivo=$1 where id=$2",
+        [resto.join(" ").trim() || "El cerebro GADUAI detectó un caso que conviene investigar.", itemId]
+      );
+    }
+  } catch (err) {
+    console.error("evaluarRelacionaiTarea (IA):", err.message);
+  }
 }
 
 app.get("/api/colegios/:id/chat-ia", asyncRoute(async (req, res) => {
