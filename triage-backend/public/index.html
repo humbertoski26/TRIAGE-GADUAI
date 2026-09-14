@@ -294,7 +294,26 @@
     <p id="timeline-empty" class="text-center text-xs text-slate-600 py-14" hidden>Aún no hay hitos ni tareas en el Timeline. Use el botón <b>+</b> para registrar el primero.</p>
   </main>
 
-  <button onclick="abrirModal()" class="fab fixed bottom-7 right-1/2 translate-x-1/2 md:right-8 md:translate-x-0 w-16 h-16 rounded-full brand-gradient text-white text-3xl font-black flex items-center justify-center z-40">+</button>
+  <button onclick="abrirEntradaIA()" class="fab fixed bottom-7 right-1/2 translate-x-1/2 md:right-8 md:translate-x-0 w-16 h-16 rounded-full brand-gradient text-white text-3xl font-black flex items-center justify-center z-40">+</button>
+</div>
+
+<!-- ============ MODAL: ENTRADA INTELIGENTE (Fase 12) ============ -->
+<div id="modal-entrada-ia" class="hidden fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 fade-in">
+    <div class="flex justify-between items-start mb-3">
+      <div>
+        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-brain text-indigo-300"></i> Cuéntame qué está pasando</h3>
+        <p class="text-[11px] text-slate-500">Escribe o dicta — GADUAI lo clasifica y tú das el V°B°.</p>
+      </div>
+      <button onclick="cerrarModalId('modal-entrada-ia')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <textarea id="ei-texto" rows="5" placeholder="Ej. Faltó el profesor Juan Pérez, el 7°B quedó sin clases..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-3"></textarea>
+    <div class="flex gap-2 mb-4">
+      <button id="ei-btn-mic" onclick="eiToggleDictado()" title="Dictar" class="w-11 h-11 flex-none rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center text-base"><i class="fa-solid fa-microphone"></i></button>
+      <button id="ei-btn-analizar" onclick="eiAnalizar()" class="flex-1 gaduai-gradient text-white text-sm font-bold rounded-xl"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Analizar con GADUAI</button>
+    </div>
+    <button onclick="cerrarModalId('modal-entrada-ia'); abrirModal();" class="w-full text-[11px] text-slate-500 hover:text-slate-300">✏️ Prefiero llenarlo manualmente</button>
+  </div>
 </div>
 
 <!-- ============ MODAL: REGISTRAR TAREA O HITO ============ -->
@@ -307,6 +326,7 @@
       </div>
       <button onclick="cerrarModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
     </div>
+    <div id="f-motivo-ia" class="hidden text-[11px] text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-3 mb-4"><i class="fa-solid fa-brain mr-1"></i> <span id="f-motivo-ia-texto"></span></div>
 
     <label class="block text-[11px] text-slate-400 mb-1">Tipo de registro</label>
     <select id="f-tipo" class="w-full bg-slate-950 border border-amber-500/40 rounded-xl p-3 text-xs text-white font-bold mb-4">
@@ -1804,22 +1824,78 @@ let quadSel = "Rojo";
 let formPersonas = [];        // [{nombre, perfil}] disponibles para Responsable/Copiar a
 let formResponsable = null;   // nombre elegido (selección única)
 let formCopiados = new Set(); // nombres elegidos (selección múltiple)
-async function abrirModal(){
+async function abrirModal(propuesta, textoOriginal){
   document.getElementById("modal-triage").classList.remove("hidden");
-  document.getElementById("f-tipo").value="tarea";
-  document.getElementById("f-titulo").value="";
-  document.getElementById("f-desc").value="";
+  document.getElementById("f-tipo").value = propuesta ? propuesta.tipo : "tarea";
+  document.getElementById("f-titulo").value = propuesta ? propuesta.titulo : "";
+  document.getElementById("f-desc").value = textoOriginal || "";
   document.getElementById("f-archivo").value="";
   archivoPendiente = null;
   document.getElementById("f-agendar-reunion").checked=false;
-  document.getElementById("f-fecha").value=new Date().toISOString().slice(0,10);
+  document.getElementById("f-fecha").value = (propuesta && propuesta.fechaSugerida) || new Date().toISOString().slice(0,10);
   document.getElementById("f-fecha-final").value="";
   const usuarios = await api(`/api/colegios/${STATE.colegioId}/usuarios`);
   formPersonas = usuarios.length ? usuarios.map(u=>({nombre:u.nombre, perfil:u.perfil})) : PERFILES.map(p=>({nombre:p, perfil:null}));
-  formResponsable = STATE.persona;
-  formCopiados = new Set();
+  formResponsable = (propuesta && propuesta.responsableSugerido) || STATE.persona;
+  formCopiados = new Set(propuesta ? (propuesta.copiadosSugeridos||[]) : []);
   renderFormPersonasListas();
-  setQuad("Rojo");
+  setQuad(propuesta ? propuesta.triage : "Rojo");
+  const banner = document.getElementById("f-motivo-ia");
+  if(propuesta && propuesta.motivo){
+    document.getElementById("f-motivo-ia-texto").textContent = propuesta.motivo;
+    banner.classList.remove("hidden");
+  } else {
+    banner.classList.add("hidden");
+  }
+}
+
+/* ---------- Fase 12: entrada inteligente única ---------- */
+let eiReconocimiento = null, eiDictando = false;
+function abrirEntradaIA(){
+  document.getElementById("ei-texto").value = "";
+  document.getElementById("modal-entrada-ia").classList.remove("hidden");
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btnMic = document.getElementById("ei-btn-mic");
+  if(!SR){ btnMic.disabled = true; btnMic.title = "Tu navegador no soporta dictado por voz"; btnMic.classList.add("opacity-40"); }
+}
+function eiToggleDictado(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR) return;
+  const btnMic = document.getElementById("ei-btn-mic");
+  if(eiDictando){ eiReconocimiento && eiReconocimiento.stop(); return; }
+  eiReconocimiento = new SR();
+  eiReconocimiento.lang = "es-CL";
+  eiReconocimiento.interimResults = false;
+  eiReconocimiento.continuous = true;
+  const ta = document.getElementById("ei-texto");
+  eiReconocimiento.onresult = (ev)=>{
+    let textoNuevo = "";
+    for(let i=ev.resultIndex; i<ev.results.length; i++) textoNuevo += ev.results[i][0].transcript;
+    ta.value = (ta.value ? ta.value+" " : "") + textoNuevo.trim();
+  };
+  eiReconocimiento.onend = ()=>{ eiDictando=false; btnMic.classList.remove("bg-rose-600","text-white"); btnMic.classList.add("bg-slate-800","text-slate-300"); };
+  eiReconocimiento.onerror = ()=>{ eiDictando=false; btnMic.classList.remove("bg-rose-600","text-white"); btnMic.classList.add("bg-slate-800","text-slate-300"); };
+  eiReconocimiento.start();
+  eiDictando = true;
+  btnMic.classList.remove("bg-slate-800","text-slate-300"); btnMic.classList.add("bg-rose-600","text-white");
+}
+async function eiAnalizar(){
+  const texto = document.getElementById("ei-texto").value.trim();
+  if(!texto){ toast("Escribe o dicta qué está pasando"); return; }
+  const btn = document.getElementById("ei-btn-analizar");
+  btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Analizando…';
+  try{
+    const r = await api(`/api/colegios/${STATE.colegioId}/interpretar`, {method:"POST", body: JSON.stringify(actorBody({texto}))});
+    cerrarModalId("modal-entrada-ia");
+    if(r.ok){ await abrirModal(r.propuesta, texto); }
+    else { toast("No se pudo interpretar automáticamente — completa el formulario"); await abrirModal(null, texto); }
+  }catch(e){
+    toast("No se pudo interpretar automáticamente — completa el formulario");
+    cerrarModalId("modal-entrada-ia");
+    await abrirModal(null, texto);
+  }finally{
+    btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Analizar con GADUAI';
+  }
 }
 function renderFormPersonasListas(){
   const filaResponsable = p => `<label class="flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer hover:bg-slate-900 ${formResponsable===p.nombre?'bg-indigo-600/15':''}" data-nombre="${esc(p.nombre)}">

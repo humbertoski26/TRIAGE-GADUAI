@@ -899,6 +899,58 @@ async function evaluarRelacionaiTarea(colegioId, itemId, titulo, descripcion) {
   }
 }
 
+// ---------- Fase 12: entrada inteligente única ----------
+// "Tú cuentas lo que ocurre; GADUAI organiza lo que sigue" — la persona escribe o dicta en
+// lenguaje natural y el cerebro GADUAI propone tipo/triage/responsable/fecha, reutilizando el
+// mismo contexto de reglamento+normativa que ya arma armarContextoIA. No crea nada: solo
+// propone, para que el usuario dé su V°B° (o lo edite) en el formulario de siempre antes de
+// registrar vía POST /timeline, que no cambia.
+async function interpretarSituacion(colegioId, actor, texto, personasDisponibles) {
+  if (!anthropic) return null;
+  const hoy = new Date().toISOString().slice(0, 10);
+  const listaPersonas = (personasDisponibles || []).map(p => `- ${p.nombre} (${p.perfil})`).join("\n") || "(sin personas registradas)";
+  try {
+    const contexto = await armarContextoIA(colegioId);
+    const completion = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 400,
+      system: [{ type: "text", text: contexto, cache_control: { type: "ephemeral" } }],
+      messages: [{
+        role: "user",
+        content: `Una persona (${actor.nombre}, perfil ${actor.perfil}) escribió esto en GADUAI hoy ${hoy} describiendo una situación:\n\n"${texto}"\n\nClasifícala usando el criterio de triage de GADUAI:\n- Rojo: urgente + importante (actuar ahora)\n- Naranjo: urgente + no importante (delegable, resolver)\n- Azul: no urgente + importante (estratégico, planificar)\n- Gris: no urgente + no importante (diferible, programar)\n\nPersonas reales de este colegio disponibles como responsable (elige SOLO un nombre de esta lista, nunca inventes uno):\n${listaPersonas}\n\nResponde ÚNICAMENTE con un objeto JSON (sin texto antes ni después, sin \`\`\`) con esta forma exacta:\n{"tipo":"tarea"|"hito","triage":"Rojo"|"Naranjo"|"Azul"|"Gris","titulo":"...(breve, menos de 12 palabras)","fechaSugerida":"YYYY-MM-DD","responsableSugerido":"...(nombre exacto de la lista, o null si no aplica)","copiadosSugeridos":[...nombres de la lista...],"motivo":"...(breve, máximo 20 palabras, explica el porqué de la clasificación)"}`
+      }]
+    });
+    const salida = completion.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+    const match = salida.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const propuesta = JSON.parse(match[0]);
+    if (!["tarea", "hito"].includes(propuesta.tipo)) propuesta.tipo = "tarea";
+    if (!["Rojo", "Naranjo", "Azul", "Gris"].includes(propuesta.triage)) propuesta.triage = "Rojo";
+    if (!propuesta.titulo) propuesta.titulo = texto.slice(0, 80);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(propuesta.fechaSugerida || "")) propuesta.fechaSugerida = hoy;
+    const nombresValidos = new Set((personasDisponibles || []).map(p => p.nombre));
+    if (!nombresValidos.has(propuesta.responsableSugerido)) propuesta.responsableSugerido = null;
+    propuesta.copiadosSugeridos = (propuesta.copiadosSugeridos || []).filter(n => nombresValidos.has(n));
+    return propuesta;
+  } catch (err) {
+    console.error("interpretarSituacion (IA):", err.message);
+    return null;
+  }
+}
+
+app.post("/api/colegios/:id/interpretar", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, texto } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  if (!texto || !texto.trim()) return res.status(400).json({ error: "texto_requerido" });
+  const personas = (await pool.query(
+    "select nombre, perfil from usuarios where colegio_id=$1 order by nombre", [req.params.id]
+  )).rows;
+  const propuesta = await interpretarSituacion(req.params.id, actor, texto.trim(), personas);
+  if (!propuesta) return res.json({ ok: false });
+  res.json({ ok: true, propuesta });
+}));
+
 // Auditoría de seguridad: cualquiera podía leer el chat privado de IA de CUALQUIER persona
 // pasando `?persona=<nombre>` — sin credenciales. Ahora exige login y solo devuelve el propio
 // chat de quien se autentica (persona sale de la cuenta verificada, no del query string).
