@@ -950,10 +950,12 @@ async function interpretarSituacion(colegioId, actor, texto, personasDisponibles
 // el registro queda como Hito, no como Tarea — pedido explícito de Humberto. Se busca por RAÍZ
 // ("reun"/"junt"), no por palabra exacta, para capturar cualquier conjugación: reunirme,
 // reunirnos, reunámonos, junta, juntarnos, juntémonos, etc. — no solo el infinitivo.
-const RAICES_REUNION = ["reun", "junt"];
+// Con límite de palabra (\b) — sin esto, "junt" hacía falso positivo con "adjunto" o
+// "conjunto" (palabras frecuentes en descripciones de tareas), que no tienen nada que ver con
+// coordinar una reunión.
+const RAIZ_REUNION_RE = /\b(reun|junt)/i;
 function detectaReunion(texto) {
-  const t = texto.toLowerCase();
-  return RAICES_REUNION.some(r => t.includes(r));
+  return RAIZ_REUNION_RE.test(texto);
 }
 
 app.post("/api/colegios/:id/interpretar", asyncRoute(async (req, res) => {
