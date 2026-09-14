@@ -25,6 +25,13 @@ create table if not exists usuarios (
 -- Preferencia de tema guardada por cuenta (no por dispositivo) — 'oscuro' por defecto para
 -- no cambiar el aspecto de nadie hasta que alguien elija modo claro.
 alter table usuarios add column if not exists tema text not null default 'oscuro';
+-- Auditoría de seguridad (antes de vender a un colegio real): las contraseñas dejaron de
+-- guardarse en texto plano. `clave_hash` (bcrypt) es la fuente de verdad desde ahora; `clave`
+-- se deja de escribir pero no se borra todavía (server.js migra las filas existentes a
+-- clave_hash una sola vez al arrancar, ver start() en server.js) — se podrá eliminar la
+-- columna en una fase futura, una vez confirmada la migración en producción.
+alter table usuarios add column if not exists clave_hash text;
+alter table usuarios alter column clave drop not null;
 
 create table if not exists items (
   id bigserial primary key,

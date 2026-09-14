@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
+    "bcryptjs": "^2.4.3",
     "express": "^4.19.2",
     "nodemailer": "^6.9.14",
     "pg": "^8.12.0",

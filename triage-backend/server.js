@@ -10,6 +10,7 @@
  */
 const path = require("path");
 const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
 const express = require("express");
 const { Pool } = require("pg");
 const { enviarCorreo } = require("./email");
@@ -30,8 +31,17 @@ if (!ADMIN_SETUP_KEY) {
   console.error("Falta la variable de entorno ADMIN_SETUP_KEY");
   process.exit(1);
 }
+// Compara dos secretos sin filtrar por cuánto tiempo tardó la comparación (timing attack) —
+// crypto.timingSafeEqual exige buffers del mismo largo, así que primero se descarta el caso
+// de largos distintos (ya es "no coinciden", sin necesidad de comparar byte a byte).
+function comparacionSegura(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const bufA = Buffer.from(a), bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 function requireAdminKey(req, res, next) {
-  if (req.header("X-Admin-Key") !== ADMIN_SETUP_KEY) {
+  if (!comparacionSegura(req.header("X-Admin-Key") || "", ADMIN_SETUP_KEY)) {
     return res.status(403).json({ error: "no_autorizado" });
   }
   next();
@@ -42,7 +52,7 @@ function requireAdminKey(req, res, next) {
 // despliegues que todavía no la necesitan).
 const TASKS_SECRET = process.env.TASKS_SECRET;
 function requireTasksSecret(req, res, next) {
-  if (!TASKS_SECRET || req.header("X-Tasks-Secret") !== TASKS_SECRET) {
+  if (!TASKS_SECRET || !comparacionSegura(req.header("X-Tasks-Secret") || "", TASKS_SECRET)) {
     return res.status(403).json({ error: "no_autorizado" });
   }
   next();
@@ -55,7 +65,7 @@ const PERFIL_CONVIVENCIA = "Encargado de Convivencia Educativa";
 // si no está configurada, la ruta protegida responde 403 siempre.
 const NORMATIVA_SEED_KEY = process.env.NORMATIVA_SEED_KEY;
 function requireNormativaKey(req, res, next) {
-  if (!NORMATIVA_SEED_KEY || req.header("X-Normativa-Key") !== NORMATIVA_SEED_KEY) {
+  if (!NORMATIVA_SEED_KEY || !comparacionSegura(req.header("X-Normativa-Key") || "", NORMATIVA_SEED_KEY)) {
     return res.status(403).json({ error: "no_autorizado" });
   }
   next();
@@ -66,7 +76,7 @@ function requireNormativaKey(req, res, next) {
 // o volver a sembrarlos sin duplicar (la ruta borra sus propios ejemplos antes de recrearlos).
 const SEED_DEMO_KEY = process.env.SEED_DEMO_KEY;
 function requireSeedKey(req, res, next) {
-  if (!SEED_DEMO_KEY || req.header("X-Seed-Key") !== SEED_DEMO_KEY) {
+  if (!SEED_DEMO_KEY || !comparacionSegura(req.header("X-Seed-Key") || "", SEED_DEMO_KEY)) {
     return res.status(403).json({ error: "no_autorizado" });
   }
   next();
@@ -91,16 +101,39 @@ const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 if (!anthropic) console.warn("ANTHROPIC_API_KEY no configurada: IA GADUAI queda deshabilitada.");
 
 const app = express();
-app.use((req, res, next) => {
-  // CORS abierto: el frontend se sirve desde este mismo backend, pero se deja abierto
-  // por si en el futuro se llama la API desde otro origen (app móvil, etc).
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.sendStatus(204);
-  next();
-});
+// Auditoría de seguridad: antes había "Access-Control-Allow-Origin: *" en todas las rutas.
+// El frontend se sirve desde este mismo backend (mismo origen) y ningún otro origen legítimo
+// llama esta API desde el navegador (Relacionai la llama servidor-a-servidor, no vía fetch()
+// del navegador, así que CORS no le aplica) — con el wildcard, cualquier sitio web externo
+// podía leer las respuestas de la API desde el navegador de cualquier visitante. Sin cabeceras
+// CORS, el navegador aplica su política de mismo-origen por defecto, que es lo que queremos.
 app.use(express.json({ limit: "8mb" })); // documentos adjuntos van en base64 dentro del JSON
+
+// Límite simple de intentos de login por IP — corta fuerza bruta contra /login sin depender
+// de un paquete nuevo. En memoria del proceso (el servicio corre en una sola instancia, ver
+// numInstances=1 en Render); se resetea solo cada 15 min por IP.
+const intentosLogin = new Map(); // ip -> {n, desde}
+function loginRateLimit(req, res, next) {
+  const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "desconocida";
+  const ahora = Date.now();
+  const ventanaMs = 15 * 60 * 1000;
+  const tope = 20;
+  let entrada = intentosLogin.get(ip);
+  if (!entrada || ahora - entrada.desde > ventanaMs) entrada = { n: 0, desde: ahora };
+  entrada.n++;
+  intentosLogin.set(ip, entrada);
+  if (entrada.n > tope) {
+    return res.status(429).json({ error: "demasiados_intentos", reintentaEnSegundos: Math.ceil((ventanaMs - (ahora - entrada.desde)) / 1000) });
+  }
+  next();
+}
+
+// Para rutas de solo-lectura que antes recibían credenciales por query string (quedaban en
+// logs/historial del navegador) — ahora viajan como cabeceras, que el navegador no guarda en
+// el historial y que normalmente no quedan en logs de acceso.
+function actorDeHeaders(req) {
+  return { correo: req.header("X-Actor-Correo") || "", clave: req.header("X-Actor-Clave") || "" };
+}
 
 // ---------- utilidades ----------
 function slug(s) {
@@ -136,10 +169,15 @@ function generarSsoToken(correo, nombre, perfil) {
 async function verificarActor(colegioId, correo, clave) {
   if (!correo || !clave) return null;
   const r = await pool.query(
-    "select nombre, correo, perfil, tema from usuarios where colegio_id=$1 and lower(correo)=lower($2) and clave=$3",
-    [colegioId, correo, clave]
+    "select nombre, correo, perfil, tema, clave_hash from usuarios where colegio_id=$1 and lower(correo)=lower($2)",
+    [colegioId, correo]
   );
-  return r.rows[0] || null;
+  const fila = r.rows[0];
+  if (!fila || !fila.clave_hash) return null; // sin hash todavía = migración no llegó a esta fila, o cuenta inexistente
+  const ok = await bcrypt.compare(clave, fila.clave_hash);
+  if (!ok) return null;
+  delete fila.clave_hash; // nunca debe viajar de vuelta en una respuesta
+  return fila;
 }
 
 function asyncRoute(fn) {
@@ -176,11 +214,12 @@ app.post("/api/colegios", requireAdminKey, asyncRoute(async (req, res) => {
   if (existe.rows.length) return res.status(409).json({ error: "colegio_existente", id });
 
   const correo = (correoMaster && correoMaster.trim()) || `director@${id}.cl`;
-  const clave = claveAleatoria();
+  const clave = claveAleatoria(); // se muestra una sola vez en esta respuesta; en la base solo queda el hash
+  const claveHash = await bcrypt.hash(clave, 10);
   await pool.query("insert into colegios (id, nombre, comuna) values ($1,$2,$3)", [id, nombre.trim(), comuna || null]);
   await pool.query(
-    "insert into usuarios (colegio_id, nombre, correo, clave, perfil) values ($1,$2,$3,$4,$5)",
-    [id, "Director ejecutivo", correo, clave, PERFIL_MASTER]
+    "insert into usuarios (colegio_id, nombre, correo, clave_hash, perfil) values ($1,$2,$3,$4,$5)",
+    [id, "Director ejecutivo", correo, claveHash, PERFIL_MASTER]
   );
   res.json({ id, nombre: nombre.trim(), comuna: comuna || null, master: { correo, clave } });
 }));
@@ -255,7 +294,7 @@ app.get("/api/colegios", requireAdminKey, asyncRoute(async (req, res) => {
 }));
 
 // ---------- login ----------
-app.post("/api/colegios/:id/login", asyncRoute(async (req, res) => {
+app.post("/api/colegios/:id/login", loginRateLimit, asyncRoute(async (req, res) => {
   const { correo, clave } = req.body || {};
   const usuario = await verificarActor(req.params.id, correo, clave);
   if (!usuario) return res.status(401).json({ error: "credenciales_invalidas" });
@@ -266,7 +305,14 @@ app.post("/api/colegios/:id/login", asyncRoute(async (req, res) => {
 }));
 
 // ---------- usuarios (solo máster administra) ----------
+// Auditoría de seguridad: esta lista (nombres, correos, perfiles de todo el colegio) se podía
+// leer sin ninguna credencial. Ahora exige una cuenta válida del mismo colegio — cualquier
+// perfil puede seguir viéndola (la necesitan los checklists de responsable/copiados), pero ya
+// no es pública para cualquiera en internet.
 app.get("/api/colegios/:id/usuarios", asyncRoute(async (req, res) => {
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await verificarActor(req.params.id, correo, clave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   const r = await pool.query(
     "select id, nombre, correo, perfil from usuarios where colegio_id=$1 order by creado_en",
     [req.params.id]
@@ -280,9 +326,10 @@ app.post("/api/colegios/:id/usuarios", asyncRoute(async (req, res) => {
   if (!actor || actor.perfil !== PERFIL_MASTER) return res.status(403).json({ error: "solo_master" });
   if (!nombre || !correo || !clave || !perfil) return res.status(400).json({ error: "campos_requeridos" });
   try {
+    const claveHash = await bcrypt.hash(clave, 10);
     const r = await pool.query(
-      "insert into usuarios (colegio_id, nombre, correo, clave, perfil) values ($1,$2,$3,$4,$5) returning id, nombre, correo, perfil",
-      [req.params.id, nombre.trim(), correo.trim(), clave, perfil]
+      "insert into usuarios (colegio_id, nombre, correo, clave_hash, perfil) values ($1,$2,$3,$4,$5) returning id, nombre, correo, perfil",
+      [req.params.id, nombre.trim(), correo.trim(), claveHash, perfil]
     );
     res.json(r.rows[0]);
   } catch (e) {
@@ -323,8 +370,16 @@ function enHiloPropio(it, perfil, persona) {
   return it.perfil === perfil || it.persona === persona || it.responsable === persona || (it.copiados || []).includes(persona);
 }
 
+// Auditoría de seguridad: este Timeline completo (tareas, hitos, adjuntos, chat, historial del
+// círculo de la promesa — incluye casos delicados como denuncias) se podía leer sin ninguna
+// credencial, con `perfil`/`persona` de la query string controlando qué se veía. Ahora exige
+// login real y el perfil/persona salen de la cuenta ya verificada, no de lo que mande el
+// cliente — así nadie puede pedir `perfil=Director ejecutivo/máster` para ver todo sin serlo.
 app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
-  const { perfil, persona } = req.query;
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await verificarActor(req.params.id, correo, clave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  const perfil = actor.perfil, persona = actor.nombre;
   let sql, params;
   if (perfil === PERFIL_MASTER) {
     sql = "select * from items where colegio_id=$1 and (triage='Rojo' or perfil=$2 or persona=$3 or responsable=$3 or $3 = any(copiados))";
@@ -421,7 +476,13 @@ app.post("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
 }));
 
 // ---------- entrevista formal (disponible a todos los perfiles) ----------
+// Auditoría de seguridad: las fichas de Entrevista (nombre, correo, fono, motivo, desarrollo,
+// compromisos) se podían leer sin credenciales. Cualquier perfil logueado las sigue viendo
+// (así se diseñó en la Fase 1), pero ahora exige una cuenta real del colegio.
 app.get("/api/colegios/:id/entrevistas", asyncRoute(async (req, res) => {
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await verificarActor(req.params.id, correo, clave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   const r = await pool.query(
     "select * from entrevistas where colegio_id=$1 order by creado_en desc",
     [req.params.id]
@@ -838,12 +899,16 @@ async function evaluarRelacionaiTarea(colegioId, itemId, titulo, descripcion) {
   }
 }
 
+// Auditoría de seguridad: cualquiera podía leer el chat privado de IA de CUALQUIER persona
+// pasando `?persona=<nombre>` — sin credenciales. Ahora exige login y solo devuelve el propio
+// chat de quien se autentica (persona sale de la cuenta verificada, no del query string).
 app.get("/api/colegios/:id/chat-ia", asyncRoute(async (req, res) => {
-  const { persona } = req.query;
-  if (!persona) return res.status(400).json({ error: "persona_requerida" });
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await verificarActor(req.params.id, correo, clave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   const r = await pool.query(
     "select rol, contenido, fuente, creado_en from chat_ia where colegio_id=$1 and persona=$2 order by creado_en asc",
-    [req.params.id, persona]
+    [req.params.id, actor.nombre]
   );
   res.json(r.rows);
 }));
@@ -945,9 +1010,14 @@ function nivelAtencion(it) {
   return "listo";
 }
 
+// Auditoría de seguridad: igual que /timeline, se podía pedir `perfil=Director ejecutivo/máster`
+// sin credenciales y ver todo PULSO GADUAI del colegio. Ahora perfil/persona salen de la cuenta
+// verificada.
 app.get("/api/colegios/:id/monitor", asyncRoute(async (req, res) => {
-  const { perfil, persona } = req.query;
-  if (!perfil || !persona) return res.status(400).json({ error: "perfil_y_persona_requeridos" });
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await verificarActor(req.params.id, correo, clave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  const perfil = actor.perfil, persona = actor.nombre;
   const items = (await pool.query(itemsVisiblesSql(perfil), [req.params.id, perfil, persona])).rows;
   const sugerencias = generarSugerenciasMonitor(items);
 
@@ -1033,11 +1103,12 @@ app.post("/api/colegios/:id/monitor/:tareaId/completar", asyncRoute(async (req, 
 }));
 
 app.get("/api/colegios/:id/monitor/historial", asyncRoute(async (req, res) => {
-  const { persona } = req.query;
-  if (!persona) return res.status(400).json({ error: "persona_requerida" });
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await verificarActor(req.params.id, correo, clave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   const r = await pool.query(
     "select id, periodo, texto, fecha_completada from monitor_tareas where colegio_id=$1 and persona=$2 and completada=true order by fecha_completada desc limit 200",
-    [req.params.id, persona]
+    [req.params.id, actor.nombre]
   );
   res.json(r.rows);
 }));
@@ -1312,7 +1383,14 @@ async function agendaAgendarReunionAutomatica(colegioId, itemId, actor, responsa
 }
 
 // Agenda personal — solo el dueño ve/edita sus propios bloques (verificarActor + nombre exacto).
+// Auditoría de seguridad: la agenda privada de cualquier persona (incluye el título de
+// reuniones agendadas automáticamente, que puede ser el título de una tarea delicada) se podía
+// leer sin credenciales. Ahora exige cualquier cuenta válida del colegio (no necesita ser la
+// misma persona — el sentido de esto es coordinar reuniones con otros).
 app.get("/api/colegios/:id/agenda", asyncRoute(async (req, res) => {
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await verificarActor(req.params.id, correo, clave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   const { persona, desde, hasta } = req.query;
   if (!persona || !desde || !hasta) return res.status(400).json({ error: "persona_desde_hasta_requeridos" });
   res.json(await agendaBloquesDe(req.params.id, persona, desde, hasta));
@@ -1408,10 +1486,24 @@ app.use(express.static(path.join(__dirname, "public")));
 app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
 // ---------- arranque: aplica el esquema y luego levanta el servidor ----------
+// Auditoría de seguridad: migra a bcrypt las cuentas que todavía tengan clave en texto plano
+// (columna `clave`) y no tengan `clave_hash` — se corre una sola vez por fila (idempotente:
+// una fila ya migrada nunca vuelve a tocarse) y de forma automática en cada arranque, así no
+// depende de que alguien entre a mano a la base de datos de producción a migrarla.
+async function migrarClavesAHash() {
+  const r = await pool.query("select id, clave from usuarios where clave_hash is null and clave is not null");
+  for (const fila of r.rows) {
+    const hash = await bcrypt.hash(fila.clave, 10);
+    await pool.query("update usuarios set clave_hash=$1 where id=$2", [hash, fila.id]);
+  }
+  if (r.rows.length) console.log(`Seguridad: migradas ${r.rows.length} cuenta(s) de clave en texto plano a bcrypt.`);
+}
+
 async function start() {
   const fs = require("fs");
   const schema = fs.readFileSync(path.join(__dirname, "db", "schema.sql"), "utf8");
   await pool.query(schema);
+  await migrarClavesAHash();
   app.listen(PORT, () => console.log(`TRIAGE GADUAI backend escuchando en el puerto ${PORT}`));
 }
 start().catch(err => {

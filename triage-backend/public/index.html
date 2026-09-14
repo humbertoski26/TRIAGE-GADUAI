@@ -776,10 +776,18 @@ function slug(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[
 function pantallas(){ return ["pantalla-landing","pantalla-login","pantalla-app","pantalla-agenda-publica"]; }
 function mostrarPantalla(id){ pantallas().forEach(p=>document.getElementById(p).hidden = p!==id); }
 
-async function api(path, opts){
+async function api(path, opts={}){
+  // Auditoría de seguridad: las rutas de solo lectura (timeline, usuarios, entrevistas, etc.)
+  // ahora exigen credenciales — viajan acá como cabeceras (no como query string, que quedaría
+  // en el historial del navegador y en logs) siempre que haya una sesión activa.
+  const headers = {"Content-Type":"application/json", ...(opts.headers||{})};
+  if(STATE.correo && STATE.clave){
+    headers["X-Actor-Correo"] = STATE.correo;
+    headers["X-Actor-Clave"] = STATE.clave;
+  }
   const r = await fetch(API + path, {
-    headers: {"Content-Type":"application/json"},
-    ...opts
+    ...opts,
+    headers
   });
   let data = null;
   try{ data = await r.json(); }catch(e){}
@@ -1018,7 +1026,7 @@ async function abrirIA(){
 async function renderMensajesIA(){
   const cont = document.getElementById("ia-mensajes");
   let mensajes = [];
-  try{ mensajes = await api(`/api/colegios/${STATE.colegioId}/chat-ia?persona=${encodeURIComponent(STATE.persona)}`); }catch(e){}
+  try{ mensajes = await api(`/api/colegios/${STATE.colegioId}/chat-ia`); }catch(e){}
   cont.innerHTML = mensajes.length ? mensajes.map(m=>`
     <div class="text-[11px] ${m.rol==='user'?'text-right':''}">
       <div class="inline-block ${m.rol==='user'?'bg-indigo-600/30':'bg-slate-800'} rounded-xl px-3 py-2 max-w-[85%] text-left">
@@ -1093,8 +1101,7 @@ function filtrarColor(v){
 
 async function cargarTimeline(){
   try{
-    const q = new URLSearchParams({perfil: STATE.perfil||"", persona: STATE.persona||""});
-    const nuevos = await api(`/api/colegios/${STATE.colegioId}/timeline?${q}`);
+    const nuevos = await api(`/api/colegios/${STATE.colegioId}/timeline`);
     document.getElementById("sync-indicator").innerHTML = '<i class="fa-solid fa-cloud"></i>';
     document.getElementById("sync-indicator").className = "text-[10px] text-emerald-400";
     // Repinta solo si de verdad cambió algo — si no, cada sincronización de fondo (cada 5s)
@@ -1146,8 +1153,7 @@ async function abrirMonitorVital(){
   document.getElementById("pulso-decisiones").innerHTML = '';
   document.getElementById("pulso-estado-frase").textContent = "Cargando…";
   try{
-    const q = new URLSearchParams({perfil: STATE.perfil||"", persona: STATE.persona||""});
-    const data = await api(`/api/colegios/${STATE.colegioId}/monitor?${q}`);
+    const data = await api(`/api/colegios/${STATE.colegioId}/monitor`);
     pulsoData = data;
     renderPulsoResumen(data);
     renderPulsoAtencion(0); // arranca en la tab "Hoy" — el pulso del día primero, nada más,
@@ -1248,8 +1254,7 @@ async function abrirHistorialMonitor(){
   const cont = document.getElementById("monitor-historial-lista");
   cont.innerHTML = '<p class="text-[11px] text-slate-500 text-center py-6">Cargando…</p>';
   try{
-    const q = new URLSearchParams({persona: STATE.persona||""});
-    const historial = await api(`/api/colegios/${STATE.colegioId}/monitor/historial?${q}`);
+    const historial = await api(`/api/colegios/${STATE.colegioId}/monitor/historial`);
     cont.innerHTML = historial.length ? historial.map(t => `
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
         <p class="text-xs text-slate-300">${esc(t.texto)}</p>
