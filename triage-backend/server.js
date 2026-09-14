@@ -946,11 +946,13 @@ async function interpretarSituacion(colegioId, actor, texto, personasDisponibles
 // Regla determinística (no depende de que haya IA configurada, igual que
 // PALABRAS_CLAVE_RELACIONAI de la Fase 11): si la persona dice "reunión" o "juntar", GADUAI
 // agenda automáticamente con todos los convocados (responsable + copiados + quien escribió) y
-// el registro queda como Hito, no como Tarea — pedido explícito de Humberto.
-const PALABRAS_CLAVE_REUNION = ["reunión", "reunion", "juntar", "juntarnos", "junta"];
+// el registro queda como Hito, no como Tarea — pedido explícito de Humberto. Se busca por RAÍZ
+// ("reun"/"junt"), no por palabra exacta, para capturar cualquier conjugación: reunirme,
+// reunirnos, reunámonos, junta, juntarnos, juntémonos, etc. — no solo el infinitivo.
+const RAICES_REUNION = ["reun", "junt"];
 function detectaReunion(texto) {
   const t = texto.toLowerCase();
-  return PALABRAS_CLAVE_REUNION.some(p => t.includes(p));
+  return RAICES_REUNION.some(r => t.includes(r));
 }
 
 app.post("/api/colegios/:id/interpretar", asyncRoute(async (req, res) => {
