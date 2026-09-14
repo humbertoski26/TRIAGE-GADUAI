@@ -389,7 +389,7 @@
 
     <label class="flex items-center gap-2 mb-5 text-[11px] text-lime-300 bg-lime-500/10 border border-lime-500/30 rounded-xl p-3 cursor-pointer">
       <input id="f-agendar-reunion" type="checkbox" class="accent-lime-500 w-4 h-4">
-      <span>📅 Agendar reunión automática de 45 min con el responsable y los copiados (solo aplica a Tareas) — GADUAI busca un bloque libre en la Agenda de todos según la urgencia.</span>
+      <span>📅 Agendar reunión automática de 45 min con el responsable y los copiados — GADUAI busca un bloque libre en la Agenda de todos según la urgencia. Se marca solo al detectar "reunión" o "juntar" en la entrada inteligente.</span>
     </label>
 
     <button onclick="registrar()" class="w-full brand-gradient text-white text-sm font-bold py-3 rounded-xl"><i class="fa-solid fa-list-check mr-1"></i> Registrar en GADUAI</button>
@@ -1873,7 +1873,7 @@ async function abrirModal(propuesta, textoOriginal){
   document.getElementById("f-desc").value = textoOriginal || "";
   document.getElementById("f-archivo").value="";
   archivoPendiente = null;
-  document.getElementById("f-agendar-reunion").checked=false;
+  document.getElementById("f-agendar-reunion").checked = !!(propuesta && propuesta.agendarReunion);
   document.getElementById("f-fecha").value = (propuesta && propuesta.fechaSugerida) || new Date().toISOString().slice(0,10);
   document.getElementById("f-fecha-final").value="";
   const usuarios = await api(`/api/colegios/${STATE.colegioId}/usuarios`);

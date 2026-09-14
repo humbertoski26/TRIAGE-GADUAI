@@ -468,11 +468,14 @@ app.post("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
       crearAlerta(req.params.id, itemId, b.responsable.trim(), `Nueva tarea asignada: ${titulo}`).catch(() => {});
     }
     crearAlerta(req.params.id, itemId, actor.nombre, `Registraste la tarea: ${titulo}`).catch(() => {});
-    if (b.agendarReunion) {
-      agendaAgendarReunionAutomatica(req.params.id, itemId, actor, b.responsable, b.copiados || [], b.triage || "Rojo", titulo)
-        .catch(err => console.error("agendaAgendarReunionAutomatica:", err));
-    }
     evaluarRelacionaiTarea(req.params.id, itemId, titulo, b.desc || "").catch(err => console.error("evaluarRelacionaiTarea:", err));
+  }
+  // El agendamiento automático aplica tanto a tareas como a hitos — cuando el cerebro GADUAI
+  // detecta "reunión"/"juntar" en la entrada inteligente (ver detectaReunion), el hito llega
+  // acá con agendarReunion=true igual que una tarea con el checkbox marcado.
+  if (b.agendarReunion) {
+    agendaAgendarReunionAutomatica(req.params.id, itemId, actor, b.responsable, b.copiados || [], b.triage || "Rojo", titulo)
+      .catch(err => console.error("agendaAgendarReunionAutomatica:", err));
   }
 }));
 
@@ -939,15 +942,39 @@ async function interpretarSituacion(colegioId, actor, texto, personasDisponibles
   }
 }
 
+// Regla determinística (no depende de que haya IA configurada, igual que
+// PALABRAS_CLAVE_RELACIONAI de la Fase 11): si la persona dice "reunión" o "juntar", GADUAI
+// agenda automáticamente con todos los convocados (responsable + copiados + quien escribió) y
+// el registro queda como Hito, no como Tarea — pedido explícito de Humberto.
+const PALABRAS_CLAVE_REUNION = ["reunión", "reunion", "juntar", "juntarnos", "junta"];
+function detectaReunion(texto) {
+  const t = texto.toLowerCase();
+  return PALABRAS_CLAVE_REUNION.some(p => t.includes(p));
+}
+
 app.post("/api/colegios/:id/interpretar", asyncRoute(async (req, res) => {
   const { actorCorreo, actorClave, texto } = req.body || {};
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   if (!texto || !texto.trim()) return res.status(400).json({ error: "texto_requerido" });
+  const textoLimpio = texto.trim();
   const personas = (await pool.query(
     "select nombre, perfil from usuarios where colegio_id=$1 order by nombre", [req.params.id]
   )).rows;
-  const propuesta = await interpretarSituacion(req.params.id, actor, texto.trim(), personas);
+  let propuesta = await interpretarSituacion(req.params.id, actor, textoLimpio, personas);
+  if (detectaReunion(textoLimpio)) {
+    if (!propuesta) {
+      propuesta = {
+        tipo: "hito", triage: "Naranjo", titulo: textoLimpio.slice(0, 80),
+        fechaSugerida: new Date().toISOString().slice(0, 10),
+        responsableSugerido: null, copiadosSugeridos: [],
+        motivo: "Se detectó una solicitud de reunión."
+      };
+    }
+    propuesta.tipo = "hito";
+    propuesta.agendarReunion = true;
+    propuesta.motivo = "GADUAI agenda automáticamente con todos los convocados. " + (propuesta.motivo || "");
+  }
   if (!propuesta) return res.json({ ok: false });
   res.json({ ok: true, propuesta });
 }));
