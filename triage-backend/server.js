@@ -1330,10 +1330,16 @@ app.get("/api/sistema/exportar/:id", requireMigracionKey, asyncRoute(async (req,
 // Importa el JSON de /exportar en este despliegue. Idempotente y seguro de reintentar: primero
 // borra cualquier fila previa con el mismo colegio_id (cascade se lleva todo lo asociado), así
 // que correrlo dos veces no duplica nada. Todo va en una sola transacción — si algo falla, no
-// queda un import a medias. Conserva los ids originales (necesario para que circulo_historial,
-// chat_mensajes, alertas, historial_persona sigan apuntando al item/persona correcto) y al final
-// reajusta las secuencias bigserial de cada tabla para que los próximos inserts normales no
-// choquen con un id ya usado.
+// queda un import a medias.
+//
+// NO reutiliza los ids originales de las filas con bigserial: el despliegue destino ya puede
+// tener OTROS colegios (con sus propios usuarios/items ocupando esos mismos números de id), así
+// que forzar el id original chocaría con datos ajenos. En cambio, cada fila se inserta sin id
+// (Postgres asigna uno nuevo) y se arma un mapa id-viejo→id-nuevo para `items` y
+// `directorio_personas` — las únicas dos tablas que otras filas referencian por id
+// (circulo_historial/chat_mensajes/alertas/agenda_bloques.item_id, historial_persona.persona_id)
+// — así las relaciones quedan intactas aunque los números cambien. `colegios.id` sí se conserva
+// tal cual porque es una clave natural (el slug del colegio), no un número autogenerado.
 app.post("/api/sistema/importar", requireMigracionKey, asyncRoute(async (req, res) => {
   const d = req.body || {};
   if (!d.colegio || !d.colegio.id) return res.status(400).json({ error: "colegio_requerido" });
@@ -1348,90 +1354,89 @@ app.post("/api/sistema/importar", requireMigracionKey, asyncRoute(async (req, re
     );
     for (const u of d.usuarios || []) {
       await cliente.query(
-        `insert into usuarios (id,colegio_id,nombre,correo,clave,perfil,creado_en,tema,clave_hash)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [u.id, u.colegio_id, u.nombre, u.correo, u.clave, u.perfil, u.creado_en, u.tema, u.clave_hash]
+        `insert into usuarios (colegio_id,nombre,correo,clave,perfil,creado_en,tema,clave_hash)
+         values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [u.colegio_id, u.nombre, u.correo, u.clave, u.perfil, u.creado_en, u.tema, u.clave_hash]
       );
     }
+    const mapaItems = {};
     for (const it of d.items || []) {
-      await cliente.query(
-        `insert into items (id,colegio_id,tipo,triage,titulo,descripcion,fecha,responsable,copiados,persona,perfil,creado,revisado,archivo_nombre,archivo_data,react,creado_en,recordatorio_enviado,recordatorio_etapa,circulo_estado,circulo_like,fecha_final,relacionai_sugerido,relacionai_motivo,relacionai_sugerencia,reunion_hora,reunion_lugar)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
-        [it.id, it.colegio_id, it.tipo, it.triage, it.titulo, it.descripcion, it.fecha, it.responsable, it.copiados, it.persona, it.perfil, it.creado, it.revisado, it.archivo_nombre, it.archivo_data, it.react, it.creado_en, it.recordatorio_enviado, it.recordatorio_etapa, it.circulo_estado, it.circulo_like, it.fecha_final, it.relacionai_sugerido, it.relacionai_motivo, it.relacionai_sugerencia, it.reunion_hora, it.reunion_lugar]
+      const r = await cliente.query(
+        `insert into items (colegio_id,tipo,triage,titulo,descripcion,fecha,responsable,copiados,persona,perfil,creado,revisado,archivo_nombre,archivo_data,react,creado_en,recordatorio_enviado,recordatorio_etapa,circulo_estado,circulo_like,fecha_final,relacionai_sugerido,relacionai_motivo,relacionai_sugerencia,reunion_hora,reunion_lugar)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) returning id`,
+        [it.colegio_id, it.tipo, it.triage, it.titulo, it.descripcion, it.fecha, it.responsable, it.copiados, it.persona, it.perfil, it.creado, it.revisado, it.archivo_nombre, it.archivo_data, it.react, it.creado_en, it.recordatorio_enviado, it.recordatorio_etapa, it.circulo_estado, it.circulo_like, it.fecha_final, it.relacionai_sugerido, it.relacionai_motivo, it.relacionai_sugerencia, it.reunion_hora, it.reunion_lugar]
       );
+      mapaItems[it.id] = r.rows[0].id;
     }
     for (const ch of d.circuloHistorial || []) {
       await cliente.query(
-        `insert into circulo_historial (id,item_id,paso,autor,perfil,mensaje,archivo_nombre,archivo_data,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [ch.id, ch.item_id, ch.paso, ch.autor, ch.perfil, ch.mensaje, ch.archivo_nombre, ch.archivo_data, ch.creado_en]
+        `insert into circulo_historial (item_id,paso,autor,perfil,mensaje,archivo_nombre,archivo_data,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [mapaItems[ch.item_id], ch.paso, ch.autor, ch.perfil, ch.mensaje, ch.archivo_nombre, ch.archivo_data, ch.creado_en]
       );
     }
     for (const cm of d.chatMensajes || []) {
       await cliente.query(
-        `insert into chat_mensajes (id,item_id,autor,perfil,texto,fecha,creado_en) values ($1,$2,$3,$4,$5,$6,$7)`,
-        [cm.id, cm.item_id, cm.autor, cm.perfil, cm.texto, cm.fecha, cm.creado_en]
+        `insert into chat_mensajes (item_id,autor,perfil,texto,fecha,creado_en) values ($1,$2,$3,$4,$5,$6)`,
+        [mapaItems[cm.item_id], cm.autor, cm.perfil, cm.texto, cm.fecha, cm.creado_en]
       );
     }
     for (const a of d.alertas || []) {
       await cliente.query(
-        `insert into alertas (id,item_id,autor,destinatario,mensaje,fecha,leida,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [a.id, a.item_id, a.autor, a.destinatario, a.mensaje, a.fecha, a.leida, a.creado_en]
+        `insert into alertas (item_id,autor,destinatario,mensaje,fecha,leida,creado_en) values ($1,$2,$3,$4,$5,$6,$7)`,
+        [mapaItems[a.item_id], a.autor, a.destinatario, a.mensaje, a.fecha, a.leida, a.creado_en]
       );
     }
     for (const p of d.pushSubs || []) {
       await cliente.query(
-        `insert into push_subscripciones (id,colegio_id,persona,endpoint,p256dh,auth,creado_en) values ($1,$2,$3,$4,$5,$6,$7)`,
-        [p.id, p.colegio_id, p.persona, p.endpoint, p.p256dh, p.auth, p.creado_en]
+        `insert into push_subscripciones (colegio_id,persona,endpoint,p256dh,auth,creado_en) values ($1,$2,$3,$4,$5,$6)
+         on conflict (endpoint) do nothing`,
+        [p.colegio_id, p.persona, p.endpoint, p.p256dh, p.auth, p.creado_en]
       );
     }
     for (const e of d.entrevistas || []) {
       await cliente.query(
-        `insert into entrevistas (id,colegio_id,nombre_entrevistado,correo,cargo,fono,fecha,hora,curso,motivo,entrevistador,desarrollo,compromisos,creado_por,perfil_creador,creado_en)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-        [e.id, e.colegio_id, e.nombre_entrevistado, e.correo, e.cargo, e.fono, e.fecha, e.hora, e.curso, e.motivo, e.entrevistador, e.desarrollo, e.compromisos, e.creado_por, e.perfil_creador, e.creado_en]
+        `insert into entrevistas (colegio_id,nombre_entrevistado,correo,cargo,fono,fecha,hora,curso,motivo,entrevistador,desarrollo,compromisos,creado_por,perfil_creador,creado_en)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        [e.colegio_id, e.nombre_entrevistado, e.correo, e.cargo, e.fono, e.fecha, e.hora, e.curso, e.motivo, e.entrevistador, e.desarrollo, e.compromisos, e.creado_por, e.perfil_creador, e.creado_en]
       );
     }
     for (const doc of d.documentos || []) {
       await cliente.query(
-        `insert into documentos (id,colegio_id,tipo,nombre,archivo_nombre,archivo_data,subido_por,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [doc.id, doc.colegio_id, doc.tipo, doc.nombre, doc.archivo_nombre, doc.archivo_data, doc.subido_por, doc.creado_en]
+        `insert into documentos (colegio_id,tipo,nombre,archivo_nombre,archivo_data,subido_por,creado_en) values ($1,$2,$3,$4,$5,$6,$7)`,
+        [doc.colegio_id, doc.tipo, doc.nombre, doc.archivo_nombre, doc.archivo_data, doc.subido_por, doc.creado_en]
       );
     }
     for (const ci of d.chatIa || []) {
       await cliente.query(
-        `insert into chat_ia (id,colegio_id,persona,rol,contenido,fuente,creado_en) values ($1,$2,$3,$4,$5,$6,$7)`,
-        [ci.id, ci.colegio_id, ci.persona, ci.rol, ci.contenido, ci.fuente, ci.creado_en]
+        `insert into chat_ia (colegio_id,persona,rol,contenido,fuente,creado_en) values ($1,$2,$3,$4,$5,$6)`,
+        [ci.colegio_id, ci.persona, ci.rol, ci.contenido, ci.fuente, ci.creado_en]
       );
     }
     for (const mt of d.monitorTareas || []) {
       await cliente.query(
-        `insert into monitor_tareas (id,colegio_id,persona,periodo,texto,fecha_generada,completada,fecha_completada,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [mt.id, mt.colegio_id, mt.persona, mt.periodo, mt.texto, mt.fecha_generada, mt.completada, mt.fecha_completada, mt.creado_en]
+        `insert into monitor_tareas (colegio_id,persona,periodo,texto,fecha_generada,completada,fecha_completada,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [mt.colegio_id, mt.persona, mt.periodo, mt.texto, mt.fecha_generada, mt.completada, mt.fecha_completada, mt.creado_en]
       );
     }
+    const mapaPersonas = {};
     for (const dp of d.directorioPersonas || []) {
-      await cliente.query(
-        `insert into directorio_personas (id,colegio_id,tipo,nombre,rut,detalle,creado_por,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [dp.id, dp.colegio_id, dp.tipo, dp.nombre, dp.rut, dp.detalle, dp.creado_por, dp.creado_en]
+      const r = await cliente.query(
+        `insert into directorio_personas (colegio_id,tipo,nombre,rut,detalle,creado_por,creado_en) values ($1,$2,$3,$4,$5,$6,$7) returning id`,
+        [dp.colegio_id, dp.tipo, dp.nombre, dp.rut, dp.detalle, dp.creado_por, dp.creado_en]
       );
+      mapaPersonas[dp.id] = r.rows[0].id;
     }
     for (const hp of d.historialPersona || []) {
       await cliente.query(
-        `insert into historial_persona (id,persona_id,tipo,titulo,descripcion,autor,perfil,archivo_nombre,archivo_data,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [hp.id, hp.persona_id, hp.tipo, hp.titulo, hp.descripcion, hp.autor, hp.perfil, hp.archivo_nombre, hp.archivo_data, hp.creado_en]
+        `insert into historial_persona (persona_id,tipo,titulo,descripcion,autor,perfil,archivo_nombre,archivo_data,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [mapaPersonas[hp.persona_id], hp.tipo, hp.titulo, hp.descripcion, hp.autor, hp.perfil, hp.archivo_nombre, hp.archivo_data, hp.creado_en]
       );
     }
     for (const ab of d.agendaBloques || []) {
       await cliente.query(
-        `insert into agenda_bloques (id,colegio_id,persona,fecha,hora,estado,titulo,modalidad,meet_link,reservado_por,item_id,origen,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [ab.id, ab.colegio_id, ab.persona, ab.fecha, ab.hora, ab.estado, ab.titulo, ab.modalidad, ab.meet_link, ab.reservado_por, ab.item_id, ab.origen, ab.creado_en]
+        `insert into agenda_bloques (colegio_id,persona,fecha,hora,estado,titulo,modalidad,meet_link,reservado_por,item_id,origen,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [ab.colegio_id, ab.persona, ab.fecha, ab.hora, ab.estado, ab.titulo, ab.modalidad, ab.meet_link, ab.reservado_por, ab.item_id ? mapaItems[ab.item_id] : null, ab.origen, ab.creado_en]
       );
-    }
-    // Reajusta cada secuencia bigserial al máximo id real insertado, para que el próximo insert
-    // "normal" (sin id explícito) no choque con uno de los que acabamos de importar.
-    const tablasConSecuencia = ["usuarios", "items", "circulo_historial", "chat_mensajes", "alertas", "push_subscripciones", "entrevistas", "documentos", "chat_ia", "monitor_tareas", "directorio_personas", "historial_persona", "agenda_bloques"];
-    for (const t of tablasConSecuencia) {
-      await cliente.query(`select setval(pg_get_serial_sequence('${t}','id'), coalesce((select max(id) from ${t}), 1))`);
     }
     await cliente.query("COMMIT");
     res.json({
