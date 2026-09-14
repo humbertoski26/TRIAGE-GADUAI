@@ -215,10 +215,10 @@
       <p id="login-colegio-label" class="text-sm font-bold text-white mb-4">—</p>
 
       <label class="block text-[10px] uppercase tracking-wide text-slate-400 mb-1">Correo de acceso</label>
-      <input id="login-correo" placeholder="nombre@colegio.cl" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-4 outline-none focus:ring-2 gaduai-focus">
+      <input id="login-correo" placeholder="nombre@colegio.cl" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-4 outline-none focus:ring-2 gaduai-focus" onkeydown="if(event.key==='Enter')ingresar()">
 
       <label class="block text-[10px] uppercase tracking-wide text-slate-400 mb-1">Clave de acceso</label>
-      <input id="login-clave" type="password" placeholder="••••••" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-5 outline-none focus:ring-2 gaduai-focus">
+      <input id="login-clave" type="password" placeholder="••••••" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-5 outline-none focus:ring-2 gaduai-focus" onkeydown="if(event.key==='Enter')ingresar()">
 
       <button onclick="ingresar()" class="w-full gaduai-gradient text-white text-sm font-bold py-3 rounded-xl"><i class="fa-solid fa-right-to-bracket mr-1"></i> Ingresar al Sistema GADUAI</button>
       <button onclick="mostrarLanding()" class="w-full text-center text-[11px] text-slate-500 mt-4 hover:text-slate-300">Cambiar de colegio / portada</button>
@@ -274,6 +274,13 @@
         <button onclick="filtrarColor('Naranjo')" data-f="Naranjo" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-amber-600/20" title="Naranjo · Delegable">🟠</button>
         <button onclick="filtrarColor('Gris')" data-f="Gris" class="filtro-btn w-7 h-7 rounded-lg text-sm bg-slate-600/20" title="Gris · Diferible">⚪</button>
       </div>
+      <select id="filtro-vencimiento" onchange="filtrarVencimiento(this.value)" class="ml-1.5 px-2 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700 outline-none">
+        <option value="todas">Vencimiento: todas</option>
+        <option value="vencidas">Vencidas</option>
+        <option value="hoy">Vencen hoy</option>
+        <option value="semana">Esta semana</option>
+        <option value="mes">Este mes</option>
+      </select>
     </div>
   </div>
 
@@ -784,7 +791,7 @@ const TRIAGE = {
   Gris:   {orden:3, color:"#64748b", icon:"⚪", nombre:"Diferible",   desc:"No urgente + no importante · Programar/eliminar"}
 };
 
-let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, filtroTipo:"todos", filtroColor:"todos" };
+let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, filtroTipo:"todos", filtroColor:"todos", filtroVencimiento:"todas" };
 let archivoPendiente = null;
 let timelineCache = [];
 let timelineCacheJson = "";
@@ -1116,6 +1123,10 @@ function filtrarColor(v){
   STATE.filtroColor=v;
   document.querySelectorAll(".filtro-btn").forEach(b=>b.classList.remove("ring-2","ring-white"));
   document.querySelector(`.filtro-btn[data-f="${v}"]`).classList.add("ring-2","ring-white");
+  pintarTimeline();
+}
+function filtrarVencimiento(v){
+  STATE.filtroVencimiento=v;
   pintarTimeline();
 }
 
@@ -1643,7 +1654,19 @@ function pintarTimeline(){
   document.getElementById("hitos-count").textContent = items.filter(x=>x.tipo==='hito').length + " hitos";
   if(STATE.filtroTipo!=="todos") items = items.filter(x=>x.tipo===STATE.filtroTipo);
   if(STATE.filtroColor!=="todos") items = items.filter(x=>x.triage===STATE.filtroColor);
-  items = [...items].sort((a,b)=> new Date(a.fecha)-new Date(b.fecha) || TRIAGE[a.triage].orden - TRIAGE[b.triage].orden);
+  if(STATE.filtroVencimiento!=="todas"){
+    items = items.filter(x=>{
+      const diff = diasHastaCliente(x.fecha);
+      if(STATE.filtroVencimiento==="vencidas") return diff<0;
+      if(STATE.filtroVencimiento==="hoy") return diff===0;
+      if(STATE.filtroVencimiento==="semana") return diff>=0 && diff<=7;
+      if(STATE.filtroVencimiento==="mes") return diff>=0 && diff<=31;
+      return true;
+    });
+  }
+  // Orden tipo bandeja de entrada: lo registrado más recientemente primero (no por fecha de
+  // vencimiento — esa ahora es solo un filtro, ver STATE.filtroVencimiento).
+  items = [...items].sort((a,b)=> new Date(b.creadoEn) - new Date(a.creadoEn));
   document.getElementById("timeline-empty").hidden = items.length>0;
   cont.innerHTML = items.map(h=>{
     const cfg = TRIAGE[h.triage];
@@ -1667,7 +1690,7 @@ function pintarTimeline(){
         <span class="text-[10px] font-mono font-bold ${dueClass}">${dueText}</span>
       </div>
       ${h.desc?`<p class="text-xs text-slate-400 mt-1">${esc(h.desc)}</p>`:""}
-      <p class="text-[11px] mt-2" style="color:${cfg.color}">${h.triage} · vence ${String(h.fecha).slice(0,10)}${h.fechaFinal?` (hasta ${String(h.fechaFinal).slice(0,10)})`:''} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
+      <p class="text-[11px] mt-2" style="color:${cfg.color}">${h.triage} · creado ${esc(h.creado||'—')} · vence ${String(h.fecha).slice(0,10)}${h.fechaFinal?` (hasta ${String(h.fechaFinal).slice(0,10)})`:''} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
       ${h.archivoNombre ? `<a href="${h.archivoData}" download="${esc(h.archivoNombre)}" class="text-[10px] text-indigo-300 underline mt-1 inline-block"><i class="fa-solid fa-paperclip"></i> ${esc(h.archivoNombre)}</a>` : ""}
       ${h.tipo==='tarea' ? `<div class="flex items-center gap-2 mt-3 flex-wrap">${circuloIconTrail(h)}</div>` : `
       <div class="flex items-center gap-3 mt-3 text-sm">

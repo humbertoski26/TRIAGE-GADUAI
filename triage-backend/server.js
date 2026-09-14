@@ -391,7 +391,7 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
     sql = "select * from items where colegio_id=$1";
     params = [req.params.id];
   }
-  sql += " order by fecha asc, id asc";
+  sql += " order by creado_en desc, id desc";
   const items = await pool.query(sql, params);
   const ids = items.rows.map(i => i.id);
   let chats = [], alertas = [], circulo = [];
@@ -413,6 +413,7 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
     persona: it.persona,
     perfil: it.perfil,
     creado: it.creado,
+    creadoEn: it.creado_en,
     revisado: it.revisado,
     archivoNombre: it.archivo_nombre,
     archivoData: it.archivo_data,
