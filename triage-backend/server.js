@@ -81,6 +81,16 @@ function requireSeedKey(req, res, next) {
   }
   next();
 }
+// Clave nueva y de un solo propósito (Fase 17: mover un colegio entre despliegues) —
+// deliberadamente NO reutiliza ADMIN_SETUP_KEY para no arriesgar nada que ya dependa de esa
+// clave (ej. gaduai-portal administrando este mismo colegio).
+const MIGRACION_KEY = process.env.MIGRACION_KEY;
+function requireMigracionKey(req, res, next) {
+  if (!MIGRACION_KEY || !comparacionSegura(req.header("X-Migracion-Key") || "", MIGRACION_KEY)) {
+    return res.status(403).json({ error: "no_autorizado" });
+  }
+  next();
+}
 // En un despliegue dedicado a un solo colegio (ej. gaduai-nuevo-rumbo), esto evita depender
 // de que el link exacto con ?colegio=<id> se haya guardado tal cual — un ícono instalado a
 // medias, un bookmark viejo, o abrir solo el dominio, igual cae en el colegio correcto.
@@ -1281,6 +1291,167 @@ app.post("/api/sistema/seed-demo-pulso", requireSeedKey, asyncRoute(async (req, 
   );
 
   res.json({ ok: true, colegioId, itemsCreados: ids.length, actores: { director, convivencia, utp } });
+}));
+
+// ---------- Fase 17: mover un colegio entre despliegues (despliegue dedicado → compartido) ----------
+// Exporta todo lo de un colegio como JSON (colegio, usuarios con su clave_hash tal cual, y cada
+// tabla filtrada por colegio_id o vía join a items/directorio_personas). Se conservan los ids
+// originales — el importador los reutiliza tal cual para que las referencias (item_id, etc.) no
+// se rompan; por eso el importador después tiene que reajustar las secuencias de cada tabla.
+app.get("/api/sistema/exportar/:id", requireMigracionKey, asyncRoute(async (req, res) => {
+  const c = req.params.id;
+  const colegio = (await pool.query("select * from colegios where id=$1", [c])).rows[0];
+  if (!colegio) return res.status(404).json({ error: "no_encontrado" });
+  const [usuarios, items, circuloHistorial, chatMensajes, alertas, pushSubs, entrevistas, documentos, chatIa, monitorTareas, directorioPersonas, historialPersona, agendaBloques] = await Promise.all([
+    pool.query("select * from usuarios where colegio_id=$1", [c]),
+    pool.query("select * from items where colegio_id=$1", [c]),
+    pool.query("select ch.* from circulo_historial ch join items i on i.id=ch.item_id where i.colegio_id=$1", [c]),
+    pool.query("select cm.* from chat_mensajes cm join items i on i.id=cm.item_id where i.colegio_id=$1", [c]),
+    pool.query("select a.* from alertas a join items i on i.id=a.item_id where i.colegio_id=$1", [c]),
+    pool.query("select * from push_subscripciones where colegio_id=$1", [c]),
+    pool.query("select * from entrevistas where colegio_id=$1", [c]),
+    pool.query("select * from documentos where colegio_id=$1", [c]),
+    pool.query("select * from chat_ia where colegio_id=$1", [c]),
+    pool.query("select * from monitor_tareas where colegio_id=$1", [c]),
+    pool.query("select * from directorio_personas where colegio_id=$1", [c]),
+    pool.query("select hp.* from historial_persona hp join directorio_personas dp on dp.id=hp.persona_id where dp.colegio_id=$1", [c]),
+    pool.query("select * from agenda_bloques where colegio_id=$1", [c]),
+  ]);
+  res.json({
+    colegio,
+    usuarios: usuarios.rows, items: items.rows, circuloHistorial: circuloHistorial.rows,
+    chatMensajes: chatMensajes.rows, alertas: alertas.rows, pushSubs: pushSubs.rows,
+    entrevistas: entrevistas.rows, documentos: documentos.rows, chatIa: chatIa.rows,
+    monitorTareas: monitorTareas.rows, directorioPersonas: directorioPersonas.rows,
+    historialPersona: historialPersona.rows, agendaBloques: agendaBloques.rows,
+  });
+}));
+
+// Importa el JSON de /exportar en este despliegue. Idempotente y seguro de reintentar: primero
+// borra cualquier fila previa con el mismo colegio_id (cascade se lleva todo lo asociado), así
+// que correrlo dos veces no duplica nada. Todo va en una sola transacción — si algo falla, no
+// queda un import a medias. Conserva los ids originales (necesario para que circulo_historial,
+// chat_mensajes, alertas, historial_persona sigan apuntando al item/persona correcto) y al final
+// reajusta las secuencias bigserial de cada tabla para que los próximos inserts normales no
+// choquen con un id ya usado.
+app.post("/api/sistema/importar", requireMigracionKey, asyncRoute(async (req, res) => {
+  const d = req.body || {};
+  if (!d.colegio || !d.colegio.id) return res.status(400).json({ error: "colegio_requerido" });
+  const cliente = await pool.connect();
+  try {
+    await cliente.query("BEGIN");
+    await cliente.query("delete from colegios where id=$1", [d.colegio.id]);
+    const co = d.colegio;
+    await cliente.query(
+      "insert into colegios (id,nombre,comuna,relacionai_url,insignia_data,creado_en) values ($1,$2,$3,$4,$5,$6)",
+      [co.id, co.nombre, co.comuna, co.relacionai_url, co.insignia_data, co.creado_en]
+    );
+    for (const u of d.usuarios || []) {
+      await cliente.query(
+        `insert into usuarios (id,colegio_id,nombre,correo,clave,perfil,creado_en,tema,clave_hash)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [u.id, u.colegio_id, u.nombre, u.correo, u.clave, u.perfil, u.creado_en, u.tema, u.clave_hash]
+      );
+    }
+    for (const it of d.items || []) {
+      await cliente.query(
+        `insert into items (id,colegio_id,tipo,triage,titulo,descripcion,fecha,responsable,copiados,persona,perfil,creado,revisado,archivo_nombre,archivo_data,react,creado_en,recordatorio_enviado,recordatorio_etapa,circulo_estado,circulo_like,fecha_final,relacionai_sugerido,relacionai_motivo,relacionai_sugerencia,reunion_hora,reunion_lugar)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+        [it.id, it.colegio_id, it.tipo, it.triage, it.titulo, it.descripcion, it.fecha, it.responsable, it.copiados, it.persona, it.perfil, it.creado, it.revisado, it.archivo_nombre, it.archivo_data, it.react, it.creado_en, it.recordatorio_enviado, it.recordatorio_etapa, it.circulo_estado, it.circulo_like, it.fecha_final, it.relacionai_sugerido, it.relacionai_motivo, it.relacionai_sugerencia, it.reunion_hora, it.reunion_lugar]
+      );
+    }
+    for (const ch of d.circuloHistorial || []) {
+      await cliente.query(
+        `insert into circulo_historial (id,item_id,paso,autor,perfil,mensaje,archivo_nombre,archivo_data,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [ch.id, ch.item_id, ch.paso, ch.autor, ch.perfil, ch.mensaje, ch.archivo_nombre, ch.archivo_data, ch.creado_en]
+      );
+    }
+    for (const cm of d.chatMensajes || []) {
+      await cliente.query(
+        `insert into chat_mensajes (id,item_id,autor,perfil,texto,fecha,creado_en) values ($1,$2,$3,$4,$5,$6,$7)`,
+        [cm.id, cm.item_id, cm.autor, cm.perfil, cm.texto, cm.fecha, cm.creado_en]
+      );
+    }
+    for (const a of d.alertas || []) {
+      await cliente.query(
+        `insert into alertas (id,item_id,autor,destinatario,mensaje,fecha,leida,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [a.id, a.item_id, a.autor, a.destinatario, a.mensaje, a.fecha, a.leida, a.creado_en]
+      );
+    }
+    for (const p of d.pushSubs || []) {
+      await cliente.query(
+        `insert into push_subscripciones (id,colegio_id,persona,endpoint,p256dh,auth,creado_en) values ($1,$2,$3,$4,$5,$6,$7)`,
+        [p.id, p.colegio_id, p.persona, p.endpoint, p.p256dh, p.auth, p.creado_en]
+      );
+    }
+    for (const e of d.entrevistas || []) {
+      await cliente.query(
+        `insert into entrevistas (id,colegio_id,nombre_entrevistado,correo,cargo,fono,fecha,hora,curso,motivo,entrevistador,desarrollo,compromisos,creado_por,perfil_creador,creado_en)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        [e.id, e.colegio_id, e.nombre_entrevistado, e.correo, e.cargo, e.fono, e.fecha, e.hora, e.curso, e.motivo, e.entrevistador, e.desarrollo, e.compromisos, e.creado_por, e.perfil_creador, e.creado_en]
+      );
+    }
+    for (const doc of d.documentos || []) {
+      await cliente.query(
+        `insert into documentos (id,colegio_id,tipo,nombre,archivo_nombre,archivo_data,subido_por,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [doc.id, doc.colegio_id, doc.tipo, doc.nombre, doc.archivo_nombre, doc.archivo_data, doc.subido_por, doc.creado_en]
+      );
+    }
+    for (const ci of d.chatIa || []) {
+      await cliente.query(
+        `insert into chat_ia (id,colegio_id,persona,rol,contenido,fuente,creado_en) values ($1,$2,$3,$4,$5,$6,$7)`,
+        [ci.id, ci.colegio_id, ci.persona, ci.rol, ci.contenido, ci.fuente, ci.creado_en]
+      );
+    }
+    for (const mt of d.monitorTareas || []) {
+      await cliente.query(
+        `insert into monitor_tareas (id,colegio_id,persona,periodo,texto,fecha_generada,completada,fecha_completada,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [mt.id, mt.colegio_id, mt.persona, mt.periodo, mt.texto, mt.fecha_generada, mt.completada, mt.fecha_completada, mt.creado_en]
+      );
+    }
+    for (const dp of d.directorioPersonas || []) {
+      await cliente.query(
+        `insert into directorio_personas (id,colegio_id,tipo,nombre,rut,detalle,creado_por,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [dp.id, dp.colegio_id, dp.tipo, dp.nombre, dp.rut, dp.detalle, dp.creado_por, dp.creado_en]
+      );
+    }
+    for (const hp of d.historialPersona || []) {
+      await cliente.query(
+        `insert into historial_persona (id,persona_id,tipo,titulo,descripcion,autor,perfil,archivo_nombre,archivo_data,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [hp.id, hp.persona_id, hp.tipo, hp.titulo, hp.descripcion, hp.autor, hp.perfil, hp.archivo_nombre, hp.archivo_data, hp.creado_en]
+      );
+    }
+    for (const ab of d.agendaBloques || []) {
+      await cliente.query(
+        `insert into agenda_bloques (id,colegio_id,persona,fecha,hora,estado,titulo,modalidad,meet_link,reservado_por,item_id,origen,creado_en) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [ab.id, ab.colegio_id, ab.persona, ab.fecha, ab.hora, ab.estado, ab.titulo, ab.modalidad, ab.meet_link, ab.reservado_por, ab.item_id, ab.origen, ab.creado_en]
+      );
+    }
+    // Reajusta cada secuencia bigserial al máximo id real insertado, para que el próximo insert
+    // "normal" (sin id explícito) no choque con uno de los que acabamos de importar.
+    const tablasConSecuencia = ["usuarios", "items", "circulo_historial", "chat_mensajes", "alertas", "push_subscripciones", "entrevistas", "documentos", "chat_ia", "monitor_tareas", "directorio_personas", "historial_persona", "agenda_bloques"];
+    for (const t of tablasConSecuencia) {
+      await cliente.query(`select setval(pg_get_serial_sequence('${t}','id'), coalesce((select max(id) from ${t}), 1))`);
+    }
+    await cliente.query("COMMIT");
+    res.json({
+      ok: true,
+      contadores: {
+        usuarios: (d.usuarios || []).length, items: (d.items || []).length,
+        circuloHistorial: (d.circuloHistorial || []).length, chatMensajes: (d.chatMensajes || []).length,
+        alertas: (d.alertas || []).length, pushSubs: (d.pushSubs || []).length,
+        entrevistas: (d.entrevistas || []).length, documentos: (d.documentos || []).length,
+        chatIa: (d.chatIa || []).length, monitorTareas: (d.monitorTareas || []).length,
+        directorioPersonas: (d.directorioPersonas || []).length, historialPersona: (d.historialPersona || []).length,
+        agendaBloques: (d.agendaBloques || []).length,
+      }
+    });
+  } catch (err) {
+    await cliente.query("ROLLBACK");
+    throw err;
+  } finally {
+    cliente.release();
+  }
 }));
 
 // ---------- Buscador restringido: directorio de personas ----------
