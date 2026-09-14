@@ -268,7 +268,7 @@
           <div id="menu-perfiles" class="space-y-1 mb-3 max-h-32 overflow-y-auto"></div>
           <button id="btn-tema" onclick="cambiarTema()" class="w-full text-[11px] text-sky-300 border border-sky-500/30 rounded-lg py-2"><i class="fa-solid fa-sun mr-1"></i> Modo claro</button>
           <button id="btn-usuarios" onclick="abrirUsuarios()" hidden class="w-full mt-2 text-[11px] text-cyan-300 border border-cyan-500/30 rounded-lg py-2"><i class="fa-solid fa-users-gear mr-1"></i> Usuarios</button>
-          <button onclick="abrirUsuarios()" class="w-full mt-2 text-[11px] text-slate-300 border border-slate-600/40 rounded-lg py-2"><i class="fa-solid fa-gear mr-1"></i> Configuración</button>
+          <button id="btn-configuracion" onclick="abrirUsuarios()" hidden class="w-full mt-2 text-[11px] text-slate-300 border border-slate-600/40 rounded-lg py-2"><i class="fa-solid fa-gear mr-1"></i> Configuración</button>
           <button id="btn-activar-push" onclick="activarPush()" class="w-full mt-2 text-[11px] text-amber-300 border border-amber-500/30 rounded-lg py-2"><i class="fa-solid fa-bell mr-1"></i> Activar notificaciones</button>
         </div>
       </div>
@@ -428,31 +428,42 @@
       </div>
       <button onclick="cerrarUsuarios()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
     </div>
-    <div id="lista-usuarios" class="space-y-2 mb-5"></div>
-    <div class="border-t border-slate-800 pt-4">
-      <p class="text-[11px] font-bold text-white mb-2">Nuevo usuario</p>
-      <input id="u-nombre" placeholder="Nombre completo" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
-      <input id="u-correo" placeholder="correo@colegio.cl" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
-      <input id="u-clave" placeholder="Contraseña" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
-      <select id="u-perfil" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-3"></select>
-      <button onclick="agregarUsuario()" class="w-full gaduai-gradient text-white text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-user-plus mr-1"></i> Crear usuario</button>
-    </div>
-    <div class="border-t border-slate-800 pt-4 mt-4">
-      <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-brain text-indigo-300 mr-1"></i> Documentos para IA GADUAI</p>
-      <p class="text-[10px] text-slate-500 mb-2">El reglamento interno es lo más importante para alimentar el cerebro de IA GADUAI. PEI, PME y reglamento de evaluación son voluntarios pero recomendados. También puede agregar cualquier otro documento.</p>
-      <div id="lista-documentos" class="space-y-2 mb-3"></div>
-      <select id="d-tipo" onchange="document.getElementById('d-nombre-wrap').classList.toggle('hidden', this.value!=='Otro')" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
-        <option>Reglamento interno</option>
-        <option>PEI</option>
-        <option>PME</option>
-        <option>Reglamento de evaluación</option>
-        <option>Otro</option>
-      </select>
-      <div id="d-nombre-wrap" class="hidden">
-        <input id="d-nombre" placeholder="Nombre del documento" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+    <div id="bloque-insignia" class="hidden border-t border-slate-800 pt-4 mb-4">
+      <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-image mr-1 text-lime-300"></i> Insignia del colegio</p>
+      <p class="text-[10px] text-slate-500 mb-2">Se muestra junto al logo de GADUAI en el encabezado y en documentos formales (ej. Entrevista). Cada colegio la sube una sola vez.</p>
+      <div class="flex items-center gap-3 mb-2">
+        <img id="insignia-preview" class="w-14 h-14 rounded-lg object-contain bg-white p-1 border border-slate-700" hidden>
       </div>
-      <input id="d-archivo" type="file" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-2">
-      <button onclick="agregarDocumento()" class="w-full bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-file-arrow-up mr-1"></i> Subir documento</button>
+      <input id="ins-archivo" type="file" accept="image/*" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-2">
+      <button onclick="subirInsignia()" class="w-full bg-lime-600/20 text-lime-300 border border-lime-500/30 text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-upload mr-1"></i> Subir / actualizar insignia</button>
+    </div>
+    <div id="bloque-usuarios-admin" class="hidden">
+      <div id="lista-usuarios" class="space-y-2 mb-5"></div>
+      <div class="border-t border-slate-800 pt-4">
+        <p class="text-[11px] font-bold text-white mb-2">Nuevo usuario</p>
+        <input id="u-nombre" placeholder="Nombre completo" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+        <input id="u-correo" placeholder="correo@colegio.cl" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+        <input id="u-clave" placeholder="Contraseña" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+        <select id="u-perfil" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-3"></select>
+        <button onclick="agregarUsuario()" class="w-full gaduai-gradient text-white text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-user-plus mr-1"></i> Crear usuario</button>
+      </div>
+      <div class="border-t border-slate-800 pt-4 mt-4">
+        <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-brain text-indigo-300 mr-1"></i> Documentos para IA GADUAI</p>
+        <p class="text-[10px] text-slate-500 mb-2">El reglamento interno es lo más importante para alimentar el cerebro de IA GADUAI. PEI, PME y reglamento de evaluación son voluntarios pero recomendados. También puede agregar cualquier otro documento.</p>
+        <div id="lista-documentos" class="space-y-2 mb-3"></div>
+        <select id="d-tipo" onchange="document.getElementById('d-nombre-wrap').classList.toggle('hidden', this.value!=='Otro')" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+          <option>Reglamento interno</option>
+          <option>PEI</option>
+          <option>PME</option>
+          <option>Reglamento de evaluación</option>
+          <option>Otro</option>
+        </select>
+        <div id="d-nombre-wrap" class="hidden">
+          <input id="d-nombre" placeholder="Nombre del documento" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+        </div>
+        <input id="d-archivo" type="file" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-2">
+        <button onclick="agregarDocumento()" class="w-full bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-file-arrow-up mr-1"></i> Subir documento</button>
+      </div>
     </div>
   </div>
 </div>
@@ -978,6 +989,7 @@ async function entrarApp(){
   document.getElementById("app-colegio-label").textContent = STATE.colegio.nombre;
   document.getElementById("ei-saludo-nombre").textContent = (STATE.persona||"").split(" ")[0] || STATE.persona;
   document.getElementById("btn-usuarios").hidden = !STATE.isMaster;
+  document.getElementById("btn-configuracion").hidden = !(STATE.isMaster || STATE.perfil === "Director/a de colegio");
   document.getElementById("btn-buscador").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
   actualizarLinkRelacionai();
   eiSetup();
@@ -1029,14 +1041,43 @@ function cerrarSesion(){
 
 /* ---------- administración de usuarios (perfil máster) ---------- */
 async function abrirUsuarios(){
-  await renderListaUsuarios();
-  await renderListaDocumentos();
-  const sel = document.getElementById("u-perfil");
-  sel.innerHTML = PERFILES.map(p=>`<option>${esc(p)}</option>`).join("");
-  document.getElementById("u-nombre").value="";
-  document.getElementById("u-correo").value="";
-  document.getElementById("u-clave").value="";
+  const esDirector = STATE.perfil === "Director/a de colegio";
+  document.getElementById("bloque-insignia").classList.toggle("hidden", !(STATE.isMaster || esDirector));
+  document.getElementById("bloque-usuarios-admin").classList.toggle("hidden", !STATE.isMaster);
+  await cargarInsigniaPreview();
+  if(STATE.isMaster){
+    await renderListaUsuarios();
+    await renderListaDocumentos();
+    const sel = document.getElementById("u-perfil");
+    sel.innerHTML = PERFILES.map(p=>`<option>${esc(p)}</option>`).join("");
+    document.getElementById("u-nombre").value="";
+    document.getElementById("u-correo").value="";
+    document.getElementById("u-clave").value="";
+  }
   document.getElementById("modal-usuarios").classList.remove("hidden");
+}
+async function cargarInsigniaPreview(){
+  const img = document.getElementById("insignia-preview");
+  try{
+    const r = await api(`/api/colegios/${STATE.colegioId}/insignia`);
+    if(r.insignia){ img.src = r.insignia; img.hidden = false; } else { img.hidden = true; }
+  }catch(e){ img.hidden = true; }
+  document.getElementById("ins-archivo").value = "";
+}
+async function subirInsignia(){
+  const file = document.getElementById("ins-archivo").files[0];
+  if(!file){ toast("Elige una imagen primero"); return; }
+  if(file.size > 2*1024*1024){ toast("La imagen debe pesar menos de 2MB"); return; }
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    try{
+      await api(`/api/colegios/${STATE.colegioId}/insignia-propia`, {method:"POST", body: JSON.stringify(actorBody({dataUri: reader.result}))});
+      toast("Insignia actualizada ✅");
+      await cargarInsigniaPreview();
+      await cargarInsigniaHeader();
+    }catch(e){ toast("No se pudo subir la insignia"); }
+  };
+  reader.readAsDataURL(file);
 }
 
 /* ---------- documentos del colegio (alimentan IA GADUAI) ---------- */

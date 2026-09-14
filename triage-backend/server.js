@@ -263,6 +263,23 @@ app.post("/api/colegios/:id/insignia", requireAdminKey, asyncRoute(async (req, r
   res.json({ ok: true });
 }));
 
+// Autoservicio: el máster y el Director/a de colegio pueden subir/cambiar la insignia con su
+// propia sesión, sin depender de X-Admin-Key (que solo tiene Humberto) — necesario para que
+// cada colegio nuevo pueda cargar su propio logo sin intervención manual al vender el producto.
+app.post("/api/colegios/:id/insignia-propia", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, dataUri } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor || ![PERFIL_MASTER, PERFIL_DIRECTOR_COLEGIO].includes(actor.perfil)) {
+    return res.status(403).json({ error: "solo_master_o_director" });
+  }
+  const r = await pool.query(
+    "update colegios set insignia_data=$2 where id=$1 returning id",
+    [req.params.id, (dataUri || "").trim() || null]
+  );
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  res.json({ ok: true });
+}));
+
 // ---------- notificaciones push del navegador (Web Push) ----------
 // Pública: el frontend la necesita para armar la suscripción antes de saber si hay sesión.
 app.get("/api/push-public-key", (req, res) => {
