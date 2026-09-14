@@ -1127,11 +1127,36 @@ const AGENDA_DIAS_MAX = 30; // tope de reserva: máximo 1 mes hacia adelante
 
 function agendaFechaISO(f) { return f instanceof Date ? f.toISOString().slice(0, 10) : String(f).slice(0, 10); }
 function agendaHoraTexto(h) { return String(h).slice(0, 5); } // pg entrega time como "HH:MM:SS"
+
+// Render corre el proceso en UTC (no en hora de Chile) — si "hoy"/"ahora" se calculan con
+// new Date() a secas, cerca de la medianoche UTC (≈20-21 hrs en Chile) el servidor ya cree
+// que es "mañana" mientras acá todavía es "hoy". Para que el tope de reserva y el motor de
+// agendamiento automático usen siempre el calendario real de Chile, se leen explícitamente
+// en esa zona horaria en vez de confiar en la hora local del proceso.
+const AGENDA_TZ = "America/Santiago";
+function agendaAhoraChile() {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: AGENDA_TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false
+  }).formatToParts(new Date());
+  const v = {}; partes.forEach(p => { v[p.type] = p.value; });
+  return { fecha: `${v.year}-${v.month}-${v.day}`, hora: parseInt(v.hour, 10), minuto: parseInt(v.minute, 10) };
+}
+// Suma/resta días a una fecha "YYYY-MM-DD" como aritmética de calendario pura (vía Date.UTC,
+// sin componente de hora real) — evita cualquier salto de día por conversión de zona horaria.
+function agendaSumarDias(fechaIso, dias) {
+  const [y, m, d] = fechaIso.split("-").map(Number);
+  const f = new Date(Date.UTC(y, m - 1, d));
+  f.setUTCDate(f.getUTCDate() + dias);
+  return f.toISOString().slice(0, 10);
+}
+function agendaDiaSemana(fechaIso) {
+  const [y, m, d] = fechaIso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=domingo ... 6=sábado
+}
 function agendaDentroDeTope(fechaIso) {
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const limite = new Date(hoy); limite.setDate(limite.getDate() + AGENDA_DIAS_MAX);
-  const f = new Date(fechaIso + "T12:00:00");
-  return f >= hoy && f <= limite;
+  const hoy = agendaAhoraChile().fecha;
+  const limite = agendaSumarDias(hoy, AGENDA_DIAS_MAX);
+  return fechaIso >= hoy && fechaIso <= limite; // comparación de strings "YYYY-MM-DD" es válida
 }
 
 // Bloques no-abiertos (bloqueados o reservados) de una persona en un rango — lo que no
@@ -1145,25 +1170,25 @@ async function agendaBloquesDe(colegioId, persona, desde, hasta) {
 }
 
 // Busca el primer bloque de 45 min, dentro de los próximos `ventanaDias`, en que TODAS las
-// `quienes` estén libres a la vez (lun-vie, sin ofrecer horas ya pasadas si es hoy).
+// `quienes` estén libres a la vez (lun-vie, sin ofrecer horas ya pasadas si es hoy). "hoy" y
+// "ahora" se calculan en hora de Chile (ver agendaAhoraChile), no en la del proceso.
 async function agendaBuscarBloqueComun(colegioId, quienes, ventanaDias) {
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const fechaLimite = new Date(hoy); fechaLimite.setDate(fechaLimite.getDate() + ventanaDias);
+  const ahoraChile = agendaAhoraChile();
+  const hoy = ahoraChile.fecha, horaAhora = ahoraChile.hora, minutoAhora = ahoraChile.minuto;
+  const fechaLimite = agendaSumarDias(hoy, ventanaDias);
   const ocupados = await pool.query(
-    "select persona, fecha, hora from agenda_bloques where colegio_id=$1 and persona = any($2) and fecha>=current_date and fecha<=$3",
-    [colegioId, quienes, agendaFechaISO(fechaLimite)]
+    "select persona, fecha, hora from agenda_bloques where colegio_id=$1 and persona = any($2) and fecha>=$3 and fecha<=$4",
+    [colegioId, quienes, hoy, fechaLimite]
   );
   const ocupadoSet = new Set(ocupados.rows.map(r => `${r.persona}|${agendaFechaISO(r.fecha)}|${agendaHoraTexto(r.hora)}`));
-  const ahora = new Date();
   for (let d = 0; d <= ventanaDias; d++) {
-    const fecha = new Date(hoy); fecha.setDate(fecha.getDate() + d);
-    const diaSemana = fecha.getDay(); // 0=domingo, 6=sábado
+    const fechaIso = agendaSumarDias(hoy, d);
+    const diaSemana = agendaDiaSemana(fechaIso); // 0=domingo, 6=sábado
     if (diaSemana === 0 || diaSemana === 6) continue;
-    const fechaIso = agendaFechaISO(fecha);
     for (const hora of AGENDA_HORAS) {
       if (d === 0) {
         const [hh, mm] = hora.split(":").map(Number);
-        if (hh < ahora.getHours() || (hh === ahora.getHours() && mm <= ahora.getMinutes())) continue;
+        if (hh < horaAhora || (hh === horaAhora && mm <= minutoAhora)) continue;
       }
       if (quienes.every(p => !ocupadoSet.has(`${p}|${fechaIso}|${hora}`))) return { fecha: fechaIso, hora };
     }
@@ -1238,9 +1263,9 @@ app.post("/api/colegios/:id/agenda/bloquear", asyncRoute(async (req, res) => {
 // Rutas públicas del link para compartir (sin login, igual que GET /api/colegios/:id ya es
 // público) — quien recibe el link ve la disponibilidad de esa persona y reserva un bloque.
 app.get("/api/colegios/:id/agenda-publica/:persona", asyncRoute(async (req, res) => {
-  const hoy = agendaFechaISO(new Date());
-  const limite = new Date(); limite.setDate(limite.getDate() + AGENDA_DIAS_MAX);
-  const bloques = await agendaBloquesDe(req.params.id, req.params.persona, hoy, agendaFechaISO(limite));
+  const hoy = agendaAhoraChile().fecha;
+  const limite = agendaSumarDias(hoy, AGENDA_DIAS_MAX);
+  const bloques = await agendaBloquesDe(req.params.id, req.params.persona, hoy, limite);
   res.json({ horas: AGENDA_HORAS, diasMax: AGENDA_DIAS_MAX, bloques });
 }));
 

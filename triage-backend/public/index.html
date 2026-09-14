@@ -1244,7 +1244,12 @@ let agendaOffset = 0;       // desplazamiento en semanas / meses / días según 
 let agendaBloquesCache = [];
 
 function agendaFechaISO(d){ return d.toISOString().slice(0,10); }
-function agendaLunesDe(d){ const c=new Date(d); const dow=(c.getDay()+6)%7; c.setDate(c.getDate()-dow); return c; }
+// Ancla a mediodía ANTES de calcular el lunes — si se deja la hora tal cual venía en `d`
+// (ej. "ahora mismo" a las 23:xx), toISOString() más adelante convierte a UTC y puede saltar
+// al día siguiente (bug real: agendar "lunes" quedaba guardado como "martes" pasadas ciertas
+// horas de la tarde/noche en Chile). Con mediodía fijo, la fecha calendario local nunca cambia
+// al pasar a UTC.
+function agendaLunesDe(d){ const c=new Date(d); c.setHours(12,0,0,0); const dow=(c.getDay()+6)%7; c.setDate(c.getDate()-dow); return c; }
 function agendaHoyISO(){ const h=new Date(); h.setHours(0,0,0,0); return agendaFechaISO(h); }
 function agendaTopeISO(){ const t=new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate()+AGENDA_DIAS_MAX); return agendaFechaISO(t); }
 
