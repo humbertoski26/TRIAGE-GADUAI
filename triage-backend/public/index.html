@@ -89,6 +89,7 @@
   :root[data-theme="claro"] .gaduai-btn-accent.text-white,
   :root[data-theme="claro"] .gaduai-btn-cyan.text-white,
   :root[data-theme="claro"] .gaduai-btn-indigo.text-white,
+  :root[data-theme="claro"] .gaduai-btn-lime.text-white,
   :root[data-theme="claro"] .gaduai-btn-violet.text-white,
   :root[data-theme="claro"] .bg-indigo-600.text-white,
   :root[data-theme="claro"] .bg-indigo-600\/30.text-white,
@@ -119,6 +120,8 @@
   .gaduai-btn-cyan:hover{background:#0284c7}
   .gaduai-btn-violet{background:#7c3aed}
   .gaduai-btn-violet:hover{background:#6d28d9}
+  .gaduai-btn-lime{background:linear-gradient(90deg,#65a30d,#059669)}
+  .gaduai-btn-lime:hover{background:linear-gradient(90deg,#4d7c0f,#047857)}
   /* ---------- Fase 9: PULSO GADUAI (antes "Monitor Vital") ----------
      Botón más grande que sus vecinos (Entrevista/Relacionai/IA GADUAI/Buscador) a propósito
      — es el primero y el más importante de la fila. El electro (SVG) usa dos trazos con el
@@ -256,6 +259,7 @@
       <a id="btn-ir-relacionai" href="#" target="_blank" rel="noopener" hidden title="Ir a Relacionai" class="gaduai-btn-cyan text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-arrow-up-right-from-square"></i> Relacionai</a>
       <button onclick="abrirIA()" title="IA GADUAI" class="gaduai-gradient text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-brain"></i> IA GADUAI</button>
       <button id="btn-buscador" hidden onclick="abrirBuscador()" title="Buscador" class="gaduai-btn-violet text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> Buscador</button>
+      <button onclick="abrirAgenda()" title="Agenda / Calendario" class="gaduai-btn-lime text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-calendar-days"></i> Agenda</button>
     </div>
   </header>
   <div class="bg-slate-950/95 border-b border-slate-800 py-2.5">
@@ -338,6 +342,11 @@
 
     <label class="block text-[11px] text-slate-400 mb-1">Copiar a (Ctrl/Cmd+clic = varios)</label>
     <select id="f-copiar" multiple class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white mb-5 h-24"></select>
+
+    <label class="flex items-center gap-2 mb-5 text-[11px] text-lime-300 bg-lime-500/10 border border-lime-500/30 rounded-xl p-3 cursor-pointer">
+      <input id="f-agendar-reunion" type="checkbox" class="accent-lime-500 w-4 h-4">
+      <span>📅 Agendar reunión automática de 45 min con el responsable y los copiados (solo aplica a Tareas) — GADUAI busca un bloque libre en la Agenda de todos según la urgencia.</span>
+    </label>
 
     <button onclick="registrar()" class="w-full brand-gradient text-white text-sm font-bold py-3 rounded-xl"><i class="fa-solid fa-list-check mr-1"></i> Registrar en GADUAI</button>
   </div>
@@ -471,6 +480,48 @@
       <button onclick="cerrarModalId('modal-monitor-historial')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
     </div>
     <div id="monitor-historial-lista" class="space-y-2"></div>
+  </div>
+</div>
+
+<!-- ============ MODAL: AGENDA / CALENDARIO ============ -->
+<div id="modal-agenda" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-3">
+      <div>
+        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-calendar-days text-emerald-400"></i> Agenda / Calendario</h3>
+        <p class="text-[11px] text-slate-500">Bloques de 45 min · se puede reservar hasta un mes hacia adelante.</p>
+      </div>
+      <button onclick="cerrarModalId('modal-agenda')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+      <div class="flex gap-1.5 bg-slate-950 border border-slate-800 p-1 rounded-xl">
+        <button class="tab-btn agenda-tab text-[11px] font-bold px-3 py-1.5 rounded-lg bg-emerald-600 text-white" data-vista="semana" onclick="cambiarVistaAgenda('semana',this)">SEMANA</button>
+        <button class="tab-btn agenda-tab text-[11px] font-bold px-3 py-1.5 rounded-lg text-slate-500" data-vista="mes" onclick="cambiarVistaAgenda('mes',this)">MES</button>
+        <button class="tab-btn agenda-tab text-[11px] font-bold px-3 py-1.5 rounded-lg text-slate-500" data-vista="dia" onclick="cambiarVistaAgenda('dia',this)">DÍA</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="agendaNavegar(-1)" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[10px]"><i class="fa-solid fa-chevron-left"></i></button>
+        <b id="agenda-periodo-label" class="text-xs text-white min-w-[150px] text-center inline-block"></b>
+        <button id="agenda-btn-next" onclick="agendaNavegar(1)" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[10px]"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+    </div>
+
+    <div id="agenda-vista" class="min-h-[260px]"></div>
+
+    <div class="mt-4 flex flex-wrap gap-3 text-[9px] text-slate-500">
+      <span><span class="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1"></span>Disponible</span>
+      <span><span class="inline-block w-2 h-2 rounded-full bg-rose-400 mr-1"></span>Reservado</span>
+      <span><span class="inline-block w-2 h-2 rounded-full bg-slate-600 mr-1"></span>Bloqueado</span>
+    </div>
+
+    <div class="mt-3 bg-slate-950 border border-slate-800 rounded-2xl p-3">
+      <p class="text-[10px] text-slate-400 mb-2"><i class="fa-solid fa-link mr-1"></i> Tu link para compartir disponibilidad (correo / WhatsApp):</p>
+      <div class="flex gap-2">
+        <input id="agenda-link" readonly class="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-[10px] text-emerald-300">
+        <button onclick="copiarLinkAgenda()" class="gaduai-btn-lime text-white text-[10px] font-bold px-3 rounded-lg"><i class="fa-regular fa-copy"></i></button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -626,6 +677,34 @@
   </div>
 </div>
 
+<!-- ============ PANTALLA 4: AGENDA PÚBLICA (link para reservar, sin login) ============ -->
+<div id="pantalla-agenda-publica" class="min-h-screen flex items-start justify-center p-4 py-10" hidden>
+  <div class="w-full max-w-2xl fade-in">
+    <div class="flex flex-col items-center text-center mb-6">
+      <div class="w-14 h-14 rounded-full logo-orb flex items-center justify-center text-white text-xl mb-3"><i class="fa-solid fa-calendar-days"></i></div>
+      <h1 class="text-xl font-black text-white">Agendar reunión</h1>
+      <p class="text-sm text-slate-400 mt-1">Con <b id="agenda-pub-persona" class="text-white"></b> · <span id="agenda-pub-colegio"></span></p>
+    </div>
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <button onclick="agendaPubNavegar(-1)" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[10px]"><i class="fa-solid fa-chevron-left"></i></button>
+        <b id="agenda-pub-periodo" class="text-xs text-white"></b>
+        <button id="agenda-pub-btn-next" onclick="agendaPubNavegar(1)" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[10px]"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+      <div id="agenda-pub-vista"></div>
+      <form id="agenda-pub-form" hidden onsubmit="agendaPubReservar(event)" class="mt-5 pt-5 border-t border-slate-800 space-y-3">
+        <p class="text-xs text-emerald-300 font-bold"><i class="fa-regular fa-calendar-check mr-1"></i> Reservando: <span id="agenda-pub-elegido"></span></p>
+        <input type="hidden" id="agenda-pub-fecha"><input type="hidden" id="agenda-pub-hora">
+        <input id="agenda-pub-nombre" required placeholder="Tu nombre" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-white">
+        <input id="agenda-pub-correo" required type="email" placeholder="Tu correo" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-white">
+        <input id="agenda-pub-motivo" placeholder="Motivo de la reunión (opcional)" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-white">
+        <button class="w-full gaduai-btn-lime text-white font-bold py-3 rounded-xl text-sm"><i class="fa-solid fa-calendar-check mr-1"></i> Reservar reunión de 45 min</button>
+      </form>
+    </div>
+    <p class="text-center text-[10px] text-slate-600 mt-4">GADUAI · Agenda</p>
+  </div>
+</div>
+
 <div id="toast" class="hidden fixed bottom-28 md:bottom-8 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl z-[200] fade-in max-w-[90vw] text-center"></div>
 
 <script>
@@ -668,7 +747,7 @@ let pollTimer = null;
 function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.hidden=false; t.classList.remove("hidden"); clearTimeout(window._toastT); window._toastT=setTimeout(()=>t.classList.add("hidden"),2800); }
 function slug(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,""); }
-function pantallas(){ return ["pantalla-landing","pantalla-login","pantalla-app"]; }
+function pantallas(){ return ["pantalla-landing","pantalla-login","pantalla-app","pantalla-agenda-publica"]; }
 function mostrarPantalla(id){ pantallas().forEach(p=>document.getElementById(p).hidden = p!==id); }
 
 async function api(path, opts){
@@ -704,6 +783,10 @@ function entrarColegioEnUI(colegio){
    pública para buscar o crear colegios. Si además hay sesión guardada en este navegador
    para ese mismo colegio, se reanuda sin pedir clave de nuevo. */
 async function init(){
+  // Link público de Agenda (/agenda/<colegio>/<persona>) — no pasa por login, es una
+  // pantalla aparte que solo muestra la disponibilidad de esa persona para reservar.
+  const rutaAgenda = location.pathname.match(/^\/agenda\/([^\/]+)\/([^\/]+)\/?$/);
+  if(rutaAgenda){ await initAgendaPublica(decodeURIComponent(rutaAgenda[1]), decodeURIComponent(rutaAgenda[2])); return; }
   let colegioParam = new URLSearchParams(location.search).get("colegio");
   if(!colegioParam){
     // Sin el parámetro en la URL (ícono instalado desde un link viejo, bookmark al dominio
@@ -1151,6 +1234,236 @@ async function abrirHistorialMonitor(){
   }
 }
 
+/* ---------- Fase 10: Agenda / Calendario ---------- */
+const AGENDA_HORAS = ["08:00","08:45","09:30","10:15","11:00","11:45","12:30","13:15","14:00","14:45","15:30"];
+const AGENDA_DIAS_NOMBRE = ["Lunes","Martes","Miércoles","Jueves","Viernes"];
+const AGENDA_DIAS_MAX = 30;
+const AGENDA_MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+let agendaVista = "semana"; // 'semana' | 'mes' | 'dia'
+let agendaOffset = 0;       // desplazamiento en semanas / meses / días según la vista
+let agendaBloquesCache = [];
+
+function agendaFechaISO(d){ return d.toISOString().slice(0,10); }
+function agendaLunesDe(d){ const c=new Date(d); const dow=(c.getDay()+6)%7; c.setDate(c.getDate()-dow); return c; }
+function agendaHoyISO(){ const h=new Date(); h.setHours(0,0,0,0); return agendaFechaISO(h); }
+function agendaTopeISO(){ const t=new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate()+AGENDA_DIAS_MAX); return agendaFechaISO(t); }
+
+async function abrirAgenda(){
+  document.getElementById("modal-agenda").classList.remove("hidden");
+  agendaVista = "semana"; agendaOffset = 0;
+  document.querySelectorAll(".agenda-tab").forEach(b=>{ b.classList.remove("bg-emerald-600","text-white"); b.classList.add("text-slate-500"); });
+  document.querySelector('.agenda-tab[data-vista="semana"]').classList.add("bg-emerald-600","text-white");
+  const base = location.origin + "/agenda/" + STATE.colegioId + "/" + encodeURIComponent(STATE.persona);
+  document.getElementById("agenda-link").value = base;
+  await agendaRecargar();
+}
+function copiarLinkAgenda(){
+  const input = document.getElementById("agenda-link");
+  navigator.clipboard?.writeText(input.value).then(()=>toast("Link copiado")).catch(()=>{ input.select(); document.execCommand("copy"); toast("Link copiado"); });
+}
+function cambiarVistaAgenda(vista, el){
+  agendaVista = vista; agendaOffset = 0;
+  document.querySelectorAll(".agenda-tab").forEach(b=>{ b.classList.remove("bg-emerald-600","text-white"); b.classList.add("text-slate-500"); });
+  el.classList.remove("text-slate-500"); el.classList.add("bg-emerald-600","text-white");
+  agendaRecargar();
+}
+function agendaRangoActual(){
+  if(agendaVista==="dia"){
+    const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+agendaOffset);
+    const iso=agendaFechaISO(d);
+    return {desde:iso, hasta:iso};
+  }
+  if(agendaVista==="mes"){
+    const base=new Date(); base.setDate(1); base.setMonth(base.getMonth()+agendaOffset);
+    const desde=new Date(base.getFullYear(), base.getMonth(), 1);
+    const hasta=new Date(base.getFullYear(), base.getMonth()+1, 0);
+    return {desde:agendaFechaISO(desde), hasta:agendaFechaISO(hasta)};
+  }
+  const lunes=agendaLunesDe(new Date()); lunes.setDate(lunes.getDate()+agendaOffset*7);
+  const viernes=new Date(lunes); viernes.setDate(lunes.getDate()+4);
+  return {desde:agendaFechaISO(lunes), hasta:agendaFechaISO(viernes)};
+}
+function agendaIrADia(iso){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  agendaOffset = Math.round((new Date(iso+"T12:00:00") - hoy) / 86400000);
+  agendaVista = "dia";
+  document.querySelectorAll(".agenda-tab").forEach(b=>{ b.classList.remove("bg-emerald-600","text-white"); b.classList.add("text-slate-500"); });
+  document.querySelector('.agenda-tab[data-vista="dia"]').classList.add("bg-emerald-600","text-white");
+  agendaRecargar();
+}
+async function agendaRecargar(){
+  const {desde,hasta} = agendaRangoActual();
+  document.getElementById("agenda-vista").innerHTML = '<p class="text-[11px] text-slate-500 text-center py-10">Cargando…</p>';
+  try{
+    agendaBloquesCache = await api(`/api/colegios/${STATE.colegioId}/agenda?persona=${encodeURIComponent(STATE.persona)}&desde=${desde}&hasta=${hasta}`);
+  }catch(e){ agendaBloquesCache = []; }
+  const hoyISO=agendaHoyISO(), topeISO=agendaTopeISO();
+  document.getElementById("agenda-btn-next").disabled = desde >= topeISO;
+  document.getElementById("agenda-btn-next").classList.toggle("opacity-30", desde >= topeISO);
+  if(agendaVista==="dia") agendaRenderDia(desde);
+  else if(agendaVista==="mes") agendaRenderMes(desde);
+  else agendaRenderSemana(desde);
+}
+function agendaNavegar(delta){ agendaOffset += delta; agendaRecargar(); }
+function agendaBloqueEn(fecha,hora){ return agendaBloquesCache.find(b=>b.fecha===fecha && b.hora===hora); }
+function agendaClaseBloque(b){
+  if(!b) return "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 cursor-pointer";
+  if(b.estado==="bloqueado") return "bg-slate-800 text-slate-500";
+  return "bg-rose-500/20 text-rose-300";
+}
+function agendaEtiquetaLabel(){
+  const {desde} = agendaRangoActual();
+  if(agendaVista==="dia"){
+    const d=new Date(desde+"T12:00:00");
+    return `${AGENDA_DIAS_NOMBRE[(d.getDay()+6)%7]||''} ${d.getDate()} de ${AGENDA_MESES[d.getMonth()]}`;
+  }
+  if(agendaVista==="mes"){
+    const d=new Date(desde+"T12:00:00");
+    return `${AGENDA_MESES[d.getMonth()][0].toUpperCase()+AGENDA_MESES[d.getMonth()].slice(1)} ${d.getFullYear()}`;
+  }
+  const {hasta} = agendaRangoActual();
+  const d1=new Date(desde+"T12:00:00"), d2=new Date(hasta+"T12:00:00");
+  return `${d1.getDate()} al ${d2.getDate()} de ${AGENDA_MESES[d2.getMonth()]}`;
+}
+function agendaRenderDia(fechaIso){
+  document.getElementById("agenda-periodo-label").textContent = agendaEtiquetaLabel();
+  const filas = AGENDA_HORAS.map(hora=>{
+    const b = agendaBloqueEn(fechaIso,hora);
+    const clase = agendaClaseBloque(b);
+    const onclick = !b ? `onclick="agendaToggleBloqueo('${fechaIso}','${hora}')"` : (b.estado==="bloqueado" ? `onclick="agendaToggleBloqueo('${fechaIso}','${hora}')"` : "");
+    const detalle = b ? (b.estado==="bloqueado" ? "Bloqueado" : `${esc(b.titulo||"Reservado")}${b.reservado_por?" · "+esc(b.reservado_por):""}`) : "Disponible";
+    return `<div class="flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-bold ${clase}" ${onclick}>
+      <span>${hora}</span><span class="font-normal text-[10px] truncate ml-2">${detalle}</span>
+    </div>`;
+  }).join("");
+  document.getElementById("agenda-vista").innerHTML = `<div class="space-y-1.5">${filas}</div>`;
+}
+function agendaRenderSemana(lunesIso){
+  document.getElementById("agenda-periodo-label").textContent = agendaEtiquetaLabel();
+  const lunes = new Date(lunesIso+"T12:00:00");
+  const hoyISO = agendaHoyISO();
+  let columnas = "";
+  for(let i=0;i<5;i++){
+    const d = new Date(lunes); d.setDate(lunes.getDate()+i);
+    const iso = agendaFechaISO(d);
+    const bloquesDia = agendaBloquesCache.filter(b=>b.fecha===iso);
+    const reservados = bloquesDia.filter(b=>b.estado==="reservado").length;
+    const bloqueados = bloquesDia.filter(b=>b.estado==="bloqueado").length;
+    const abiertos = AGENDA_HORAS.length - bloquesDia.length;
+    columnas += `<div onclick="agendaIrADia('${iso}')" class="rounded-xl p-2.5 cursor-pointer border ${iso===hoyISO?'border-emerald-500 bg-emerald-600/10':'border-slate-800 bg-slate-950 hover:bg-slate-900'}">
+      <p class="text-[9px] text-slate-500 uppercase">${AGENDA_DIAS_NOMBRE[i].slice(0,3)}${iso===hoyISO?' · hoy':''}</p>
+      <p class="text-base font-black text-white">${d.getDate()}</p>
+      <div class="mt-1.5 space-y-0.5 text-[9px]">
+        <div class="text-emerald-400">${abiertos} libres</div>
+        ${reservados?`<div class="text-rose-300">${reservados} reservado${reservados>1?'s':''}</div>`:''}
+        ${bloqueados?`<div class="text-slate-500">${bloqueados} bloqueado${bloqueados>1?'s':''}</div>`:''}
+      </div>
+    </div>`;
+  }
+  document.getElementById("agenda-vista").innerHTML = `<div class="grid grid-cols-5 gap-2">${columnas}</div>`;
+}
+function agendaRenderMes(primerDiaIso){
+  document.getElementById("agenda-periodo-label").textContent = agendaEtiquetaLabel();
+  const primerDia = new Date(primerDiaIso+"T12:00:00");
+  const ultimoDia = new Date(primerDia.getFullYear(), primerDia.getMonth()+1, 0);
+  const offsetInicio = (primerDia.getDay()+6)%7; // lunes=0
+  const hoyISO = agendaHoyISO(), topeISO = agendaTopeISO();
+  let celdas = "";
+  for(let i=0;i<offsetInicio;i++) celdas += `<div></div>`;
+  for(let dia=1; dia<=ultimoDia.getDate(); dia++){
+    const d = new Date(primerDia.getFullYear(), primerDia.getMonth(), dia);
+    const iso = agendaFechaISO(d);
+    const esFinde = d.getDay()===0 || d.getDay()===6;
+    const reservados = agendaBloquesCache.filter(b=>b.fecha===iso && b.estado==="reservado").length;
+    const fueraDeTope = iso < hoyISO || iso > topeISO;
+    celdas += `<div ${esFinde?'':`onclick="agendaIrADia('${iso}')"`} class="rounded-lg p-1.5 text-center border ${esFinde?'border-transparent text-slate-700':fueraDeTope?'border-slate-900 text-slate-600 cursor-pointer':'border-slate-800 bg-slate-950 hover:bg-slate-900 cursor-pointer'} ${iso===hoyISO?'ring-1 ring-emerald-500':''}">
+      <p class="text-[11px] font-bold text-white">${dia}</p>
+      ${reservados?`<span class="inline-block w-1.5 h-1.5 rounded-full bg-rose-400 mt-0.5"></span>`:''}
+    </div>`;
+  }
+  document.getElementById("agenda-vista").innerHTML = `
+    <div class="grid grid-cols-7 gap-1 text-center mb-1">${["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"].map(d=>`<p class="text-[9px] text-slate-500 uppercase">${d}</p>`).join("")}</div>
+    <div class="grid grid-cols-7 gap-1">${celdas}</div>`;
+}
+async function agendaToggleBloqueo(fecha, hora){
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/agenda/bloquear`, {method:"POST", body: JSON.stringify(actorBody({fecha,hora}))});
+    await agendaRecargar();
+  }catch(e){ toast("No se pudo actualizar ese bloque"); }
+}
+
+/* ---------- Fase 10: Agenda pública (link para reservar, sin login) ---------- */
+let agendaPubColegioId = null, agendaPubPersona = null, agendaPubData = null, agendaPubOffsetSemana = 0;
+async function initAgendaPublica(colegioId, persona){
+  agendaPubColegioId = colegioId; agendaPubPersona = persona;
+  mostrarPantalla("pantalla-agenda-publica");
+  document.getElementById("agenda-pub-persona").textContent = persona;
+  try{
+    const colegio = await api(`/api/colegios/${colegioId}`);
+    document.getElementById("agenda-pub-colegio").textContent = colegio.nombre;
+  }catch(e){}
+  try{
+    agendaPubData = await api(`/api/colegios/${colegioId}/agenda-publica/${encodeURIComponent(persona)}`);
+  }catch(e){
+    document.getElementById("agenda-pub-vista").innerHTML = '<p class="text-sm text-rose-400 text-center py-10">No pudimos cargar la disponibilidad. Revisa el link.</p>';
+    return;
+  }
+  agendaPubOffsetSemana = 0;
+  agendaPubRenderSemana();
+}
+function agendaPubEstadoDe(fecha,hora){
+  const b = (agendaPubData.bloques||[]).find(x=>x.fecha===fecha && x.hora===hora);
+  return b ? b.estado : "abierto";
+}
+function agendaPubHoraYaPaso(hora){
+  const ahora=new Date(); const [hh,mm]=hora.split(":").map(Number);
+  return hh<ahora.getHours() || (hh===ahora.getHours() && mm<=ahora.getMinutes());
+}
+function agendaPubRenderSemana(){
+  const lunes = agendaLunesDe(new Date()); lunes.setDate(lunes.getDate()+agendaPubOffsetSemana*7);
+  const hoyISO = agendaHoyISO(), topeISO = agendaTopeISO();
+  document.getElementById("agenda-pub-btn-next").disabled = agendaFechaISO(lunes) >= topeISO;
+  document.getElementById("agenda-pub-btn-next").classList.toggle("opacity-30", agendaFechaISO(lunes) >= topeISO);
+  document.getElementById("agenda-pub-periodo").textContent = `Semana del ${lunes.getDate()} de ${AGENDA_MESES[lunes.getMonth()]}`;
+  let columnas = "";
+  for(let i=0;i<5;i++){
+    const d=new Date(lunes); d.setDate(lunes.getDate()+i);
+    const iso = agendaFechaISO(d);
+    const disponibles = iso > topeISO ? [] : AGENDA_HORAS.filter(h => agendaPubEstadoDe(iso,h)==="abierto" && !(iso===hoyISO && agendaPubHoraYaPaso(h)) && iso>=hoyISO);
+    columnas += `<div class="bg-slate-950 border border-slate-800 rounded-xl p-2">
+      <p class="text-[10px] text-slate-400 uppercase mb-1.5 text-center">${AGENDA_DIAS_NOMBRE[i].slice(0,3)} ${d.getDate()}</p>
+      <div class="space-y-1">${disponibles.length ? disponibles.map(h=>`<button onclick="agendaPubElegir('${iso}','${h}')" class="w-full text-[10px] font-bold rounded-lg py-1.5 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/30">${h}</button>`).join("") : '<p class="text-[9px] text-slate-600 text-center py-2">Sin cupos</p>'}</div>
+    </div>`;
+  }
+  document.getElementById("agenda-pub-vista").innerHTML = `<div class="grid grid-cols-5 gap-2">${columnas}</div>`;
+}
+function agendaPubNavegar(delta){ agendaPubOffsetSemana += delta; agendaPubRenderSemana(); }
+function agendaPubElegir(fecha,hora){
+  document.getElementById("agenda-pub-form").hidden = false;
+  document.getElementById("agenda-pub-elegido").textContent = `${fecha} a las ${hora} hrs`;
+  document.getElementById("agenda-pub-fecha").value = fecha;
+  document.getElementById("agenda-pub-hora").value = hora;
+  document.getElementById("agenda-pub-form").scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+async function agendaPubReservar(e){
+  e.preventDefault();
+  const nombre = document.getElementById("agenda-pub-nombre").value.trim();
+  const correo = document.getElementById("agenda-pub-correo").value.trim();
+  const motivo = document.getElementById("agenda-pub-motivo").value.trim();
+  const fecha = document.getElementById("agenda-pub-fecha").value;
+  const hora = document.getElementById("agenda-pub-hora").value;
+  if(!nombre || !correo){ toast("Completa tu nombre y correo"); return; }
+  try{
+    await api(`/api/colegios/${agendaPubColegioId}/agenda-publica/${encodeURIComponent(agendaPubPersona)}/reservar`, {method:"POST", body: JSON.stringify({nombre,correo,fecha,hora,motivo})});
+    document.getElementById("agenda-pub-vista").innerHTML = `<div class="text-center py-10"><i class="fa-solid fa-circle-check text-emerald-400 text-4xl mb-3"></i><p class="text-white font-bold">¡Reunión agendada!</p><p class="text-slate-400 text-sm mt-1">${esc(fecha)} a las ${esc(hora)} hrs · 45 min · presencial</p><p class="text-slate-500 text-xs mt-2">Te enviamos la confirmación a ${esc(correo)}.</p></div>`;
+    document.getElementById("agenda-pub-form").hidden = true;
+  }catch(err){
+    toast(err.data && err.data.error==="bloque_no_disponible" ? "Ese horario ya no está disponible, elige otro." : "No se pudo agendar, intenta de nuevo.");
+    try{ agendaPubData = await api(`/api/colegios/${agendaPubColegioId}/agenda-publica/${encodeURIComponent(agendaPubPersona)}`); }catch(e2){}
+    agendaPubRenderSemana();
+  }
+}
+
 /* ---------- Buscador restringido ---------- */
 let buscadorTimer = null;
 let fichaPersonaActual = null;
@@ -1427,6 +1740,7 @@ async function abrirModal(){
   document.getElementById("f-desc").value="";
   document.getElementById("f-archivo").value="";
   archivoPendiente = null;
+  document.getElementById("f-agendar-reunion").checked=false;
   document.getElementById("f-fecha").value=new Date().toISOString().slice(0,10);
   const usuarios = await api(`/api/colegios/${STATE.colegioId}/usuarios`);
   const opciones = usuarios.length ? usuarios.map(u=>`<option value="${esc(u.nombre)}">${esc(u.nombre)} · ${esc(u.perfil)}</option>`).join("") : PERFILES.map(p=>`<option>${esc(p)}</option>`).join("");
@@ -1464,7 +1778,8 @@ async function registrar(){
     responsable: document.getElementById("f-responsable").value,
     copiados: [...document.getElementById("f-copiar").selectedOptions].map(o=>o.value),
     archivoNombre: archivoPendiente ? archivoPendiente.nombre : null,
-    archivoData: archivoPendiente ? archivoPendiente.data : null
+    archivoData: archivoPendiente ? archivoPendiente.data : null,
+    agendarReunion: document.getElementById("f-agendar-reunion").checked
   });
   try{
     await api(`/api/colegios/${STATE.colegioId}/timeline`, {method:"POST", body: JSON.stringify(body)});
@@ -1710,7 +2025,7 @@ async function guardarEntrevista(){
   toast("Entrevista guardada y descargada.");
 }
 
-document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista","modal-circulo","modal-ia","modal-monitor","modal-monitor-historial","modal-buscador","modal-ficha-persona"].forEach(cerrarModalId); } });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista","modal-circulo","modal-ia","modal-monitor","modal-monitor-historial","modal-buscador","modal-ficha-persona","modal-agenda"].forEach(cerrarModalId); } });
 init();
 </script>
 </body>

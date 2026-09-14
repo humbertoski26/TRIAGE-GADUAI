@@ -408,6 +408,10 @@ app.post("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
       crearAlerta(req.params.id, itemId, b.responsable.trim(), `Nueva tarea asignada: ${titulo}`).catch(() => {});
     }
     crearAlerta(req.params.id, itemId, actor.nombre, `Registraste la tarea: ${titulo}`).catch(() => {});
+    if (b.agendarReunion) {
+      agendaAgendarReunionAutomatica(req.params.id, itemId, actor, b.responsable, b.copiados || [], b.triage || "Rojo", titulo)
+        .catch(err => console.error("agendaAgendarReunionAutomatica:", err));
+    }
   }
 }));
 
@@ -1112,6 +1116,157 @@ app.post("/api/sistema/normativa", requireNormativaKey, asyncRoute(async (req, r
     );
   }
   res.json({ ok: true, cargados: items.length });
+}));
+
+// ---------- Agenda / Calendario (Fase 10) ----------
+// Bloques fijos de 45 min, lunes a viernes, 08:00-16:15 — mismo horario que ya define el
+// prototipo de referencia. Solo existe una fila en agenda_bloques cuando un bloque deja de
+// estar "abierto"; la ausencia de fila para (persona,fecha,hora) es disponibilidad.
+const AGENDA_HORAS = ["08:00", "08:45", "09:30", "10:15", "11:00", "11:45", "12:30", "13:15", "14:00", "14:45", "15:30"];
+const AGENDA_DIAS_MAX = 30; // tope de reserva: máximo 1 mes hacia adelante
+
+function agendaFechaISO(f) { return f instanceof Date ? f.toISOString().slice(0, 10) : String(f).slice(0, 10); }
+function agendaHoraTexto(h) { return String(h).slice(0, 5); } // pg entrega time como "HH:MM:SS"
+function agendaDentroDeTope(fechaIso) {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const limite = new Date(hoy); limite.setDate(limite.getDate() + AGENDA_DIAS_MAX);
+  const f = new Date(fechaIso + "T12:00:00");
+  return f >= hoy && f <= limite;
+}
+
+// Bloques no-abiertos (bloqueados o reservados) de una persona en un rango — lo que no
+// aparece acá está disponible.
+async function agendaBloquesDe(colegioId, persona, desde, hasta) {
+  const r = await pool.query(
+    "select fecha, hora, estado, titulo, modalidad, meet_link, reservado_por, item_id, origen from agenda_bloques where colegio_id=$1 and persona=$2 and fecha>=$3 and fecha<=$4 order by fecha, hora",
+    [colegioId, persona, desde, hasta]
+  );
+  return r.rows.map(b => ({ ...b, fecha: agendaFechaISO(b.fecha), hora: agendaHoraTexto(b.hora) }));
+}
+
+// Busca el primer bloque de 45 min, dentro de los próximos `ventanaDias`, en que TODAS las
+// `quienes` estén libres a la vez (lun-vie, sin ofrecer horas ya pasadas si es hoy).
+async function agendaBuscarBloqueComun(colegioId, quienes, ventanaDias) {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const fechaLimite = new Date(hoy); fechaLimite.setDate(fechaLimite.getDate() + ventanaDias);
+  const ocupados = await pool.query(
+    "select persona, fecha, hora from agenda_bloques where colegio_id=$1 and persona = any($2) and fecha>=current_date and fecha<=$3",
+    [colegioId, quienes, agendaFechaISO(fechaLimite)]
+  );
+  const ocupadoSet = new Set(ocupados.rows.map(r => `${r.persona}|${agendaFechaISO(r.fecha)}|${agendaHoraTexto(r.hora)}`));
+  const ahora = new Date();
+  for (let d = 0; d <= ventanaDias; d++) {
+    const fecha = new Date(hoy); fecha.setDate(fecha.getDate() + d);
+    const diaSemana = fecha.getDay(); // 0=domingo, 6=sábado
+    if (diaSemana === 0 || diaSemana === 6) continue;
+    const fechaIso = agendaFechaISO(fecha);
+    for (const hora of AGENDA_HORAS) {
+      if (d === 0) {
+        const [hh, mm] = hora.split(":").map(Number);
+        if (hh < ahora.getHours() || (hh === ahora.getHours() && mm <= ahora.getMinutes())) continue;
+      }
+      if (quienes.every(p => !ocupadoSet.has(`${p}|${fechaIso}|${hora}`))) return { fecha: fechaIso, hora };
+    }
+  }
+  return null;
+}
+
+// Se llama best-effort desde POST /timeline cuando se crea una tarea con agendarReunion=true.
+// Ventana de búsqueda según urgencia (triage): Rojo = lo antes posible (hoy/mañana), Naranjo
+// 2 días, Azul 4 días, Gris 5 días — la escala que pidió Humberto. Si no hay bloque en común:
+// el Director (de colegio o ejecutivo/máster) igual agenda según su propia disponibilidad y
+// los demás se adaptan; cualquier otro perfil solo recibe el aviso de coordinarlo a mano.
+async function agendaAgendarReunionAutomatica(colegioId, itemId, actor, responsable, copiados, triage, titulo) {
+  const personas = Array.from(new Set([actor.nombre, ...(responsable ? [responsable.trim()] : []), ...(copiados || []).filter(Boolean)]));
+  if (personas.length < 2) return;
+  const ventanaDias = { Rojo: 1, Naranjo: 2, Azul: 4, Gris: 5 }[triage] ?? 3;
+
+  let bloque = await agendaBuscarBloqueComun(colegioId, personas, ventanaDias);
+  let forzadoPorDirector = false;
+  if (!bloque && (actor.perfil === PERFIL_MASTER || actor.perfil === PERFIL_DIRECTOR_COLEGIO)) {
+    bloque = await agendaBuscarBloqueComun(colegioId, [actor.nombre], ventanaDias);
+    forzadoPorDirector = !!bloque;
+  }
+  if (!bloque) {
+    for (const p of personas) {
+      crearAlerta(colegioId, itemId, p, `No se encontró un bloque en común para agendar la reunión de "${titulo}" — coordínenla manualmente en la Agenda.`).catch(() => {});
+    }
+    return;
+  }
+  for (const p of personas) {
+    await pool.query(
+      `insert into agenda_bloques (colegio_id, persona, fecha, hora, estado, titulo, modalidad, item_id, origen)
+       values ($1,$2,$3,$4,'reservado',$5,'presencial',$6,'automatico')
+       on conflict (colegio_id, persona, fecha, hora) do nothing`,
+      [colegioId, p, bloque.fecha, bloque.hora, `Reunión: ${titulo}`, itemId]
+    );
+    const mensaje = forzadoPorDirector
+      ? `No se encontró un bloque en común — reunión agendada el ${bloque.fecha} a las ${bloque.hora} según la disponibilidad de ${actor.nombre}. "${titulo}".`
+      : `Reunión agendada el ${bloque.fecha} a las ${bloque.hora} (presencial, 45 min) con: ${personas.filter(x => x !== p).join(", ")}. "${titulo}".`;
+    crearAlerta(colegioId, itemId, p, mensaje).catch(() => {});
+  }
+}
+
+// Agenda personal — solo el dueño ve/edita sus propios bloques (verificarActor + nombre exacto).
+app.get("/api/colegios/:id/agenda", asyncRoute(async (req, res) => {
+  const { persona, desde, hasta } = req.query;
+  if (!persona || !desde || !hasta) return res.status(400).json({ error: "persona_desde_hasta_requeridos" });
+  res.json(await agendaBloquesDe(req.params.id, persona, desde, hasta));
+}));
+
+app.post("/api/colegios/:id/agenda/bloquear", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, fecha, hora } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  if (!AGENDA_HORAS.includes(hora)) return res.status(400).json({ error: "hora_invalida" });
+  const existente = await pool.query(
+    "select id, estado from agenda_bloques where colegio_id=$1 and persona=$2 and fecha=$3 and hora=$4",
+    [req.params.id, actor.nombre, fecha, hora]
+  );
+  if (existente.rows.length) {
+    if (existente.rows[0].estado === "reservado") return res.status(409).json({ error: "bloque_reservado" });
+    await pool.query("delete from agenda_bloques where id=$1", [existente.rows[0].id]); // vuelve a "abierto"
+  } else {
+    await pool.query(
+      "insert into agenda_bloques (colegio_id, persona, fecha, hora, estado, origen) values ($1,$2,$3,$4,'bloqueado','manual')",
+      [req.params.id, actor.nombre, fecha, hora]
+    );
+  }
+  res.json({ ok: true });
+}));
+
+// Rutas públicas del link para compartir (sin login, igual que GET /api/colegios/:id ya es
+// público) — quien recibe el link ve la disponibilidad de esa persona y reserva un bloque.
+app.get("/api/colegios/:id/agenda-publica/:persona", asyncRoute(async (req, res) => {
+  const hoy = agendaFechaISO(new Date());
+  const limite = new Date(); limite.setDate(limite.getDate() + AGENDA_DIAS_MAX);
+  const bloques = await agendaBloquesDe(req.params.id, req.params.persona, hoy, agendaFechaISO(limite));
+  res.json({ horas: AGENDA_HORAS, diasMax: AGENDA_DIAS_MAX, bloques });
+}));
+
+app.post("/api/colegios/:id/agenda-publica/:persona/reservar", asyncRoute(async (req, res) => {
+  const { nombre, correo, fecha, hora, motivo } = req.body || {};
+  if (!nombre || !correo || !fecha || !hora) return res.status(400).json({ error: "campos_requeridos" });
+  if (!AGENDA_HORAS.includes(hora)) return res.status(400).json({ error: "hora_invalida" });
+  if (!agendaDentroDeTope(fecha)) return res.status(400).json({ error: "fuera_de_rango" });
+  const persona = req.params.persona;
+  try {
+    await pool.query(
+      `insert into agenda_bloques (colegio_id, persona, fecha, hora, estado, titulo, reservado_por, origen)
+       values ($1,$2,$3,$4,'reservado',$5,$6,'link_publico')`,
+      [req.params.id, persona, fecha, hora, motivo || `Reunión con ${nombre}`, nombre]
+    );
+  } catch (e) {
+    if (e.code === "23505") return res.status(409).json({ error: "bloque_no_disponible" });
+    throw e;
+  }
+  const asunto = `Reunión agendada: ${fecha} ${hora}`;
+  const texto = `${nombre} agendó una reunión de 45 min con ${persona} el ${fecha} a las ${hora} hrs.${motivo ? `\nMotivo: ${motivo}` : ""}`;
+  enviarCorreo({ to: correo, asunto, texto }).catch(() => {});
+  pool.query("select correo from usuarios where colegio_id=$1 and nombre=$2", [req.params.id, persona])
+    .then(ur => { if (ur.rows[0]) enviarCorreo({ to: ur.rows[0].correo, asunto, texto }).catch(() => {}); })
+    .catch(() => {});
+  res.json({ ok: true });
 }));
 
 // El frontend la consulta al iniciar si la URL no trae ?colegio= — solo devuelve algo en

@@ -212,3 +212,26 @@ create table if not exists historial_persona (
   creado_en timestamptz not null default now()
 );
 create index if not exists historial_persona_persona_idx on historial_persona(persona_id);
+
+-- ---------- Agenda / Calendario (Fase 10) ----------
+-- Solo se guarda una fila cuando un bloque de 45 min deja de estar "abierto" — la ausencia
+-- de fila para (persona, fecha, hora) dentro del horario fijo (08:00-16:15 lun-vie) significa
+-- que ese bloque está disponible. Mismo patrón que items.persona/responsable: persona es el
+-- nombre exacto, no una FK a usuarios.
+create table if not exists agenda_bloques (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  persona text not null,
+  fecha date not null,
+  hora time not null,
+  estado text not null check (estado in ('bloqueado','reservado')),
+  titulo text,                    -- motivo de la reunión (solo si estado='reservado')
+  modalidad text default 'presencial' check (modalidad in ('presencial','meet')),
+  meet_link text,                 -- solo si modalidad='meet' — texto libre, quien agenda pega su link
+  reservado_por text,             -- nombre de quien reservó vía el link público (null si fue automático)
+  item_id bigint references items(id) on delete cascade,
+  origen text not null default 'manual' check (origen in ('manual','link_publico','automatico')),
+  creado_en timestamptz not null default now(),
+  unique (colegio_id, persona, fecha, hora)
+);
+create index if not exists agenda_bloques_persona_idx on agenda_bloques(colegio_id, persona, fecha);
