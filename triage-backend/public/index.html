@@ -160,6 +160,9 @@
   .react-btn:hover{transform:scale(1.15)}
   .react-btn.active{filter:drop-shadow(0 0 4px currentColor)}
   .tab-btn{transition:.15s}
+  #modal-monitor details>summary{list-style:none}
+  #modal-monitor details>summary::-webkit-details-marker{display:none}
+  #modal-monitor details[open]>summary i{transform:rotate(90deg)}
   [hidden]{display:none!important}
 </style>
 </head>
@@ -488,66 +491,80 @@
 
 <!-- ============ MODAL: PULSO GADUAI ============ -->
 <div id="modal-monitor" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
-  <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
-    <div class="flex justify-between items-start mb-3">
-      <div>
-        <h3 class="text-base font-black text-white flex items-center gap-2">
-          <svg class="pulso-electro" style="width:28px;height:18px" viewBox="0 0 120 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path class="fondo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
-            <path class="trazo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
-          </svg>
-          PULSO GADUAI
-        </h3>
-        <p id="pulso-estado-frase" class="text-[11px] text-slate-500 mt-1">Cargando…</p>
-      </div>
-      <button onclick="cerrarModalId('modal-monitor')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+  <div class="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-center gap-3 mb-1">
+      <h3 class="text-base font-black text-white flex items-center gap-2">
+        <svg class="pulso-electro" style="width:28px;height:18px" viewBox="0 0 120 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path class="fondo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
+          <path class="trazo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
+        </svg>
+        PULSO GADUAI
+      </h3>
+      <button onclick="cerrarModalId('modal-monitor')" class="text-slate-400 hover:text-white flex-none"><i class="fa-solid fa-xmark text-xl"></i></button>
     </div>
 
-    <div class="flex items-center justify-between gap-3 bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 mb-4">
-      <div>
-        <p id="pulso-periodo-label" class="text-sm font-black text-white">Hoy</p>
-        <p class="text-[10px] text-slate-500">Esto es lo que requiere tu atención para avanzar.</p>
-      </div>
-      <div class="text-right">
-        <p id="pulso-porcentaje" class="text-2xl font-black text-emerald-400">--%</p>
-        <p class="text-[9px] text-slate-500">Saturación</p>
-      </div>
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+      <p id="pulso-estado-frase" class="text-[11px] text-slate-500 flex-1 min-w-0">Cargando…</p>
+      <span class="inline-flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-full px-3 py-1 flex-none">
+        <span id="pulso-porcentaje" class="text-sm font-black text-emerald-400">--%</span>
+        <span class="text-[9px] text-slate-500 uppercase tracking-wide">saturación</span>
+      </span>
     </div>
 
-    <div class="flex gap-1.5 bg-slate-950 border border-slate-800 p-1 rounded-xl mb-4 w-max">
-      <button class="tab-btn pulso-tab text-[11px] font-bold px-3 py-1.5 rounded-lg bg-emerald-600 text-white" data-dias="0" onclick="cambiarPeriodoPulso(0,this)">HOY</button>
-      <button class="tab-btn pulso-tab text-[11px] font-bold px-3 py-1.5 rounded-lg text-slate-500" data-dias="7" onclick="cambiarPeriodoPulso(7,this)">SEMANA</button>
-      <button class="tab-btn pulso-tab text-[11px] font-bold px-3 py-1.5 rounded-lg text-slate-500" data-dias="30" onclick="cambiarPeriodoPulso(30,this)">MES</button>
+    <div class="flex items-center gap-2 mb-5">
+      <div class="flex gap-1.5 bg-slate-950 border border-slate-800 p-1 rounded-xl w-max">
+        <button class="tab-btn pulso-tab text-[11px] font-bold px-3 py-1.5 rounded-lg bg-emerald-600 text-white" data-dias="0" onclick="cambiarPeriodoPulso(0,this)">HOY</button>
+        <button class="tab-btn pulso-tab text-[11px] font-bold px-3 py-1.5 rounded-lg text-slate-500" data-dias="7" onclick="cambiarPeriodoPulso(7,this)">SEMANA</button>
+        <button class="tab-btn pulso-tab text-[11px] font-bold px-3 py-1.5 rounded-lg text-slate-500" data-dias="30" onclick="cambiarPeriodoPulso(30,this)">MES</button>
+      </div>
+      <p id="pulso-periodo-label" class="hidden">Hoy</p>
     </div>
 
     <div class="grid grid-cols-4 gap-2 mb-5">
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-center">
-        <p id="pulso-m-hoy" class="text-lg font-black text-white">0</p><p class="text-[9px] text-slate-500">Tareas hoy</p>
+        <i class="fa-solid fa-calendar-day text-slate-500 text-[11px]"></i>
+        <p id="pulso-m-hoy" class="text-lg font-black text-white leading-tight">0</p><p class="text-[9px] text-slate-500">Tareas hoy</p>
       </div>
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-center">
-        <p id="pulso-m-prioritarias" class="text-lg font-black text-white">0</p><p class="text-[9px] text-slate-500">Prioridades</p>
+        <i class="fa-solid fa-star text-slate-500 text-[11px]"></i>
+        <p id="pulso-m-prioritarias" class="text-lg font-black text-white leading-tight">0</p><p class="text-[9px] text-slate-500">Prioridades</p>
       </div>
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-center">
-        <p id="pulso-m-decisiones" class="text-lg font-black text-white">0</p><p class="text-[9px] text-slate-500">Decisiones</p>
+        <i class="fa-solid fa-compass text-slate-500 text-[11px]"></i>
+        <p id="pulso-m-decisiones" class="text-lg font-black text-white leading-tight">0</p><p class="text-[9px] text-slate-500">Decisiones</p>
       </div>
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-center cursor-pointer hover:border-amber-500/50" onclick="cerrarModalId('modal-monitor');abrirAlertas()">
-        <p id="pulso-m-alertas" class="text-lg font-black text-amber-300">0</p><p class="text-[9px] text-slate-500">Alertas</p>
+        <i class="fa-solid fa-bell text-amber-400 text-[11px]"></i>
+        <p id="pulso-m-alertas" class="text-lg font-black text-amber-300 leading-tight">0</p><p class="text-[9px] text-slate-500">Alertas</p>
       </div>
     </div>
 
-    <p class="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-2">🎯 Requiere tu atención</p>
-    <div id="pulso-atencion" class="space-y-2 mb-5"></div>
+    <div class="lg:grid lg:grid-cols-[1fr_260px] lg:gap-5 lg:items-start">
+      <div class="min-w-0">
+        <p class="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-0.5">🎯 Requiere tu atención</p>
+        <p class="text-[9px] text-slate-600 mb-2">Esto es lo que requiere tu atención para avanzar.</p>
+        <div id="pulso-atencion" class="space-y-2"></div>
+      </div>
 
-    <div id="pulso-decisiones-wrap">
-      <p class="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-2">🧭 Decisiones pendientes</p>
-      <div id="pulso-decisiones" class="space-y-2 mb-5"></div>
+      <div class="mt-5 lg:mt-0 lg:border-l lg:border-slate-800 lg:pl-5">
+        <div id="pulso-decisiones-wrap">
+          <p class="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-2">🧭 Decisiones pendientes</p>
+          <div id="pulso-decisiones" class="space-y-2 mb-5"></div>
+        </div>
+
+        <details class="group">
+          <summary class="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-2 cursor-pointer select-none list-none flex items-center gap-1.5">
+            <i class="fa-solid fa-chevron-right text-[9px] transition-transform group-open:rotate-90"></i> Sugerencias del sistema
+          </summary>
+          <div id="monitor-secciones" class="space-y-5 mt-2"></div>
+        </details>
+      </div>
     </div>
 
-    <p class="text-[10px] uppercase tracking-wide text-slate-500 font-bold mb-2">Sugerencias del sistema</p>
-    <div id="monitor-secciones" class="space-y-5"></div>
-    <button onclick="abrirHistorialMonitor()" class="w-full mt-4 text-[11px] text-slate-400 border border-slate-800 rounded-lg py-2"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Historial de tareas realizadas</button>
+    <button onclick="abrirHistorialMonitor()" class="w-full mt-5 text-[11px] text-slate-400 border border-slate-800 rounded-lg py-2"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Historial de tareas realizadas</button>
   </div>
 </div>
+
 
 <!-- ============ MODAL: HISTORIAL PULSO GADUAI ============ -->
 <div id="modal-monitor-historial" class="hidden fixed inset-0 z-[120] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
