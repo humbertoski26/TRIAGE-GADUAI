@@ -1449,6 +1449,7 @@ function actualizarPulsoBoton(){
   const elM = document.getElementById("pulso-matricula-valor");
   const hayM = mVal !== null && mVal !== undefined && mVal !== "";
   elM.innerHTML = hayM ? String(mVal) : '<span class="pulso-valor-vacio">--</span>';
+  elM.classList.toggle("pulso-valor-alerta", hayM && Number(mVal) < mMin);
   document.getElementById("pulso-matricula-min").textContent = mMin;
   document.getElementById("pulso-matricula-max").textContent = mMax;
 }
