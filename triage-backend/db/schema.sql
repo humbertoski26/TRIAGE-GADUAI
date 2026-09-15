@@ -261,3 +261,28 @@ create table if not exists agenda_bloques (
   unique (colegio_id, persona, fecha, hora)
 );
 create index if not exists agenda_bloques_persona_idx on agenda_bloques(colegio_id, persona, fecha);
+
+-- ---------- PULSO GADUAI: monitor de asistencia/matrícula/eventos críticos ----------
+-- Asistencia y matrícula son valores escritos a mano por el colegio (mientras no exista
+-- integración con SIGE) — por eso son columnas simples, no una tabla con historial. Sus
+-- rangos (min/max) son iguales para todo el colegio, sin importar el perfil.
+alter table colegios add column if not exists pulso_asistencia_valor numeric(5,2);
+alter table colegios add column if not exists pulso_asistencia_min numeric(5,2) not null default 85;
+alter table colegios add column if not exists pulso_asistencia_max numeric(5,2) not null default 100;
+alter table colegios add column if not exists pulso_matricula_valor integer;
+alter table colegios add column if not exists pulso_matricula_min integer not null default 800;
+alter table colegios add column if not exists pulso_matricula_max integer not null default 1000;
+
+-- Eventos críticos es distinto: cada perfil ve solo sus propios ítems Triage Rojo abiertos
+-- (Director/máster ve todos los del colegio, el resto solo los de su propio hilo — misma
+-- regla que ya usa itemsVisiblesSql para el Timeline), así que lo que es "normal" para un
+-- Director (que ve todo el colegio) no es lo mismo que para un Inspector General (que ve
+-- menos). Por eso el rango se configura por perfil, no por colegio — una tabla en vez de
+-- columnas en `colegios`. No guarda valor: el conteo siempre se calcula en vivo.
+create table if not exists pulso_eventos_rango (
+  colegio_id text not null references colegios(id) on delete cascade,
+  perfil text not null,
+  eventos_min integer not null default 1,
+  eventos_max integer not null default 4,
+  primary key (colegio_id, perfil)
+);

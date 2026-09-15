@@ -155,6 +155,17 @@ function slug(s) {
     .replace(/(^-|-$)/g, "");
 }
 const PERFIL_MASTER = "Director ejecutivo/máster";
+// Mismo listado exacto que PERFILES en public/index.html — usado para validar el perfil al
+// guardar el rango de Eventos Críticos de PULSO GADUAI (ver /pulso-eventos-rango más abajo).
+const PERFILES = [
+  PERFIL_MASTER,
+  "Director/a de colegio",
+  "Inspector General",
+  "UTP",
+  "Encargado de Convivencia Educativa",
+  "Dupla psicosocial",
+  "Docente",
+];
 
 // SSO hacia Relacionai: Director (de colegio o ejecutivo/máster), Encargado de Convivencia,
 // Dupla psicosocial e Inspector General entran a Relacionai sin clave aparte — Relacionai
@@ -259,9 +270,92 @@ app.delete("/api/colegios/:id", requireAdminKey, asyncRoute(async (req, res) => 
 // Pública a propósito: es la que usa el link con ?colegio=<id> para mostrar el nombre antes
 // de loguearse. No expone la lista completa, solo un colegio puntual si se sabe su id.
 app.get("/api/colegios/:id", asyncRoute(async (req, res) => {
-  const r = await pool.query("select id, nombre, comuna, relacionai_url from colegios where id=$1", [req.params.id]);
+  const r = await pool.query(
+    `select id, nombre, comuna, relacionai_url,
+            pulso_asistencia_valor, pulso_asistencia_min, pulso_asistencia_max,
+            pulso_matricula_valor, pulso_matricula_min, pulso_matricula_max
+     from colegios where id=$1`,
+    [req.params.id]
+  );
   if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
   res.json(r.rows[0]);
+}));
+
+// Configuración de PULSO GADUAI — Asistencia y Matrícula: autoservicio para el máster y el
+// Director/a de colegio, mismo patrón que insignia-propia. Son valores escritos a mano
+// (mientras no exista integración SIGE) y su rango es igual para todo el colegio. Eventos
+// críticos NO vive acá — su rango es por perfil, ver /pulso-eventos-rango más abajo.
+app.post("/api/colegios/:id/pulso-config", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, asistenciaValor, asistenciaMin, asistenciaMax, matriculaValor, matriculaMin, matriculaMax } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor || ![PERFIL_MASTER, PERFIL_DIRECTOR_COLEGIO].includes(actor.perfil)) {
+    return res.status(403).json({ error: "solo_master_o_director" });
+  }
+  const numOrNull = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
+  const numOr = (v, fallback) => { const n = numOrNull(v); return n === null || Number.isNaN(n) ? fallback : n; };
+  const r = await pool.query(
+    `update colegios set
+       pulso_asistencia_valor=$2, pulso_asistencia_min=$3, pulso_asistencia_max=$4,
+       pulso_matricula_valor=$5, pulso_matricula_min=$6, pulso_matricula_max=$7
+     where id=$1 returning id`,
+    [
+      req.params.id,
+      numOrNull(asistenciaValor), numOr(asistenciaMin, 85), numOr(asistenciaMax, 100),
+      numOrNull(matriculaValor), numOr(matriculaMin, 800), numOr(matriculaMax, 1000),
+    ]
+  );
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  res.json({ ok: true });
+}));
+
+// PULSO GADUAI — Eventos críticos: cada perfil ve solo sus propios ítems Rojo abiertos
+// (Director/máster ve todo el colegio, el resto solo su propio hilo — misma regla que ya usa
+// itemsVisiblesSql para el Timeline), así que lo "normal" para un perfil no es lo mismo que
+// para otro. Por eso el rango se guarda por perfil, no por colegio.
+async function obtenerRangoEventos(colegioId, perfil) {
+  const r = await pool.query(
+    "select eventos_min, eventos_max from pulso_eventos_rango where colegio_id=$1 and perfil=$2",
+    [colegioId, perfil]
+  );
+  return r.rows.length ? { min: r.rows[0].eventos_min, max: r.rows[0].eventos_max } : { min: 1, max: 4 };
+}
+// La usa cualquier perfil logueado para saber SU PROPIO rango al pintar el botón del home.
+app.get("/api/colegios/:id/pulso-eventos-rango", asyncRoute(async (req, res) => {
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await verificarActor(req.params.id, correo, clave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  res.json(await obtenerRangoEventos(req.params.id, actor.perfil));
+}));
+// Listado completo (los 7 perfiles) para la pantalla de Configuración — solo máster/director,
+// que son quienes definen el rango "normal" de cada perfil en su colegio.
+app.get("/api/colegios/:id/pulso-eventos-rangos", asyncRoute(async (req, res) => {
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await verificarActor(req.params.id, correo, clave);
+  if (!actor || ![PERFIL_MASTER, PERFIL_DIRECTOR_COLEGIO].includes(actor.perfil)) {
+    return res.status(403).json({ error: "solo_master_o_director" });
+  }
+  const r = await pool.query(
+    "select perfil, eventos_min, eventos_max from pulso_eventos_rango where colegio_id=$1",
+    [req.params.id]
+  );
+  const guardados = Object.fromEntries(r.rows.map((row) => [row.perfil, { min: row.eventos_min, max: row.eventos_max }]));
+  res.json(PERFILES.map((p) => ({ perfil: p, min: (guardados[p] || {}).min ?? 1, max: (guardados[p] || {}).max ?? 4 })));
+}));
+app.post("/api/colegios/:id/pulso-eventos-rango", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, perfil, min, max } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor || ![PERFIL_MASTER, PERFIL_DIRECTOR_COLEGIO].includes(actor.perfil)) {
+    return res.status(403).json({ error: "solo_master_o_director" });
+  }
+  if (!PERFILES.includes(perfil)) return res.status(400).json({ error: "perfil_invalido" });
+  const numOr = (v, fallback) => { const n = Number(v); return Number.isFinite(n) ? n : fallback; };
+  await pool.query(
+    `insert into pulso_eventos_rango (colegio_id, perfil, eventos_min, eventos_max)
+     values ($1,$2,$3,$4)
+     on conflict (colegio_id, perfil) do update set eventos_min=excluded.eventos_min, eventos_max=excluded.eventos_max`,
+    [req.params.id, perfil, numOr(min, 1), numOr(max, 4)]
+  );
+  res.json({ ok: true });
 }));
 
 // Insignia/logo propio del colegio, usado en documentos formales (ej. Entrevista). Pública

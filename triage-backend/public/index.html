@@ -123,35 +123,50 @@
   .gaduai-btn-violet:hover{background:#6d28d9}
   .gaduai-btn-lime{background:linear-gradient(90deg,#65a30d,#059669)}
   .gaduai-btn-lime:hover{background:linear-gradient(90deg,#4d7c0f,#047857)}
-  /* ---------- Fase 9: PULSO GADUAI (antes "Monitor Vital") ----------
+  /* ---------- Fase 9/18: PULSO GADUAI — monitor de signos vitales del colegio ----------
      Botón más grande que sus vecinos (Entrevista/Relacionai/IA GADUAI/Buscador) a propósito
-     — es el primero y el más importante de la fila. El electro (SVG) usa dos trazos con el
-     mismo `d`: uno tenue fijo de fondo y uno brillante que recorre el trazo en loop vía
-     stroke-dashoffset (pathLength="100" evita tener que calcular el largo real del path). El
-     color (verde=estable / rojo=atención) viene de `color` en el contenedor, heredado por
-     `stroke:currentColor` — así una sola clase `.critico` cambia electro + fondo + halo. */
-  .pulso-btn{display:flex;align-items:center;gap:14px;padding:22px 24px;border-radius:20px;background:#031814;border:1px solid rgba(16,185,129,.4);color:#a7f3d0}
-  .pulso-btn:hover{border-color:rgba(16,185,129,.7)}
+     — es el primero y el más importante de la fila. Se ve como un monitor clínico: 3 líneas
+     (Asistencia/Matrícula/Eventos críticos), cada una con su onda animada + rango + valor.
+     La "pantalla" del monitor es oscura SIEMPRE, sin importar el tema claro/oscuro de la app
+     — igual que un monitor real, que se ve igual prendido esté la sala iluminada o no. Solo
+     así el verde/amarillo/azul del trazo mantienen buen contraste en cualquier tema. Cada
+     onda usa el mismo truco de `pulso-electro` original: dos trazos (uno tenue de fondo, uno
+     brillante animado vía stroke-dashoffset, pathLength="100" evita calcular el largo real). */
+  .pulso-btn{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border-radius:20px;background:#020617;border:1px solid rgba(16,185,129,.35);color:#a7f3d0;text-align:left}
+  .pulso-btn:hover{border-color:rgba(16,185,129,.65)}
+  .pulso-monitor-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
   .pulso-btn .pulso-label{display:flex;flex-direction:column;align-items:flex-start;line-height:1.2}
-  .pulso-btn .pulso-label b{font-size:19px;font-weight:900;letter-spacing:.02em;color:#fff}
-  .pulso-btn .pulso-label span{font-size:11.5px;color:#6ee7b7;font-weight:700}
-  .pulso-btn.critico{background:#210a10;border-color:rgba(225,29,72,.55);color:#fda4af;animation:pulsoBtnCritico 2.6s ease-in-out infinite}
+  .pulso-btn .pulso-label b{font-size:17px;font-weight:900;letter-spacing:.02em;color:#fff}
+  .pulso-btn .pulso-label span{font-size:11px;color:#6ee7b7;font-weight:700}
+  .pulso-btn.critico{border-color:rgba(225,29,72,.6);animation:pulsoBtnCritico 2.6s ease-in-out infinite}
   .pulso-btn.critico .pulso-label b{color:#fff}
   .pulso-btn.critico .pulso-label span{color:#fda4af}
   @keyframes pulsoBtnCritico{0%,100%{box-shadow:0 0 0 0 rgba(225,29,72,.45)}50%{box-shadow:0 0 0 7px rgba(225,29,72,0)}}
+  #pulso-gaduai-count:not(.hidden){display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;border-radius:9999px;background:#e11d48;color:#fff;font-size:10px;font-weight:800;padding:0 4px;flex:none}
+  .pulso-linea{display:flex;align-items:center;gap:6px;border-top:1px solid rgba(148,163,184,.12);padding-top:8px}
+  .pulso-linea-label{width:52px;flex:none;font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;line-height:1.15;color:currentColor}
+  .pulso-onda{flex:1;min-width:0;height:26px}
+  .pulso-onda path{fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .pulso-onda path.fondo{stroke:currentColor;opacity:.2}
+  .pulso-onda path.trazo{stroke:currentColor;stroke-dasharray:26 100;animation:pulsoTrazo 5s linear infinite}
+  @keyframes pulsoTrazo{to{stroke-dashoffset:-126}}
+  .pulso-rango{flex:none;display:flex;flex-direction:column;align-items:flex-end;font-weight:800;line-height:1.05;color:currentColor;opacity:.55;width:22px}
+  .pulso-rango b{font-size:8px}
+  .pulso-rango i{font-size:8px;font-style:normal}
+  .pulso-valor{flex:none;min-width:38px;text-align:right;font-size:17px;font-weight:900;color:currentColor}
+  .pulso-valor small{font-size:10px;font-weight:800;margin-left:1px}
+  .pulso-valor-vacio{opacity:.35;font-size:13px}
+  .pulso-linea-asistencia{color:#10b981}
+  .pulso-linea-matricula{color:#eab308}
+  .pulso-linea-eventos{color:#38bdf8}
+  @keyframes pulsoValorAlerta{0%,100%{opacity:1}50%{opacity:.2}}
+  .pulso-valor-alerta{color:#f87171!important;animation:pulsoValorAlerta 1s steps(2,jump-none) infinite}
+  /* Ícono chico de electro suelto, usado solo en el encabezado del modal PULSO GADUAI (no en
+     el botón del home, que ahora tiene sus 3 líneas propias arriba). */
   .pulso-electro{width:60px;height:34px;flex:none;color:#10b981}
-  .pulso-btn.critico .pulso-electro{color:#e11d48}
   .pulso-electro path{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
   .pulso-electro path.fondo{stroke:currentColor;opacity:.22}
   .pulso-electro path.trazo{stroke:currentColor;stroke-dasharray:22 100;animation:pulsoTrazo 3s linear infinite}
-  @keyframes pulsoTrazo{to{stroke-dashoffset:-122}}
-  #pulso-gaduai-count:not(.hidden){display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;border-radius:9999px;background:#e11d48;color:#fff;font-size:10px;font-weight:800;padding:0 4px;margin-left:2px}
-  :root[data-theme="claro"] .pulso-btn{background:#ecfdf5;border-color:#6ee7b7}
-  :root[data-theme="claro"] .pulso-btn .pulso-label b{color:#064e3b}
-  :root[data-theme="claro"] .pulso-btn .pulso-label span{color:#047857}
-  :root[data-theme="claro"] .pulso-btn.critico{background:#fef2f2;border-color:#fca5a5}
-  :root[data-theme="claro"] .pulso-btn.critico .pulso-label b{color:#7f1d1d}
-  :root[data-theme="claro"] .pulso-btn.critico .pulso-label span{color:#b91c1c}
   .monitor-tarea{display:flex;align-items:flex-start;gap:10px;background:#020617;border:1px solid #1e293b;border-radius:12px;padding:10px 12px}
   .monitor-check{flex:none;width:20px;height:20px;border-radius:9999px;border:2px solid #475569;cursor:pointer;margin-top:1px}
   .monitor-check:hover{border-color:#10b981}
@@ -257,13 +272,41 @@
 
       <!-- ============ COLUMNA IZQUIERDA: Pulso GADUAI (más espacio) + panel (abajo) ============ -->
       <div class="order-2 lg:order-1 flex flex-col gap-4 lg:sticky lg:top-20 lg:h-[calc(100vh-7rem)]">
-        <button id="btn-pulso-gaduai" onclick="abrirMonitorVital()" title="PULSO GADUAI" class="pulso-btn w-full lg:flex-[1.4] lg:items-center">
-          <svg class="pulso-electro" viewBox="0 0 120 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path class="fondo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
-            <path class="trazo" pathLength="100" d="M0,20 H14 L20,8 L26,32 L32,4 L38,20 H54 L60,14 L66,26 L72,20 H120"/>
-          </svg>
-          <span class="pulso-label"><b>PULSO GADUAI</b><span>Panorama del colegio</span></span>
-          <span id="pulso-gaduai-count" class="hidden"></span>
+        <button id="btn-pulso-gaduai" onclick="abrirMonitorVital()" title="PULSO GADUAI" class="pulso-btn w-full lg:flex-[1.4]">
+          <div class="pulso-monitor-head">
+            <span class="pulso-label"><b>PULSO GADUAI</b><span>Monitoreo colegio</span></span>
+            <span id="pulso-gaduai-count" class="hidden"></span>
+          </div>
+
+          <div class="pulso-linea pulso-linea-asistencia">
+            <span class="pulso-linea-label">Asistencia</span>
+            <svg class="pulso-onda" viewBox="0 0 200 34" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path class="fondo" pathLength="100" d="M0,17 L20,17 L26,4 L32,30 L38,17 L90,17 L96,4 L102,30 L108,17 L160,17 L166,4 L172,30 L178,17 L200,17"/>
+              <path class="trazo" pathLength="100" d="M0,17 L20,17 L26,4 L32,30 L38,17 L90,17 L96,4 L102,30 L108,17 L160,17 L166,4 L172,30 L178,17 L200,17"/>
+            </svg>
+            <span class="pulso-rango"><b id="pulso-asistencia-max">100</b><i id="pulso-asistencia-min">85</i></span>
+            <span id="pulso-asistencia-valor" class="pulso-valor"><span class="pulso-valor-vacio">--</span></span>
+          </div>
+
+          <div class="pulso-linea pulso-linea-matricula">
+            <span class="pulso-linea-label">Matrícula</span>
+            <svg class="pulso-onda" viewBox="0 0 200 34" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path class="fondo" pathLength="100" d="M0,26 C8,26 10,6 18,6 C26,6 28,26 36,26 C44,26 46,6 54,6 C62,6 64,26 72,26 C80,26 82,6 90,6 C98,6 100,26 108,26 C116,26 118,6 126,6 C134,6 136,26 144,26 L200,26"/>
+              <path class="trazo" pathLength="100" d="M0,26 C8,26 10,6 18,6 C26,6 28,26 36,26 C44,26 46,6 54,6 C62,6 64,26 72,26 C80,26 82,6 90,6 C98,6 100,26 108,26 C116,26 118,6 126,6 C134,6 136,26 144,26 L200,26"/>
+            </svg>
+            <span class="pulso-rango"><b id="pulso-matricula-max">1000</b><i id="pulso-matricula-min">800</i></span>
+            <span id="pulso-matricula-valor" class="pulso-valor"><span class="pulso-valor-vacio">--</span></span>
+          </div>
+
+          <div class="pulso-linea pulso-linea-eventos">
+            <span class="pulso-linea-label">Eventos críticos</span>
+            <svg class="pulso-onda" viewBox="0 0 200 34" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path class="fondo" pathLength="100" d="M0,26 L18,26 L18,8 L54,8 L54,26 L90,26 L90,8 L126,8 L126,26 L162,26 L162,8 L200,8"/>
+              <path class="trazo" pathLength="100" d="M0,26 L18,26 L18,8 L54,8 L54,26 L90,26 L90,8 L126,8 L126,26 L162,26 L162,8 L200,8"/>
+            </svg>
+            <span class="pulso-rango"><b id="pulso-eventos-max">4</b><i id="pulso-eventos-min">1</i></span>
+            <span id="pulso-eventos-valor" class="pulso-valor">0</span>
+          </div>
         </button>
 
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 lg:flex-1 lg:overflow-y-auto">
@@ -439,6 +482,31 @@
       </div>
       <input id="ins-archivo" type="file" accept="image/*" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-2">
       <button onclick="subirInsignia()" class="w-full bg-lime-600/20 text-lime-300 border border-lime-500/30 text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-upload mr-1"></i> Subir / actualizar insignia</button>
+    </div>
+    <div id="bloque-pulso-config" class="hidden border-t border-slate-800 pt-4 mb-4">
+      <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-heart-pulse mr-1 text-emerald-300"></i> Configuración de PULSO GADUAI</p>
+      <p class="text-[10px] text-slate-500 mb-3">Asistencia y Matrícula se escriben a mano mientras no exista integración con SIGE. Los rangos definen cuándo cada línea se considera normal.</p>
+
+      <p class="text-[10px] font-bold text-emerald-300 mb-1">Asistencia (%)</p>
+      <div class="grid grid-cols-3 gap-2 mb-3">
+        <div><input id="pc-asistencia-valor" type="number" step="0.1" placeholder="Valor" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Valor hoy</p></div>
+        <div><input id="pc-asistencia-min" type="number" step="0.1" placeholder="85" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Mínimo</p></div>
+        <div><input id="pc-asistencia-max" type="number" step="0.1" placeholder="100" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Máximo</p></div>
+      </div>
+
+      <p class="text-[10px] font-bold text-amber-300 mb-1">Matrícula</p>
+      <div class="grid grid-cols-3 gap-2 mb-3">
+        <div><input id="pc-matricula-valor" type="number" placeholder="Valor" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Valor hoy</p></div>
+        <div><input id="pc-matricula-min" type="number" placeholder="800" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Mínimo</p></div>
+        <div><input id="pc-matricula-max" type="number" placeholder="1000" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Máximo</p></div>
+      </div>
+
+      <button onclick="guardarPulsoConfig()" class="w-full bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold py-2.5 rounded-xl mb-4"><i class="fa-solid fa-floppy-disk mr-1"></i> Guardar Asistencia / Matrícula</button>
+
+      <p class="text-[10px] font-bold text-sky-300 mb-1">Eventos críticos — rango por perfil (se calcula solo)</p>
+      <p class="text-[10px] text-slate-500 mb-2">Cada perfil ve solo sus propios eventos críticos (Director/máster ve todo el colegio). Lo "normal" no es lo mismo para todos, por eso cada uno tiene su propio rango.</p>
+      <div id="pc-eventos-lista" class="space-y-1.5 mb-3"></div>
+      <button onclick="guardarEventosRangos()" class="w-full bg-sky-600/20 text-sky-300 border border-sky-500/30 text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-floppy-disk mr-1"></i> Guardar rangos de Eventos críticos</button>
     </div>
     <div id="bloque-usuarios-admin" class="hidden">
       <div id="lista-usuarios" class="space-y-2 mb-5"></div>
@@ -850,7 +918,7 @@ const TRIAGE = {
   Gris:   {orden:3, color:"#64748b", icon:"⚪", nombre:"Diferible",   desc:"No urgente + no importante · Programar/eliminar"}
 };
 
-let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, filtroTipo:"todos", filtroColor:"todos", filtroVencimiento:"todas" };
+let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, filtroTipo:"todos", filtroColor:"todos", filtroVencimiento:"todas", pulsoEventosRango:{min:1,max:4} };
 let archivoPendiente = null;
 let timelineCache = [];
 let timelineCacheJson = "";
@@ -997,6 +1065,13 @@ async function cargarInsigniaHeader(){
     if(r.insignia){ img.src = r.insignia; img.hidden = false; } else { img.hidden = true; }
   }catch(e){ img.hidden = true; }
 }
+// Rango de Eventos Críticos de ESTE perfil (Director/máster ve todo el colegio, el resto solo
+// su propio hilo — misma regla que ya separa el Timeline), configurado por máster/director en
+// Configuración. Se pide una vez al entrar; alcanza porque el rango casi no cambia en vivo.
+async function cargarPulsoEventosRango(){
+  try{ STATE.pulsoEventosRango = await api(`/api/colegios/${STATE.colegioId}/pulso-eventos-rango`); }
+  catch(e){ /* se queda con el default {min:1,max:4} ya en STATE */ }
+}
 async function entrarApp(){
   // La cuenta (servidor) manda sobre lo que hubiera guardado en este dispositivo — así un
   // cambio de tema hecho en otro celular/computador se refleja acá al entrar.
@@ -1011,7 +1086,7 @@ async function entrarApp(){
   actualizarLinkRelacionai();
   eiSetup();
   cargarInsigniaHeader();
-  await Promise.all([renderMenuPerfiles(), cargarTimeline()]);
+  await Promise.all([renderMenuPerfiles(), cargarPulsoEventosRango(), cargarTimeline()]);
   if(pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(cargarTimeline, 5000); // sincronización con otros dispositivos
   document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) cargarTimeline(); });
@@ -1060,8 +1135,10 @@ function cerrarSesion(){
 async function abrirUsuarios(){
   const esDirector = STATE.perfil === "Director/a de colegio";
   document.getElementById("bloque-insignia").classList.toggle("hidden", !(STATE.isMaster || esDirector));
+  document.getElementById("bloque-pulso-config").classList.toggle("hidden", !(STATE.isMaster || esDirector));
   document.getElementById("bloque-usuarios-admin").classList.toggle("hidden", !STATE.isMaster);
   await cargarInsigniaPreview();
+  if(STATE.isMaster || esDirector) await cargarPulsoConfigPreview();
   if(STATE.isMaster){
     await renderListaUsuarios();
     await renderListaDocumentos();
@@ -1095,6 +1172,60 @@ async function subirInsignia(){
     }catch(e){ toast("No se pudo subir la insignia"); }
   };
   reader.readAsDataURL(file);
+}
+async function cargarPulsoConfigPreview(){
+  try{
+    const c = await api(`/api/colegios/${STATE.colegioId}`);
+    STATE.colegio = Object.assign({}, STATE.colegio, c);
+    document.getElementById("pc-asistencia-valor").value = c.pulso_asistencia_valor ?? "";
+    document.getElementById("pc-asistencia-min").value = c.pulso_asistencia_min ?? 85;
+    document.getElementById("pc-asistencia-max").value = c.pulso_asistencia_max ?? 100;
+    document.getElementById("pc-matricula-valor").value = c.pulso_matricula_valor ?? "";
+    document.getElementById("pc-matricula-min").value = c.pulso_matricula_min ?? 800;
+    document.getElementById("pc-matricula-max").value = c.pulso_matricula_max ?? 1000;
+    actualizarPulsoBoton();
+  }catch(e){ toast("No se pudo cargar la configuración de PULSO GADUAI"); }
+  await cargarEventosRangosPreview();
+}
+async function guardarPulsoConfig(){
+  const v = id => document.getElementById(id).value.trim();
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/pulso-config`, {method:"POST", body: JSON.stringify(actorBody({
+      asistenciaValor: v("pc-asistencia-valor"), asistenciaMin: v("pc-asistencia-min"), asistenciaMax: v("pc-asistencia-max"),
+      matriculaValor: v("pc-matricula-valor"), matriculaMin: v("pc-matricula-min"), matriculaMax: v("pc-matricula-max"),
+    }))});
+    toast("Asistencia / Matrícula actualizadas ✅");
+    await cargarPulsoConfigPreview();
+  }catch(e){ toast("No se pudo guardar PULSO GADUAI"); }
+}
+async function cargarEventosRangosPreview(){
+  const cont = document.getElementById("pc-eventos-lista");
+  try{
+    const rangos = await api(`/api/colegios/${STATE.colegioId}/pulso-eventos-rangos`);
+    cont.innerHTML = rangos.map(r => `
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] text-slate-300 flex-1 min-w-0 truncate">${esc(r.perfil)}</span>
+        <input type="number" data-perfil="${esc(r.perfil)}" data-campo="min" value="${r.min}" class="pc-evt-input w-14 bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-[11px] text-white text-center">
+        <span class="text-slate-600 text-[10px]">–</span>
+        <input type="number" data-perfil="${esc(r.perfil)}" data-campo="max" value="${r.max}" class="pc-evt-input w-14 bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-[11px] text-white text-center">
+      </div>`).join("");
+  }catch(e){ cont.innerHTML = '<p class="text-[10px] text-rose-400">No se pudieron cargar los rangos por perfil.</p>'; }
+}
+async function guardarEventosRangos(){
+  const filas = {};
+  document.querySelectorAll(".pc-evt-input").forEach(inp => {
+    const p = inp.dataset.perfil;
+    filas[p] = filas[p] || {};
+    filas[p][inp.dataset.campo] = inp.value.trim();
+  });
+  try{
+    await Promise.all(Object.entries(filas).map(([perfil, {min, max}]) =>
+      api(`/api/colegios/${STATE.colegioId}/pulso-eventos-rango`, {method:"POST", body: JSON.stringify(actorBody({perfil, min, max}))})
+    ));
+    toast("Rangos de Eventos críticos actualizados ✅");
+    await cargarPulsoEventosRango(); // por si el propio actor editó el rango de su propio perfil
+    actualizarPulsoBoton();
+  }catch(e){ toast("No se pudieron guardar los rangos"); }
 }
 
 /* ---------- documentos del colegio (alimentan IA GADUAI) ---------- */
@@ -1270,14 +1401,56 @@ function diasHastaCliente(fechaStr){
   const f = new Date(String(fechaStr).slice(0,10) + "T12:00:00");
   return Math.round((f - hoy) / 86400000);
 }
+function pulsoNum(v, fallback){ return (v===null || v===undefined || v==="") ? fallback : Number(v); }
+// Un ítem Triage Rojo cuenta como "evento crítico abierto" mientras no esté cerrado — mismo
+// criterio de "terminado" que ya usa pintarTimeline() para atenuar tarjetas (circuloEstado
+// para tareas, react.done para hitos) — así el número del monitor y el Timeline nunca discrepan.
+function eventosCriticosAbiertos(){
+  return timelineCache.filter(it => {
+    if(it.triage !== "Rojo") return false;
+    const react = it.react || {done:false};
+    const terminado = it.tipo === "tarea" ? it.circuloEstado === "cerrado" : !!react.done;
+    return !terminado;
+  }).length;
+}
 function actualizarPulsoBoton(){
-  const criticos = timelineCache.filter(it => it.triage === "Rojo" && diasHastaCliente(it.fecha) <= 0 && !it.revisado);
   const btn = document.getElementById("btn-pulso-gaduai");
-  const count = document.getElementById("pulso-gaduai-count");
   if(!btn) return;
-  btn.classList.toggle("critico", criticos.length > 0);
-  if(criticos.length){ count.textContent = criticos.length; count.classList.remove("hidden"); }
+  const c = STATE.colegio || {};
+  const count = document.getElementById("pulso-gaduai-count");
+  // El pulso rojo/parpadeo del botón completo se mantiene por lo urgente de hoy (Rojo vencido,
+  // como siempre) y ahora TAMBIÉN se enciende si Eventos críticos de ESTE perfil se sale de SU
+  // propio rango (no el del colegio — cada perfil ve y compara solo lo suyo) — no reemplaza la
+  // alerta anterior, se suma a ella.
+  const vencidosHoy = timelineCache.filter(it => it.triage === "Rojo" && diasHastaCliente(it.fecha) <= 0 && !it.revisado).length;
+  const eventos = eventosCriticosAbiertos();
+  const rangoEventos = STATE.pulsoEventosRango || {min:1, max:4};
+  const eMin = pulsoNum(rangoEventos.min, 1), eMax = pulsoNum(rangoEventos.max, 4);
+  const eventosFueraDeRango = eventos > eMax;
+  btn.classList.toggle("critico", vencidosHoy > 0 || eventosFueraDeRango);
+  if(vencidosHoy){ count.textContent = vencidosHoy; count.classList.remove("hidden"); }
   else { count.classList.add("hidden"); }
+
+  const elE = document.getElementById("pulso-eventos-valor");
+  elE.textContent = eventos;
+  elE.classList.toggle("pulso-valor-alerta", eventosFueraDeRango);
+  document.getElementById("pulso-eventos-min").textContent = eMin;
+  document.getElementById("pulso-eventos-max").textContent = eMax;
+
+  const aVal = c.pulso_asistencia_valor, aMin = pulsoNum(c.pulso_asistencia_min, 85), aMax = pulsoNum(c.pulso_asistencia_max, 100);
+  const elA = document.getElementById("pulso-asistencia-valor");
+  const hayA = aVal !== null && aVal !== undefined && aVal !== "";
+  elA.innerHTML = hayA ? `${aVal}<small>%</small>` : '<span class="pulso-valor-vacio">--</span>';
+  elA.classList.toggle("pulso-valor-alerta", hayA && Number(aVal) < aMin);
+  document.getElementById("pulso-asistencia-min").textContent = aMin;
+  document.getElementById("pulso-asistencia-max").textContent = aMax;
+
+  const mVal = c.pulso_matricula_valor, mMin = pulsoNum(c.pulso_matricula_min, 800), mMax = pulsoNum(c.pulso_matricula_max, 1000);
+  const elM = document.getElementById("pulso-matricula-valor");
+  const hayM = mVal !== null && mVal !== undefined && mVal !== "";
+  elM.innerHTML = hayM ? String(mVal) : '<span class="pulso-valor-vacio">--</span>';
+  document.getElementById("pulso-matricula-min").textContent = mMin;
+  document.getElementById("pulso-matricula-max").textContent = mMax;
 }
 const MONITOR_PERIODOS = {diaria:"Hoy", semanal:"Esta semana", mensual:"Este mes"};
 const PULSO_NIVEL = {
