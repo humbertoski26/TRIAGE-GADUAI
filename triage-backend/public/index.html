@@ -160,7 +160,12 @@
   .pulso-linea-matricula{color:#eab308}
   .pulso-linea-eventos{color:#38bdf8}
   @keyframes pulsoValorAlerta{0%,100%{opacity:1}50%{opacity:.2}}
-  .pulso-valor-alerta{color:#f87171!important;animation:pulsoValorAlerta 1s steps(2,jump-none) infinite;cursor:pointer}
+  /* padding+margen negativo agranda el área táctil real sin mover el número (el padding
+     vertical sí cuenta para el hit-test aunque el elemento fuera inline — acá no lo es: al
+     ser hijo directo de un contenedor flex, .pulso-valor queda "blockificado" por spec — en
+     el celular el número por sí solo era demasiado chico para tocarlo con el dedo). */
+  .pulso-valor-alerta{color:#f87171!important;animation:pulsoValorAlerta 1s steps(2,jump-none) infinite;cursor:pointer;padding:14px 8px;margin:-14px -8px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .pulso-valor-alerta:active{opacity:.55}
   /* Ícono chico de electro suelto, usado solo en el encabezado del modal PULSO GADUAI (no en
      el botón del home, que ahora tiene sus 3 líneas propias arriba). */
   .pulso-electro{width:60px;height:34px;flex:none;color:#10b981}
@@ -1498,14 +1503,32 @@ async function abrirMonitorVital(){
     document.getElementById("pulso-estado-frase").textContent = "No se pudo cargar.";
   }
 }
+// Saturación del hero del modal — a pedido, ya NO viene del cálculo del servidor
+// (tareas/prioridades), sino de cuántos de los 3 guarismos del monitor (Asistencia,
+// Matrícula, Eventos críticos) están fuera de su propio rango en este momento:
+// 0 fuera de rango -> 100% verde · 1 o 2 fuera de rango -> 95% amarillo · los 3 fuera -> 89% rojo.
+function calcularSaturacionGuarismos(){
+  const c = STATE.colegio || {};
+  const aVal = c.pulso_asistencia_valor, aMin = Math.round(pulsoNum(c.pulso_asistencia_min, 85));
+  const fallaAsistencia = aVal !== null && aVal !== undefined && aVal !== "" && Number(aVal) < aMin;
+  const mVal = c.pulso_matricula_valor, mMin = pulsoNum(c.pulso_matricula_min, 800);
+  const fallaMatricula = mVal !== null && mVal !== undefined && mVal !== "" && Number(mVal) < mMin;
+  const rangoEventos = STATE.pulsoEventosRango || {min:1, max:4};
+  const fallaEventos = eventosCriticosAbiertos() > pulsoNum(rangoEventos.max, 4);
+  const fallas = [fallaAsistencia, fallaMatricula, fallaEventos].filter(Boolean).length;
+  if(fallas >= 3) return {pct:89, clase:"text-rose-400"};
+  if(fallas >= 1) return {pct:95, clase:"text-amber-400"};
+  return {pct:100, clase:"text-emerald-400"};
+}
 function renderPulsoResumen(data){
   const estable = data.estado !== "atencion";
   document.getElementById("pulso-estado-frase").textContent = estable
     ? "El colegio está funcionando sin nudos críticos pendientes."
     : "Hay ítems críticos que merecen tu atención hoy.";
   const pct = document.getElementById("pulso-porcentaje");
-  pct.textContent = `${data.saturacion}%`;
-  pct.className = "text-2xl font-black " + (estable ? "text-emerald-400" : "text-rose-400");
+  const sat = calcularSaturacionGuarismos();
+  pct.textContent = `${sat.pct}%`;
+  pct.className = "text-2xl font-black " + sat.clase;
   document.getElementById("pulso-m-hoy").textContent = data.metricas.hoy;
   document.getElementById("pulso-m-prioritarias").textContent = data.metricas.prioritarias;
   document.getElementById("pulso-m-decisiones").textContent = data.metricas.decisiones;
