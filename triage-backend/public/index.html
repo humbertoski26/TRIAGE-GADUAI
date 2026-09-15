@@ -1796,12 +1796,12 @@ function pintarTimeline(){
         ${h.soloLectura ? `
         <span class="text-slate-600 opacity-50">👍</span>
         <span class="text-slate-600 opacity-50">👎</span>
-        <span class="text-slate-600 opacity-50">🤙</span>
+        <span class="text-slate-600 opacity-50">👌</span>
         <span class="text-slate-600 opacity-50"><i class="fa-solid fa-circle-check"></i></span>
         <span class="text-slate-600 opacity-50">♥</span>` : `
         <span class="react-btn text-slate-500 ${react.like?'active text-emerald-400':''}" onclick="reaccionar(${h.id},'like')" title="Me parece bien">👍<sup class="text-[9px]">${react.like||''}</sup></span>
         <span class="react-btn text-slate-500 ${react.dislike?'active text-rose-400':''}" onclick="reaccionar(${h.id},'dislike')" title="No corresponde">👎<sup class="text-[9px]">${react.dislike||''}</sup></span>
-        <span class="react-btn text-slate-500 ${react.ok?'active text-amber-300':''}" onclick="reaccionar(${h.id},'ok')" title="Acuso recibo">🤙<sup class="text-[9px]">${react.ok||''}</sup></span>
+        <span class="react-btn text-slate-500 ${react.ok?'active text-amber-300':''}" onclick="reaccionar(${h.id},'ok')" title="Acuso recibo">👌<sup class="text-[9px]">${react.ok||''}</sup></span>
         <span class="react-btn text-slate-500 ${react.done?'active text-emerald-400':''}" onclick="reaccionar(${h.id},'done')" title="Marcar cumplido"><i class="fa-solid fa-circle-check"></i></span>
         <span class="react-btn text-slate-500 ${react.heart?'active text-pink-400':''}" onclick="reaccionar(${h.id},'heart')" title="Agradecer">♥<sup class="text-[9px]">${react.heart||''}</sup></span>`}
         <span class="text-[10px] text-slate-500 ml-auto">${estado}</span>
