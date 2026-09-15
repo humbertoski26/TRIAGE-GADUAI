@@ -160,7 +160,7 @@
   .pulso-linea-matricula{color:#eab308}
   .pulso-linea-eventos{color:#38bdf8}
   @keyframes pulsoValorAlerta{0%,100%{opacity:1}50%{opacity:.2}}
-  .pulso-valor-alerta{color:#f87171!important;animation:pulsoValorAlerta 1s steps(2,jump-none) infinite}
+  .pulso-valor-alerta{color:#f87171!important;animation:pulsoValorAlerta 1s steps(2,jump-none) infinite;cursor:pointer}
   /* Ícono chico de electro suelto, usado solo en el encabezado del modal PULSO GADUAI (no en
      el botón del home, que ahora tiene sus 3 líneas propias arriba). */
   .pulso-electro{width:60px;height:34px;flex:none;color:#10b981}
@@ -285,7 +285,7 @@
               <path class="trazo" pathLength="100" d="M0,17 L20,17 L26,4 L32,30 L38,17 L90,17 L96,4 L102,30 L108,17 L160,17 L166,4 L172,30 L178,17 L200,17"/>
             </svg>
             <span class="pulso-rango"><b id="pulso-asistencia-max">100</b><i id="pulso-asistencia-min">85</i></span>
-            <span id="pulso-asistencia-valor" class="pulso-valor"><span class="pulso-valor-vacio">--</span></span>
+            <span id="pulso-asistencia-valor" class="pulso-valor" onclick="congelarPulsoLinea(event,'asistencia')" title="Clic en el número para silenciar la alerta por 5 min"><span class="pulso-valor-vacio">--</span></span>
           </div>
 
           <div class="pulso-linea pulso-linea-matricula">
@@ -295,7 +295,7 @@
               <path class="trazo" pathLength="100" d="M0,26 C8,26 10,6 18,6 C26,6 28,26 36,26 C44,26 46,6 54,6 C62,6 64,26 72,26 C80,26 82,6 90,6 C98,6 100,26 108,26 C116,26 118,6 126,6 C134,6 136,26 144,26 L200,26"/>
             </svg>
             <span class="pulso-rango"><b id="pulso-matricula-max">1000</b><i id="pulso-matricula-min">800</i></span>
-            <span id="pulso-matricula-valor" class="pulso-valor"><span class="pulso-valor-vacio">--</span></span>
+            <span id="pulso-matricula-valor" class="pulso-valor" onclick="congelarPulsoLinea(event,'matricula')" title="Clic en el número para silenciar la alerta por 5 min"><span class="pulso-valor-vacio">--</span></span>
           </div>
 
           <div class="pulso-linea pulso-linea-eventos">
@@ -305,7 +305,7 @@
               <path class="trazo" pathLength="100" d="M0,26 L18,26 L18,8 L54,8 L54,26 L90,26 L90,8 L126,8 L126,26 L162,26 L162,8 L200,8"/>
             </svg>
             <span class="pulso-rango"><b id="pulso-eventos-max">4</b><i id="pulso-eventos-min">1</i></span>
-            <span id="pulso-eventos-valor" class="pulso-valor">0</span>
+            <span id="pulso-eventos-valor" class="pulso-valor" onclick="congelarPulsoLinea(event,'eventos')" title="Clic en el número para silenciar la alerta por 5 min">0</span>
           </div>
         </button>
 
@@ -918,7 +918,7 @@ const TRIAGE = {
   Gris:   {orden:3, color:"#64748b", icon:"⚪", nombre:"Diferible",   desc:"No urgente + no importante · Programar/eliminar"}
 };
 
-let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, filtroTipo:"todos", filtroColor:"todos", filtroVencimiento:"todas", pulsoEventosRango:{min:1,max:4} };
+let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, filtroTipo:"todos", filtroColor:"todos", filtroVencimiento:"todas", pulsoEventosRango:{min:1,max:4}, pulsoCongelado:{} };
 let archivoPendiente = null;
 let timelineCache = [];
 let timelineCacheJson = "";
@@ -1413,6 +1413,26 @@ function eventosCriticosAbiertos(){
     return !terminado;
   }).length;
 }
+// Clic en un número que está parpadeando lo silencia 5 min (o hasta recargar la app — el
+// congelamiento vive solo en memoria, así que un reload lo limpia solo, sin código extra).
+// Si el número NO está alertando, el clic no hace nada especial y sigue de largo hacia el
+// onclick del botón completo (abre PULSO GADUAI), como siempre.
+const PULSO_CONGELADO_MS = 5 * 60 * 1000;
+function pulsoEstaCongelado(clave){
+  const hasta = (STATE.pulsoCongelado || {})[clave];
+  if(!hasta) return false;
+  if(Date.now() >= hasta){ delete STATE.pulsoCongelado[clave]; return false; }
+  return true;
+}
+function congelarPulsoLinea(ev, clave){
+  const el = ev.currentTarget;
+  if(!el.classList.contains("pulso-valor-alerta")) return;
+  ev.stopPropagation();
+  STATE.pulsoCongelado = STATE.pulsoCongelado || {};
+  STATE.pulsoCongelado[clave] = Date.now() + PULSO_CONGELADO_MS;
+  toast("Alerta silenciada por 5 min");
+  actualizarPulsoBoton();
+}
 function actualizarPulsoBoton(){
   const btn = document.getElementById("btn-pulso-gaduai");
   if(!btn) return;
@@ -1421,19 +1441,19 @@ function actualizarPulsoBoton(){
   // El pulso rojo/parpadeo del botón completo se mantiene por lo urgente de hoy (Rojo vencido,
   // como siempre) y ahora TAMBIÉN se enciende si Eventos críticos de ESTE perfil se sale de SU
   // propio rango (no el del colegio — cada perfil ve y compara solo lo suyo) — no reemplaza la
-  // alerta anterior, se suma a ella.
+  // alerta anterior, se suma a ella. Si esa alerta puntual está congelada, no contribuye acá.
   const vencidosHoy = timelineCache.filter(it => it.triage === "Rojo" && diasHastaCliente(it.fecha) <= 0 && !it.revisado).length;
   const eventos = eventosCriticosAbiertos();
   const rangoEventos = STATE.pulsoEventosRango || {min:1, max:4};
   const eMin = pulsoNum(rangoEventos.min, 1), eMax = pulsoNum(rangoEventos.max, 4);
-  const eventosFueraDeRango = eventos > eMax;
-  btn.classList.toggle("critico", vencidosHoy > 0 || eventosFueraDeRango);
+  const eventosAlerta = eventos > eMax && !pulsoEstaCongelado("eventos");
+  btn.classList.toggle("critico", vencidosHoy > 0 || eventosAlerta);
   if(vencidosHoy){ count.textContent = vencidosHoy; count.classList.remove("hidden"); }
   else { count.classList.add("hidden"); }
 
   const elE = document.getElementById("pulso-eventos-valor");
   elE.textContent = eventos;
-  elE.classList.toggle("pulso-valor-alerta", eventosFueraDeRango);
+  elE.classList.toggle("pulso-valor-alerta", eventosAlerta);
   document.getElementById("pulso-eventos-min").textContent = eMin;
   document.getElementById("pulso-eventos-max").textContent = eMax;
 
@@ -1441,7 +1461,7 @@ function actualizarPulsoBoton(){
   const elA = document.getElementById("pulso-asistencia-valor");
   const hayA = aVal !== null && aVal !== undefined && aVal !== "";
   elA.innerHTML = hayA ? `${Math.round(Number(aVal))}<small>%</small>` : '<span class="pulso-valor-vacio">--</span>';
-  elA.classList.toggle("pulso-valor-alerta", hayA && Number(aVal) < aMin);
+  elA.classList.toggle("pulso-valor-alerta", hayA && Number(aVal) < aMin && !pulsoEstaCongelado("asistencia"));
   document.getElementById("pulso-asistencia-min").textContent = aMin;
   document.getElementById("pulso-asistencia-max").textContent = aMax;
 
@@ -1449,7 +1469,7 @@ function actualizarPulsoBoton(){
   const elM = document.getElementById("pulso-matricula-valor");
   const hayM = mVal !== null && mVal !== undefined && mVal !== "";
   elM.innerHTML = hayM ? String(mVal) : '<span class="pulso-valor-vacio">--</span>';
-  elM.classList.toggle("pulso-valor-alerta", hayM && Number(mVal) < mMin);
+  elM.classList.toggle("pulso-valor-alerta", hayM && Number(mVal) < mMin && !pulsoEstaCongelado("matricula"));
   document.getElementById("pulso-matricula-min").textContent = mMin;
   document.getElementById("pulso-matricula-max").textContent = mMax;
 }
