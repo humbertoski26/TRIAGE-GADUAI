@@ -291,8 +291,10 @@ app.post("/api/colegios/:id/pulso-config", asyncRoute(async (req, res) => {
   if (!actor || ![PERFIL_MASTER, PERFIL_DIRECTOR_COLEGIO].includes(actor.perfil)) {
     return res.status(403).json({ error: "solo_master_o_director" });
   }
-  const numOrNull = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
-  const numOr = (v, fallback) => { const n = numOrNull(v); return n === null || Number.isNaN(n) ? fallback : n; };
+  // El % de asistencia se muestra sin decimales (pedido explícito) — se redondea acá, antes
+  // de guardar, para que nunca dependa de que el cliente mande un número ya entero.
+  const intOrNull = (v) => { if (v === "" || v === null || v === undefined) return null; const n = Number(v); return Number.isNaN(n) ? null : Math.round(n); };
+  const intOr = (v, fallback) => { const n = intOrNull(v); return n === null ? fallback : n; };
   const r = await pool.query(
     `update colegios set
        pulso_asistencia_valor=$2, pulso_asistencia_min=$3, pulso_asistencia_max=$4,
@@ -300,8 +302,8 @@ app.post("/api/colegios/:id/pulso-config", asyncRoute(async (req, res) => {
      where id=$1 returning id`,
     [
       req.params.id,
-      numOrNull(asistenciaValor), numOr(asistenciaMin, 85), numOr(asistenciaMax, 100),
-      numOrNull(matriculaValor), numOr(matriculaMin, 800), numOr(matriculaMax, 1000),
+      intOrNull(asistenciaValor), intOr(asistenciaMin, 85), intOr(asistenciaMax, 100),
+      intOrNull(matriculaValor), intOr(matriculaMin, 800), intOr(matriculaMax, 1000),
     ]
   );
   if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });

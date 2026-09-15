@@ -269,6 +269,13 @@ create index if not exists agenda_bloques_persona_idx on agenda_bloques(colegio_
 alter table colegios add column if not exists pulso_asistencia_valor numeric(5,2);
 alter table colegios add column if not exists pulso_asistencia_min numeric(5,2) not null default 85;
 alter table colegios add column if not exists pulso_asistencia_max numeric(5,2) not null default 100;
+-- Sin decimales en el % de asistencia (pedido explícito) — convierte lo ya guardado como
+-- numeric(5,2) a integer; el cast numeric->integer redondea, no trunca (85.6 -> 86).
+alter table colegios alter column pulso_asistencia_valor type integer using pulso_asistencia_valor::integer;
+alter table colegios alter column pulso_asistencia_min type integer using pulso_asistencia_min::integer;
+alter table colegios alter column pulso_asistencia_max type integer using pulso_asistencia_max::integer;
+alter table colegios alter column pulso_asistencia_min set default 85;
+alter table colegios alter column pulso_asistencia_max set default 100;
 alter table colegios add column if not exists pulso_matricula_valor integer;
 alter table colegios add column if not exists pulso_matricula_min integer not null default 800;
 alter table colegios add column if not exists pulso_matricula_max integer not null default 1000;

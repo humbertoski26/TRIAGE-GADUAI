@@ -489,9 +489,9 @@
 
       <p class="text-[10px] font-bold text-emerald-300 mb-1">Asistencia (%)</p>
       <div class="grid grid-cols-3 gap-2 mb-3">
-        <div><input id="pc-asistencia-valor" type="number" step="0.1" placeholder="Valor" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Valor hoy</p></div>
-        <div><input id="pc-asistencia-min" type="number" step="0.1" placeholder="85" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Mínimo</p></div>
-        <div><input id="pc-asistencia-max" type="number" step="0.1" placeholder="100" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Máximo</p></div>
+        <div><input id="pc-asistencia-valor" type="number" step="1" placeholder="Valor" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Valor hoy</p></div>
+        <div><input id="pc-asistencia-min" type="number" step="1" placeholder="85" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Mínimo</p></div>
+        <div><input id="pc-asistencia-max" type="number" step="1" placeholder="100" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"><p class="text-[9px] text-slate-600 mt-0.5 text-center">Máximo</p></div>
       </div>
 
       <p class="text-[10px] font-bold text-amber-300 mb-1">Matrícula</p>
@@ -1437,10 +1437,10 @@ function actualizarPulsoBoton(){
   document.getElementById("pulso-eventos-min").textContent = eMin;
   document.getElementById("pulso-eventos-max").textContent = eMax;
 
-  const aVal = c.pulso_asistencia_valor, aMin = pulsoNum(c.pulso_asistencia_min, 85), aMax = pulsoNum(c.pulso_asistencia_max, 100);
+  const aVal = c.pulso_asistencia_valor, aMin = Math.round(pulsoNum(c.pulso_asistencia_min, 85)), aMax = Math.round(pulsoNum(c.pulso_asistencia_max, 100));
   const elA = document.getElementById("pulso-asistencia-valor");
   const hayA = aVal !== null && aVal !== undefined && aVal !== "";
-  elA.innerHTML = hayA ? `${aVal}<small>%</small>` : '<span class="pulso-valor-vacio">--</span>';
+  elA.innerHTML = hayA ? `${Math.round(Number(aVal))}<small>%</small>` : '<span class="pulso-valor-vacio">--</span>';
   elA.classList.toggle("pulso-valor-alerta", hayA && Number(aVal) < aMin);
   document.getElementById("pulso-asistencia-min").textContent = aMin;
   document.getElementById("pulso-asistencia-max").textContent = aMax;
