@@ -267,6 +267,48 @@ app.delete("/api/colegios/:id", requireAdminKey, asyncRoute(async (req, res) => 
   res.json({ ok: true, eliminado: r.rows[0] });
 }));
 
+// Limpieza selectiva: borra toda la ACTIVIDAD de un colegio (Timeline, Círculo, chat, alertas,
+// Agenda, Entrevistas, historial de IA GADUAI, sugerencias del Pulso viejo) pero mantiene lo
+// estructural — cuentas de usuario, directorio de personas, documentos ya cargados (reglamento/
+// PEI), insignia y configuración de PULSO GADUAI (rangos) — para que un colegio real pueda
+// "resetearse" antes de entrar en producción sin tener que recrear nada de eso. Distinta de
+// DELETE /api/colegios/:id, que borra el colegio entero (cuentas incluidas).
+app.post("/api/colegios/:id/limpiar-actividad", requireAdminKey, asyncRoute(async (req, res) => {
+  const existe = await pool.query("select id from colegios where id=$1", [req.params.id]);
+  if (!existe.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  const cliente = await pool.connect();
+  try {
+    await cliente.query("BEGIN");
+    // Borrar items primero: cascade se lleva circulo_historial, chat_mensajes, alertas y los
+    // bloques de agenda_bloques que nacieron de una tarea (item_id no nulo).
+    const items = await cliente.query("delete from items where colegio_id=$1 returning id", [req.params.id]);
+    // Bloques de agenda reservados/bloqueados manualmente (sin item_id) no cascadearon arriba.
+    const agenda = await cliente.query("delete from agenda_bloques where colegio_id=$1 returning id", [req.params.id]);
+    const entrevistas = await cliente.query("delete from entrevistas where colegio_id=$1 returning id", [req.params.id]);
+    const chatIa = await cliente.query("delete from chat_ia where colegio_id=$1 returning id", [req.params.id]);
+    const monitorTareas = await cliente.query("delete from monitor_tareas where colegio_id=$1 returning id", [req.params.id]);
+    // Los valores "de hoy" de Asistencia/Matrícula son datos de prueba manuales — se limpian;
+    // los RANGOS (min/max) son configuración, no actividad, y se mantienen tal cual.
+    await cliente.query("update colegios set pulso_asistencia_valor=null, pulso_matricula_valor=null where id=$1", [req.params.id]);
+    await cliente.query("COMMIT");
+    res.json({
+      ok: true,
+      borrados: {
+        items: items.rows.length,
+        agendaBloques: agenda.rows.length,
+        entrevistas: entrevistas.rows.length,
+        chatIa: chatIa.rows.length,
+        monitorTareas: monitorTareas.rows.length,
+      },
+    });
+  } catch (e) {
+    await cliente.query("ROLLBACK");
+    throw e;
+  } finally {
+    cliente.release();
+  }
+}));
+
 // Pública a propósito: es la que usa el link con ?colegio=<id> para mostrar el nombre antes
 // de loguearse. No expone la lista completa, solo un colegio puntual si se sabe su id.
 app.get("/api/colegios/:id", asyncRoute(async (req, res) => {
