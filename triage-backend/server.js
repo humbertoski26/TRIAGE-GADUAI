@@ -1903,8 +1903,8 @@ app.get("/manifest.webmanifest", (req, res) => {
     start_url: `/${colegio}`,
     scope: "/",
     display: "standalone",
-    background_color: "#020617",
-    theme_color: "#020617",
+    background_color: "#0C0B70",
+    theme_color: "#0C0B70",
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },

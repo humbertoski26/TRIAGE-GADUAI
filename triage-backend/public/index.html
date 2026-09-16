@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 <title>GADUAI</title>
-<meta name="theme-color" content="#020617">
+<meta name="theme-color" content="#0C0B70">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -111,18 +111,24 @@
   .quad-cell:hover{transform:scale(1.02)}
   .quad-cell.selected{outline:3px solid #fff;outline-offset:-3px}
   .modal-scroll{max-height:82vh;overflow-y:auto}
-  .brand-gradient{background:linear-gradient(90deg,#f43f5e,#f59e0b,#818cf8,#38bdf8)}
-  .gaduai-gradient{background:linear-gradient(90deg,#4338ca,#0ea5e9)}
-  .gaduai-btn-indigo{background:#4338ca}
-  .gaduai-btn-indigo:hover{background:#3730a3}
-  .gaduai-btn-accent{background:#5B72D6}
-  .gaduai-btn-accent:hover{background:#4759b8}
-  .gaduai-btn-cyan{background:#0ea5e9}
-  .gaduai-btn-cyan:hover{background:#0284c7}
-  .gaduai-btn-violet{background:#7c3aed}
-  .gaduai-btn-violet:hover{background:#6d28d9}
-  .gaduai-btn-lime{background:linear-gradient(90deg,#65a30d,#059669)}
-  .gaduai-btn-lime:hover{background:linear-gradient(90deg,#4d7c0f,#047857)}
+  /* ---------- Paleta Inteligencia Educativa (oficial) ----------
+     Azul marino #0C0B70 identidad/navegación · Azul intenso #0034DA menús y
+     acciones principales · Turquesa IA #20C9B5 exclusivo de lo que es IA
+     (IA GADUAI) · Violeta #8B5CF6 funciones inteligentes/automatizadas
+     (Agenda, Buscador) · los colores de Triage (rojo/naranjo/azul/gris) NO
+     se tocan: son un sistema semántico de urgencia, no de marca. */
+  .brand-gradient{background:linear-gradient(90deg,#0034DA,#8B5CF6)}
+  .gaduai-gradient{background:linear-gradient(90deg,#0C0B70,#20C9B5)}
+  .gaduai-btn-indigo{background:#0034DA}
+  .gaduai-btn-indigo:hover{background:#0028ad}
+  .gaduai-btn-accent{background:#0034DA}
+  .gaduai-btn-accent:hover{background:#0028ad}
+  .gaduai-btn-cyan{background:#0C0B70}
+  .gaduai-btn-cyan:hover{background:#08075a}
+  .gaduai-btn-violet{background:#8B5CF6}
+  .gaduai-btn-violet:hover{background:#7c3aed}
+  .gaduai-btn-lime{background:linear-gradient(90deg,#7c3aed,#6d28d9)}
+  .gaduai-btn-lime:hover{background:linear-gradient(90deg,#6d28d9,#5b21b6)}
   /* ---------- Fase 9/18: PULSO GADUAI — monitor de signos vitales del colegio ----------
      Botón más grande que sus vecinos (Entrevista/Relacionai/IA GADUAI/Buscador) a propósito
      — es el primero y el más importante de la fila. Se ve como un monitor clínico: 3 líneas
@@ -175,7 +181,7 @@
   .monitor-tarea{display:flex;align-items:flex-start;gap:10px;background:#020617;border:1px solid #1e293b;border-radius:12px;padding:10px 12px}
   .monitor-check{flex:none;width:20px;height:20px;border-radius:9999px;border:2px solid #475569;cursor:pointer;margin-top:1px}
   .monitor-check:hover{border-color:#10b981}
-  .logo-orb{background:radial-gradient(circle at 35% 30%,#22d3ee,#4338ca 65%,#1e1b4b);box-shadow:0 0 30px -4px rgba(56,189,248,.7)}
+  .logo-orb{background:radial-gradient(circle at 35% 30%,#20C9B5,#0034DA 65%,#0C0B70);box-shadow:0 0 30px -4px rgba(32,201,181,.6)}
   .react-btn{transition:.15s;cursor:pointer}
   .react-btn:hover{transform:scale(1.15)}
   .react-btn.active{filter:drop-shadow(0 0 4px currentColor)}
@@ -192,8 +198,8 @@
 <div id="pantalla-landing" class="min-h-screen flex items-center justify-center p-4">
   <div class="w-full max-w-lg fade-in">
     <div class="flex flex-col items-center text-center mb-8">
-      <div class="w-20 h-20 rounded-full logo-orb flex items-center justify-center text-white text-3xl mb-4"><i class="fa-solid fa-list-check"></i></div>
-      <h1 class="text-3xl font-black text-white leading-tight">GADU<span class="text-cyan-400">AI</span></h1>
+      <img src="/icons/icon-512.png" alt="GADUAI" class="w-20 h-20 rounded-2xl mb-4">
+      <h1 class="text-3xl font-black text-white leading-tight">GADU<span style="color:#20C9B5">AI</span></h1>
       <p class="text-sm font-bold text-slate-300 mt-1">Sistema de Inteligencia Organizacional para colegios</p>
       <p class="text-[11px] uppercase tracking-widest text-slate-500 mt-2">Timeline · Perfiles · Triage inteligente · Entrevista formal</p>
     </div>
@@ -229,8 +235,8 @@
     <div class="h-1.5 gaduai-gradient"></div>
     <div class="p-8">
       <div class="flex flex-col items-center text-center mb-5">
-        <div class="w-16 h-16 rounded-full logo-orb flex items-center justify-center text-white text-2xl mb-3"><i class="fa-solid fa-list-check"></i></div>
-        <h1 class="text-xl font-black"><span class="text-indigo-400">PLATAFORMA</span> <span class="text-cyan-400">GADUAI</span></h1>
+        <img src="/icons/icon-512.png" alt="GADUAI" class="w-16 h-16 rounded-2xl mb-3">
+        <h1 class="text-xl font-black"><span style="color:#7c8aff">PLATAFORMA</span> <span style="color:#20C9B5">GADUAI</span></h1>
         <p class="text-xs font-bold text-slate-300">Triage · Sistema de Inteligencia Organizacional</p>
         <p class="text-[10px] uppercase tracking-widest text-slate-500 mt-1">Datos · Personas · Propósito</p>
       </div>
