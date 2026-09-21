@@ -1394,7 +1394,10 @@ function cerrarUsuarios(){ document.getElementById("modal-usuarios").classList.a
 // nuevo por su cuenta (nunca confía solo en lo que validó el cliente).
 const CM_CONFIG = {
   funcionario: {
-    columnas: ["nombre","rut","cargo","correo"],
+    // "columnas" lista las claves de la fila YA MAPEADA (mapFila) que se muestran en la vista
+    // previa — no los encabezados originales de la planilla (por eso "cargo" del Excel se lee
+    // aquí como "detalle", que es el nombre real que le da mapFila más abajo).
+    columnas: ["nombre","rut","detalle","correo"],
     requeridos: ["nombre"],
     endpoint: () => `/api/colegios/${STATE.colegioId}/directorio/carga-masiva`,
     bodyExtra: {tipo:"funcionario"},
@@ -1406,7 +1409,7 @@ const CM_CONFIG = {
     }),
   },
   estudiante: {
-    columnas: ["nombre","rut","curso"],
+    columnas: ["nombre","rut","detalle"],
     requeridos: ["nombre"],
     endpoint: () => `/api/colegios/${STATE.colegioId}/directorio/carga-masiva`,
     bodyExtra: {tipo:"estudiante"},
