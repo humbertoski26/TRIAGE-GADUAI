@@ -218,12 +218,20 @@ create table if not exists directorio_personas (
   nombre text not null,
   rut text,
   detalle text,                  -- cargo (funcionario) o curso (estudiante)
+  correo text,
+  activo boolean not null default true,   -- baja lógica: nunca se borra (el historial referencia persona_id)
   creado_por text not null,
-  creado_en timestamptz not null default now()
+  creado_en timestamptz not null default now(),
+  actualizado_por text,
+  actualizado_en timestamptz
 );
 create index if not exists directorio_personas_colegio_idx on directorio_personas(colegio_id);
 create index if not exists directorio_personas_nombre_idx on directorio_personas(colegio_id, nombre);
 create index if not exists directorio_personas_rut_idx on directorio_personas(colegio_id, rut);
+-- Un mismo RUT no puede repetirse dos veces activo en el mismo colegio: así la carga masiva
+-- puede reconocer "ya existe, actualizar" en vez de duplicar a la persona en cada resubida.
+create unique index if not exists directorio_personas_colegio_rut_idx
+  on directorio_personas(colegio_id, rut) where rut is not null and rut <> '';
 
 create table if not exists historial_persona (
   id bigserial primary key,
@@ -238,6 +246,26 @@ create table if not exists historial_persona (
   creado_en timestamptz not null default now()
 );
 create index if not exists historial_persona_persona_idx on historial_persona(persona_id);
+
+-- Horario semanal FIJO de cada docente (Fase 19) — una fila por bloque de clase. Se sube por
+-- planilla desde Configuración y se reemplaza completo por docente en cada resubida (no se
+-- acumula), para que actualizar el horario a mitad de semestre sea simplemente volver a subir
+-- el archivo. Alimenta el módulo de Ausentismo: de aquí sale qué bloques cubrir cuando alguien
+-- falta, y quién tiene la hora libre para proponerlo como reemplazo.
+create table if not exists docentes_horario (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  persona_id bigint not null references directorio_personas(id) on delete cascade,
+  dia_semana smallint not null,     -- 1=lunes … 5=viernes
+  hora_inicio text not null,        -- '08:00'
+  hora_fin text not null,           -- '08:45'
+  curso text,
+  asignatura text,
+  creado_por text not null,
+  creado_en timestamptz not null default now()
+);
+create index if not exists docentes_horario_persona_idx on docentes_horario(persona_id, dia_semana);
+create index if not exists docentes_horario_colegio_idx on docentes_horario(colegio_id, dia_semana);
 
 -- ---------- Agenda / Calendario (Fase 10) ----------
 -- Solo se guarda una fila cuando un bloque de 45 min deja de estar "abierto" — la ausencia

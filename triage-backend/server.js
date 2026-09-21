@@ -1650,30 +1650,42 @@ async function actorConAccesoBuscador(colegioId, correo, clave) {
   if (!actor || !PERFILES_BUSCADOR.includes(actor.perfil)) return null;
   return actor;
 }
+// Carga masiva y edición/baja del directorio: solo quien administra el colegio completo
+// (mismos 2 perfiles que administran Relacionai) — UTP e Inspector General siguen pudiendo
+// dar de alta una persona a la vez desde el Buscador (actorConAccesoBuscador), pero no un
+// lote completo ni dar de baja a nadie.
+const PERFILES_DIRECTORIO_ADMIN = [PERFIL_MASTER, "Director/a de colegio"];
+async function actorAdminDirectorio(colegioId, correo, clave) {
+  const actor = await verificarActor(colegioId, correo, clave);
+  if (!actor || !PERFILES_DIRECTORIO_ADMIN.includes(actor.perfil)) return null;
+  return actor;
+}
 
 // Búsqueda y ficha van por POST (no GET) aunque sean lecturas: así la clave del actor nunca
 // viaja en la URL/query string (no queda en logs ni en el historial del navegador).
 app.post("/api/colegios/:id/directorio/buscar", asyncRoute(async (req, res) => {
-  const { actorCorreo, actorClave, q } = req.body || {};
+  const { actorCorreo, actorClave, q, incluirInactivos } = req.body || {};
   const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(403).json({ error: "sin_permiso" });
   const termino = (q || "").trim();
   if (termino.length < 2) return res.json([]);
   const r = await pool.query(
-    "select id, tipo, nombre, rut, detalle from directorio_personas where colegio_id=$1 and (nombre ilike $2 or rut ilike $2) order by nombre asc limit 30",
+    `select id, tipo, nombre, rut, detalle, correo, activo from directorio_personas
+     where colegio_id=$1 and (nombre ilike $2 or rut ilike $2) ${incluirInactivos ? "" : "and activo=true"}
+     order by nombre asc limit 30`,
     [req.params.id, `%${termino}%`]
   );
   res.json(r.rows);
 }));
 
 app.post("/api/colegios/:id/directorio", asyncRoute(async (req, res) => {
-  const { actorCorreo, actorClave, tipo, nombre, rut, detalle } = req.body || {};
+  const { actorCorreo, actorClave, tipo, nombre, rut, detalle, correo } = req.body || {};
   const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(403).json({ error: "sin_permiso" });
   if (!tipo || !nombre || !nombre.trim()) return res.status(400).json({ error: "campos_requeridos" });
   const r = await pool.query(
-    "insert into directorio_personas (colegio_id, tipo, nombre, rut, detalle, creado_por) values ($1,$2,$3,$4,$5,$6) returning id, tipo, nombre, rut, detalle",
-    [req.params.id, tipo, nombre.trim(), rut || null, detalle || null, actor.nombre]
+    "insert into directorio_personas (colegio_id, tipo, nombre, rut, detalle, correo, creado_por) values ($1,$2,$3,$4,$5,$6,$7) returning id, tipo, nombre, rut, detalle, correo, activo",
+    [req.params.id, tipo, nombre.trim(), rut || null, detalle || null, correo || null, actor.nombre]
   );
   res.json(r.rows[0]);
 }));
@@ -1683,7 +1695,7 @@ app.post("/api/colegios/:id/directorio/:personaId/ver", asyncRoute(async (req, r
   const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(403).json({ error: "sin_permiso" });
   const persona = await pool.query(
-    "select id, tipo, nombre, rut, detalle from directorio_personas where id=$1 and colegio_id=$2",
+    "select id, tipo, nombre, rut, detalle, correo, activo from directorio_personas where id=$1 and colegio_id=$2",
     [req.params.personaId, req.params.id]
   );
   if (!persona.rows.length) return res.status(404).json({ error: "no_encontrada" });
@@ -1692,6 +1704,160 @@ app.post("/api/colegios/:id/directorio/:personaId/ver", asyncRoute(async (req, r
     [req.params.personaId]
   );
   res.json({ ...persona.rows[0], historial: historial.rows });
+}));
+
+// Editar datos de una persona — mismos 4 perfiles del Buscador (no solo los 2 de carga
+// masiva: corregir un RUT mal tipeado a mano es una edición chica, no una operación masiva).
+app.post("/api/colegios/:id/directorio/:personaId/editar", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, nombre, rut, detalle, correo } = req.body || {};
+  const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  if (!nombre || !nombre.trim()) return res.status(400).json({ error: "nombre_requerido" });
+  const r = await pool.query(
+    `update directorio_personas set nombre=$3, rut=$4, detalle=$5, correo=$6, actualizado_por=$7, actualizado_en=now()
+     where id=$1 and colegio_id=$2 returning id, tipo, nombre, rut, detalle, correo, activo`,
+    [req.params.personaId, req.params.id, nombre.trim(), rut || null, detalle || null, correo || null, actor.nombre]
+  );
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrada" });
+  res.json(r.rows[0]);
+}));
+
+// Baja/reactivación lógica — solo los 2 perfiles que administran el colegio completo.
+// Nunca se borra la fila: el historial (entrevistas, ausencias) sigue apuntando a persona_id.
+app.post("/api/colegios/:id/directorio/:personaId/baja", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave } = req.body || {};
+  const actor = await actorAdminDirectorio(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  const r = await pool.query(
+    `update directorio_personas set activo=false, actualizado_por=$3, actualizado_en=now()
+     where id=$1 and colegio_id=$2 returning id`,
+    [req.params.personaId, req.params.id, actor.nombre]
+  );
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrada" });
+  res.json({ ok: true });
+}));
+
+app.post("/api/colegios/:id/directorio/:personaId/reactivar", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave } = req.body || {};
+  const actor = await actorAdminDirectorio(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  const r = await pool.query(
+    `update directorio_personas set activo=true, actualizado_por=$3, actualizado_en=now()
+     where id=$1 and colegio_id=$2 returning id`,
+    [req.params.personaId, req.params.id, actor.nombre]
+  );
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrada" });
+  res.json({ ok: true });
+}));
+
+// Carga masiva de colaboradores/estudiantes — el frontend ya parseó y validó el archivo
+// (SheetJS), acá solo llega la lista de filas limpias. Por RUT: si ya existe activo en este
+// colegio, se ACTUALIZA (detalle/correo) en vez de duplicar — así resubir la misma planilla
+// a mitad de año, con datos al día, no crea personas repetidas.
+app.post("/api/colegios/:id/directorio/carga-masiva", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, tipo, filas } = req.body || {};
+  const actor = await actorAdminDirectorio(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  if (!["funcionario", "estudiante"].includes(tipo)) return res.status(400).json({ error: "tipo_invalido" });
+  if (!Array.isArray(filas) || !filas.length) return res.status(400).json({ error: "sin_filas" });
+
+  let creadas = 0, actualizadas = 0;
+  const filasConError = [];
+  const cliente = await pool.connect();
+  try {
+    await cliente.query("BEGIN");
+    for (let i = 0; i < filas.length; i++) {
+      const f = filas[i] || {};
+      const nombre = (f.nombre || "").trim();
+      if (!nombre) { filasConError.push({ fila: i + 1, motivo: "sin nombre" }); continue; }
+      const rut = (f.rut || "").trim() || null;
+      const detalle = (f.detalle || "").trim() || null;
+      const correo = (f.correo || "").trim() || null;
+      if (rut) {
+        const r = await cliente.query(
+          `update directorio_personas set nombre=$3, detalle=$4, correo=$5, activo=true, actualizado_por=$6, actualizado_en=now()
+           where colegio_id=$1 and rut=$2 returning id`,
+          [req.params.id, rut, nombre, detalle, correo, actor.nombre]
+        );
+        if (r.rows.length) { actualizadas++; continue; }
+      }
+      await cliente.query(
+        "insert into directorio_personas (colegio_id, tipo, nombre, rut, detalle, correo, creado_por) values ($1,$2,$3,$4,$5,$6,$7)",
+        [req.params.id, tipo, nombre, rut, detalle, correo, actor.nombre]
+      );
+      creadas++;
+    }
+    await cliente.query("COMMIT");
+  } catch (e) {
+    await cliente.query("ROLLBACK");
+    throw e;
+  } finally {
+    cliente.release();
+  }
+  res.json({ creadas, actualizadas, filasConError });
+}));
+
+// Carga masiva de horario docente — reemplaza el horario completo de cada docente
+// mencionado en la planilla (borra sus bloques viejos, inserta los nuevos), para que resubir
+// el archivo a mitad de semestre no vaya acumulando bloques duplicados. Cada fila debe traer
+// el RUT de alguien que YA exista en el directorio como funcionario (se sube primero la Fase
+// 18, de ahí el mensaje de error explícito si no calza).
+app.post("/api/colegios/:id/docentes-horario/carga-masiva", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, filas } = req.body || {};
+  const actor = await actorAdminDirectorio(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  if (!Array.isArray(filas) || !filas.length) return res.status(400).json({ error: "sin_filas" });
+
+  const DIAS = { lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5 };
+  // Sin depender de rangos Unicode de tildes (ambiguos de escribir en el código fuente) —
+  // reemplazo directo de las 5 vocales acentuadas que pueden venir en "miércoles".
+  function sinTildes(s) {
+    return s.replace(/á/g, "a").replace(/é/g, "e").replace(/í/g, "i").replace(/ó/g, "o").replace(/ú/g, "u");
+  }
+  let creados = 0;
+  const filasConError = [];
+  const rutsTocados = new Set();
+  const cliente = await pool.connect();
+  try {
+    await cliente.query("BEGIN");
+    for (let i = 0; i < filas.length; i++) {
+      const f = filas[i] || {};
+      const rut = (f.rut || f.rutDocente || "").trim();
+      const diaSemana = DIAS[sinTildes((f.dia || "").trim().toLowerCase())];
+      const horaInicio = (f.horaInicio || "").trim();
+      const horaFin = (f.horaFin || "").trim();
+      if (!rut || !diaSemana || !horaInicio || !horaFin) {
+        filasConError.push({ fila: i + 1, motivo: "faltan campos obligatorios (rut, día, hora inicio/fin)" });
+        continue;
+      }
+      const persona = await cliente.query(
+        "select id from directorio_personas where colegio_id=$1 and rut=$2 and tipo='funcionario' and activo=true",
+        [req.params.id, rut]
+      );
+      if (!persona.rows.length) {
+        filasConError.push({ fila: i + 1, motivo: `RUT ${rut} no está en Directorio: colaboradores — agréguelo primero ahí` });
+        continue;
+      }
+      const personaId = persona.rows[0].id;
+      if (!rutsTocados.has(personaId)) {
+        await cliente.query("delete from docentes_horario where persona_id=$1", [personaId]);
+        rutsTocados.add(personaId);
+      }
+      await cliente.query(
+        `insert into docentes_horario (colegio_id, persona_id, dia_semana, hora_inicio, hora_fin, curso, asignatura, creado_por)
+         values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [req.params.id, personaId, diaSemana, horaInicio, horaFin, (f.curso || "").trim() || null, (f.asignatura || "").trim() || null, actor.nombre]
+      );
+      creados++;
+    }
+    await cliente.query("COMMIT");
+  } catch (e) {
+    await cliente.query("ROLLBACK");
+    throw e;
+  } finally {
+    cliente.release();
+  }
+  res.json({ creados, docentesActualizados: rutsTocados.size, filasConError });
 }));
 
 app.post("/api/colegios/:id/directorio/:personaId/historial", asyncRoute(async (req, res) => {

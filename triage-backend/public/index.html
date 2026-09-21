@@ -15,6 +15,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script>
   // El manifest lleva el ?colegio= actual, para que "Instalar app" abra directo ese colegio
   // la próxima vez, sin pasar por la portada.
@@ -324,7 +325,6 @@
           <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Perfiles conectados</p>
           <div id="menu-perfiles" class="space-y-1 mb-3 max-h-32 overflow-y-auto"></div>
           <button id="btn-tema" onclick="cambiarTema()" class="w-full text-[11px] text-sky-300 border border-sky-500/30 rounded-lg py-2"><i class="fa-solid fa-sun mr-1"></i> Modo claro</button>
-          <button id="btn-usuarios" onclick="abrirUsuarios()" hidden class="w-full mt-2 text-[11px] text-cyan-300 border border-cyan-500/30 rounded-lg py-2"><i class="fa-solid fa-users-gear mr-1"></i> Usuarios</button>
           <button id="btn-configuracion" onclick="abrirUsuarios()" hidden class="w-full mt-2 text-[11px] text-slate-300 border border-slate-600/40 rounded-lg py-2"><i class="fa-solid fa-gear mr-1"></i> Configuración</button>
           <button id="btn-activar-push" onclick="activarPush()" class="w-full mt-2 text-[11px] text-amber-300 border border-amber-500/30 rounded-lg py-2"><i class="fa-solid fa-bell mr-1"></i> Activar notificaciones</button>
         </div>
@@ -477,15 +477,30 @@
 
 <!-- ============ MODAL: ADMINISTRAR USUARIOS ============ -->
 <div id="modal-usuarios" class="hidden fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
-  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+  <div class="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
     <div class="flex justify-between items-start mb-4">
       <div>
-        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-users-gear text-cyan-400"></i> Administrar usuarios</h3>
-        <p class="text-[11px] text-slate-500">Cree un acceso por cada persona del colegio: nombre, correo, contraseña y perfil.</p>
+        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-gear text-cyan-400"></i> Configuración</h3>
+        <p class="text-[11px] text-slate-500">Elige un tema para configurar.</p>
       </div>
       <button onclick="cerrarUsuarios()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
     </div>
-    <div id="bloque-insignia" class="hidden border-t border-slate-800 pt-4 mb-4">
+
+    <div id="config-tabs" class="flex flex-wrap gap-1.5 mb-4 border-b border-slate-800 pb-4"></div>
+
+    <div id="bloque-cuentas" class="hidden">
+      <div id="lista-usuarios" class="space-y-2 mb-5"></div>
+      <div class="border-t border-slate-800 pt-4">
+        <p class="text-[11px] font-bold text-white mb-2">Nuevo usuario</p>
+        <input id="u-nombre" placeholder="Nombre completo" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+        <input id="u-correo" placeholder="correo@colegio.cl" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+        <input id="u-clave" placeholder="Contraseña" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+        <select id="u-perfil" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-3"></select>
+        <button onclick="agregarUsuario()" class="w-full gaduai-gradient text-white text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-user-plus mr-1"></i> Crear usuario</button>
+      </div>
+    </div>
+
+    <div id="bloque-insignia" class="hidden">
       <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-image mr-1 text-lime-300"></i> Insignia del colegio</p>
       <p class="text-[10px] text-slate-500 mb-2">Se muestra junto al logo de GADUAI en el encabezado y en documentos formales (ej. Entrevista). Cada colegio la sube una sola vez.</p>
       <div class="flex items-center gap-3 mb-2">
@@ -494,7 +509,8 @@
       <input id="ins-archivo" type="file" accept="image/*" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-2">
       <button onclick="subirInsignia()" class="w-full bg-lime-600/20 text-lime-300 border border-lime-500/30 text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-upload mr-1"></i> Subir / actualizar insignia</button>
     </div>
-    <div id="bloque-pulso-config" class="hidden border-t border-slate-800 pt-4 mb-4">
+
+    <div id="bloque-pulso-config" class="hidden">
       <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-heart-pulse mr-1 text-emerald-300"></i> Configuración de PULSO GADUAI</p>
       <p class="text-[10px] text-slate-500 mb-3">Asistencia y Matrícula se escriben a mano mientras no exista integración con SIGE. Los rangos definen cuándo cada línea se considera normal.</p>
 
@@ -519,33 +535,47 @@
       <div id="pc-eventos-lista" class="space-y-1.5 mb-3"></div>
       <button onclick="guardarEventosRangos()" class="w-full bg-sky-600/20 text-sky-300 border border-sky-500/30 text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-floppy-disk mr-1"></i> Guardar rangos de Eventos críticos</button>
     </div>
-    <div id="bloque-usuarios-admin" class="hidden">
-      <div id="lista-usuarios" class="space-y-2 mb-5"></div>
-      <div class="border-t border-slate-800 pt-4">
-        <p class="text-[11px] font-bold text-white mb-2">Nuevo usuario</p>
-        <input id="u-nombre" placeholder="Nombre completo" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
-        <input id="u-correo" placeholder="correo@colegio.cl" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
-        <input id="u-clave" placeholder="Contraseña" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
-        <select id="u-perfil" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-3"></select>
-        <button onclick="agregarUsuario()" class="w-full gaduai-gradient text-white text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-user-plus mr-1"></i> Crear usuario</button>
+
+    <div id="bloque-documentos-ia" class="hidden">
+      <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-brain text-indigo-300 mr-1"></i> Documentos para IA GADUAI</p>
+      <p class="text-[10px] text-slate-500 mb-2">El reglamento interno es lo más importante para alimentar el cerebro de IA GADUAI. PEI, PME y reglamento de evaluación son voluntarios pero recomendados. También puede agregar cualquier otro documento.</p>
+      <div id="lista-documentos" class="space-y-2 mb-3"></div>
+      <select id="d-tipo" onchange="document.getElementById('d-nombre-wrap').classList.toggle('hidden', this.value!=='Otro')" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+        <option>Reglamento interno</option>
+        <option>PEI</option>
+        <option>PME</option>
+        <option>Reglamento de evaluación</option>
+        <option>Otro</option>
+      </select>
+      <div id="d-nombre-wrap" class="hidden">
+        <input id="d-nombre" placeholder="Nombre del documento" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
       </div>
-      <div class="border-t border-slate-800 pt-4 mt-4">
-        <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-brain text-indigo-300 mr-1"></i> Documentos para IA GADUAI</p>
-        <p class="text-[10px] text-slate-500 mb-2">El reglamento interno es lo más importante para alimentar el cerebro de IA GADUAI. PEI, PME y reglamento de evaluación son voluntarios pero recomendados. También puede agregar cualquier otro documento.</p>
-        <div id="lista-documentos" class="space-y-2 mb-3"></div>
-        <select id="d-tipo" onchange="document.getElementById('d-nombre-wrap').classList.toggle('hidden', this.value!=='Otro')" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
-          <option>Reglamento interno</option>
-          <option>PEI</option>
-          <option>PME</option>
-          <option>Reglamento de evaluación</option>
-          <option>Otro</option>
-        </select>
-        <div id="d-nombre-wrap" class="hidden">
-          <input id="d-nombre" placeholder="Nombre del documento" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
-        </div>
-        <input id="d-archivo" type="file" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-2">
-        <button onclick="agregarDocumento()" class="w-full bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-file-arrow-up mr-1"></i> Subir documento</button>
-      </div>
+      <input id="d-archivo" type="file" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-2">
+      <button onclick="agregarDocumento()" class="w-full bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-file-arrow-up mr-1"></i> Subir documento</button>
+    </div>
+
+    <div id="bloque-cm-funcionario" class="hidden">
+      <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-people-group mr-1 text-cyan-300"></i> Directorio: colaboradores</p>
+      <p class="text-[10px] text-slate-500 mb-3">Planilla .xlsx o .csv con columnas <b>nombre, rut, cargo, correo</b> (correo opcional). Incluye tanto profesores como asistentes de la educación — use la columna "cargo" para distinguirlos (ej. "Profesor de Matemática", "Asistente de aula"). Si el RUT ya existe en este colegio, se actualiza en vez de duplicarse.</p>
+      <input id="cm-funcionario-archivo" type="file" accept=".xlsx,.xls,.csv" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-2">
+      <button onclick="cmLeerArchivo('funcionario')" class="w-full bg-cyan-600/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold py-2.5 rounded-xl mb-3"><i class="fa-solid fa-table mr-1"></i> Leer archivo y previsualizar</button>
+      <div id="cm-funcionario-preview"></div>
+    </div>
+
+    <div id="bloque-cm-estudiante" class="hidden">
+      <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-user-graduate mr-1 text-violet-300"></i> Directorio: estudiantes</p>
+      <p class="text-[10px] text-slate-500 mb-3">Planilla .xlsx o .csv con columnas <b>nombre, rut, curso</b>. Si el RUT ya existe en este colegio, se actualiza en vez de duplicarse.</p>
+      <input id="cm-estudiante-archivo" type="file" accept=".xlsx,.xls,.csv" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-2">
+      <button onclick="cmLeerArchivo('estudiante')" class="w-full bg-violet-600/20 text-violet-300 border border-violet-500/30 text-xs font-bold py-2.5 rounded-xl mb-3"><i class="fa-solid fa-table mr-1"></i> Leer archivo y previsualizar</button>
+      <div id="cm-estudiante-preview"></div>
+    </div>
+
+    <div id="bloque-cm-horario" class="hidden">
+      <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-calendar-days mr-1 text-amber-300"></i> Horarios docentes</p>
+      <p class="text-[10px] text-slate-500 mb-3">Planilla .xlsx o .csv con columnas <b>rut, dia, horaInicio, horaFin, curso, asignatura</b> — una fila por bloque de clase (ej. lunes, 08:00, 08:45). El docente debe existir primero en Directorio: colaboradores. Volver a subir la planilla reemplaza el horario completo de cada docente mencionado.</p>
+      <input id="cm-horario-archivo" type="file" accept=".xlsx,.xls,.csv" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-2">
+      <button onclick="cmLeerArchivo('horario')" class="w-full bg-amber-600/20 text-amber-300 border border-amber-500/30 text-xs font-bold py-2.5 rounded-xl mb-3"><i class="fa-solid fa-table mr-1"></i> Leer archivo y previsualizar</button>
+      <div id="cm-horario-preview"></div>
     </div>
   </div>
 </div>
@@ -728,9 +758,22 @@
       <div>
         <h3 id="ficha-nombre" class="text-base font-black text-white"></h3>
         <p id="ficha-detalle" class="text-[11px] text-slate-500"></p>
+        <span id="ficha-badge-inactivo" class="hidden text-[9px] text-rose-400 font-bold uppercase tracking-wide">Dado de baja</span>
       </div>
-      <button onclick="cerrarModalId('modal-ficha-persona')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+      <div class="flex items-center gap-3">
+        <button onclick="toggleEdicionFicha()" title="Editar datos" class="text-slate-400 hover:text-white"><i class="fa-solid fa-pen"></i></button>
+        <button onclick="cerrarModalId('modal-ficha-persona')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
     </div>
+    <div id="ficha-form-editar" class="hidden space-y-2 bg-slate-950 border border-slate-800 rounded-xl p-3 mb-3">
+      <input id="fe-nombre" placeholder="Nombre completo" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+      <input id="fe-rut" placeholder="RUT" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+      <input id="fe-detalle" placeholder="Cargo o curso" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+      <input id="fe-correo" placeholder="Correo (opcional)" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+      <button onclick="guardarEdicionFicha()" class="w-full gaduai-btn-accent text-white text-xs font-bold py-2 rounded-lg">Guardar cambios</button>
+    </div>
+    <button id="ficha-btn-baja" onclick="darDeBajaFicha()" class="hidden w-full mb-3 text-[11px] text-rose-400 border border-rose-500/30 rounded-lg py-2"><i class="fa-solid fa-user-slash mr-1"></i> Dar de baja</button>
+    <button id="ficha-btn-reactivar" onclick="reactivarFicha()" class="hidden w-full mb-3 text-[11px] text-emerald-400 border border-emerald-500/30 rounded-lg py-2"><i class="fa-solid fa-user-check mr-1"></i> Reactivar</button>
     <div id="ficha-historial" class="space-y-2 mb-3"></div>
     <div class="space-y-2 bg-slate-950 border border-slate-800 rounded-xl p-3">
       <select id="nuevo-hist-tipo" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
@@ -1091,7 +1134,6 @@ async function entrarApp(){
   document.getElementById("app-perfil-label").textContent = STATE.perfil;
   document.getElementById("app-colegio-label").textContent = STATE.colegio.nombre;
   document.getElementById("ei-saludo-nombre").textContent = (STATE.persona||"").split(" ")[0] || STATE.persona;
-  document.getElementById("btn-usuarios").hidden = !STATE.isMaster;
   document.getElementById("btn-configuracion").hidden = !(STATE.isMaster || STATE.perfil === "Director/a de colegio");
   document.getElementById("btn-buscador").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
   actualizarLinkRelacionai();
@@ -1143,16 +1185,28 @@ function cerrarSesion(){
 }
 
 /* ---------- administración de usuarios (perfil máster) ---------- */
+// Configuración por subtemas: cada colegio irá subiendo más tipos de datos con el tiempo
+// (directorio, horarios, y lo que venga después), así que la pantalla nunca vuelve a ser un
+// único bloque largo — se navega por pestañas, una sección a la vez.
+const CONFIG_SUBTEMAS = [
+  {id:"cuentas", label:"Cuentas y perfiles", icon:"fa-users-gear", color:"cyan", soloMaster:true},
+  {id:"insignia", label:"Insignia", icon:"fa-image", color:"lime", soloMaster:false},
+  {id:"pulso-config", label:"PULSO GADUAI", icon:"fa-heart-pulse", color:"emerald", soloMaster:false},
+  {id:"documentos-ia", label:"Documentos IA", icon:"fa-brain", color:"indigo", soloMaster:true},
+  {id:"cm-funcionario", label:"Directorio: colaboradores", icon:"fa-people-group", color:"cyan", soloMaster:false},
+  {id:"cm-estudiante", label:"Directorio: estudiantes", icon:"fa-user-graduate", color:"violet", soloMaster:false},
+  {id:"cm-horario", label:"Horarios docentes", icon:"fa-calendar-days", color:"amber", soloMaster:false},
+];
 async function abrirUsuarios(){
   const esDirector = STATE.perfil === "Director/a de colegio";
-  document.getElementById("bloque-insignia").classList.toggle("hidden", !(STATE.isMaster || esDirector));
-  document.getElementById("bloque-pulso-config").classList.toggle("hidden", !(STATE.isMaster || esDirector));
-  document.getElementById("bloque-usuarios-admin").classList.toggle("hidden", !STATE.isMaster);
-  await cargarInsigniaPreview();
-  if(STATE.isMaster || esDirector) await cargarPulsoConfigPreview();
+  const puedeAdminColegio = STATE.isMaster || esDirector; // mismos 2 perfiles que administran Relacionai
+  const visibles = CONFIG_SUBTEMAS.filter(s => s.soloMaster ? STATE.isMaster : puedeAdminColegio);
+  document.getElementById("config-tabs").innerHTML = visibles.map(s => `
+    <button data-id="${s.id}" onclick="mostrarSubtemaConfig('${s.id}')"
+      class="config-tab-btn text-[10px] font-bold px-3 py-2 rounded-lg border border-${s.color}-500/30 text-${s.color}-300 flex items-center gap-1.5">
+      <i class="fa-solid ${s.icon}"></i> ${s.label}
+    </button>`).join("");
   if(STATE.isMaster){
-    await renderListaUsuarios();
-    await renderListaDocumentos();
     const sel = document.getElementById("u-perfil");
     sel.innerHTML = PERFILES.map(p=>`<option>${esc(p)}</option>`).join("");
     document.getElementById("u-nombre").value="";
@@ -1160,6 +1214,19 @@ async function abrirUsuarios(){
     document.getElementById("u-clave").value="";
   }
   document.getElementById("modal-usuarios").classList.remove("hidden");
+  if(visibles.length) await mostrarSubtemaConfig(visibles[0].id);
+}
+async function mostrarSubtemaConfig(id){
+  CONFIG_SUBTEMAS.forEach(s => document.getElementById("bloque-"+s.id)?.classList.toggle("hidden", s.id!==id));
+  document.querySelectorAll(".config-tab-btn").forEach(b => {
+    const activo = b.dataset.id === id;
+    b.classList.toggle("bg-slate-800", activo);
+    b.classList.toggle("text-white", activo);
+  });
+  if(id==="cuentas") await renderListaUsuarios();
+  if(id==="insignia") await cargarInsigniaPreview();
+  if(id==="pulso-config") await cargarPulsoConfigPreview();
+  if(id==="documentos-ia") await renderListaDocumentos();
 }
 async function cargarInsigniaPreview(){
   const img = document.getElementById("insignia-preview");
@@ -1321,6 +1388,104 @@ async function enviarMensajeIA(){
   await renderMensajesIA();
 }
 function cerrarUsuarios(){ document.getElementById("modal-usuarios").classList.add("hidden"); }
+
+/* ---------- Configuración: carga masiva (Directorio + Horarios docentes) ---------- */
+// Parseo en el navegador con SheetJS — el backend solo recibe filas ya limpias y valida de
+// nuevo por su cuenta (nunca confía solo en lo que validó el cliente).
+const CM_CONFIG = {
+  funcionario: {
+    columnas: ["nombre","rut","cargo","correo"],
+    requeridos: ["nombre"],
+    endpoint: () => `/api/colegios/${STATE.colegioId}/directorio/carga-masiva`,
+    bodyExtra: {tipo:"funcionario"},
+    mapFila: row => ({
+      nombre: String(row.nombre ?? row.Nombre ?? "").trim(),
+      rut: String(row.rut ?? row.Rut ?? row.RUT ?? "").trim(),
+      detalle: String(row.cargo ?? row.Cargo ?? "").trim(),
+      correo: String(row.correo ?? row.Correo ?? "").trim(),
+    }),
+  },
+  estudiante: {
+    columnas: ["nombre","rut","curso"],
+    requeridos: ["nombre"],
+    endpoint: () => `/api/colegios/${STATE.colegioId}/directorio/carga-masiva`,
+    bodyExtra: {tipo:"estudiante"},
+    mapFila: row => ({
+      nombre: String(row.nombre ?? row.Nombre ?? "").trim(),
+      rut: String(row.rut ?? row.Rut ?? row.RUT ?? "").trim(),
+      detalle: String(row.curso ?? row.Curso ?? "").trim(),
+    }),
+  },
+  horario: {
+    columnas: ["rut","dia","horaInicio","horaFin","curso","asignatura"],
+    requeridos: ["rut","dia","horaInicio","horaFin"],
+    endpoint: () => `/api/colegios/${STATE.colegioId}/docentes-horario/carga-masiva`,
+    bodyExtra: {},
+    mapFila: row => ({
+      rut: String(row.rut ?? row.Rut ?? row.RUT ?? "").trim(),
+      dia: String(row.dia ?? row.Dia ?? row["día"] ?? row["Día"] ?? "").trim(),
+      horaInicio: String(row.horaInicio ?? row["hora_inicio"] ?? row["Hora Inicio"] ?? row["HoraInicio"] ?? "").trim(),
+      horaFin: String(row.horaFin ?? row["hora_fin"] ?? row["Hora Fin"] ?? row["HoraFin"] ?? "").trim(),
+      curso: String(row.curso ?? row.Curso ?? "").trim(),
+      asignatura: String(row.asignatura ?? row.Asignatura ?? "").trim(),
+    }),
+  },
+};
+let cmFilasActuales = {};
+function cmLeerArchivo(modo){
+  const input = document.getElementById(`cm-${modo}-archivo`);
+  const file = input.files[0];
+  if(!file){ toast("Elige un archivo primero"); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try{
+      const wb = XLSX.read(e.target.result, {type:"array"});
+      const hoja = wb.Sheets[wb.SheetNames[0]];
+      const filasCrudas = XLSX.utils.sheet_to_json(hoja, {defval:""});
+      const filas = filasCrudas.map(CM_CONFIG[modo].mapFila);
+      cmFilasActuales[modo] = filas;
+      cmRenderPreview(modo, filas);
+    }catch(err){ toast("No se pudo leer el archivo — revisa que sea .xlsx, .xls o .csv"); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function cmRenderPreview(modo, filas){
+  const cfg = CM_CONFIG[modo];
+  const cont = document.getElementById(`cm-${modo}-preview`);
+  if(!filas.length){ cont.innerHTML = '<p class="text-[11px] text-rose-400">El archivo no tiene filas.</p>'; return; }
+  let errores = 0;
+  const filasHtml = filas.map((f,i) => {
+    const faltan = cfg.requeridos.filter(campo => !String(f[campo]||"").trim());
+    if(faltan.length) errores++;
+    const valores = cfg.columnas.map(c => esc(String(f[c]||"—"))).join(" · ");
+    return `<div class="text-[10px] ${faltan.length?'text-rose-300 bg-rose-950/40 border-rose-800':'text-slate-300 bg-slate-950 border-slate-800'} border rounded-lg px-2 py-1.5">
+      ${i+1}. ${valores}${faltan.length?` — falta: ${faltan.join(", ")}`:""}
+    </div>`;
+  }).join("");
+  cont.innerHTML = `
+    <p class="text-[10px] text-slate-500 mb-2">${filas.length} filas leídas${errores?`, <span class="text-rose-400">${errores} con error (no se subirán)</span>`:""}.</p>
+    <div class="space-y-1 max-h-52 overflow-y-auto mb-3">${filasHtml}</div>
+    <button onclick="cmConfirmar('${modo}')" class="w-full gaduai-gradient text-white text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-upload mr-1"></i> Confirmar carga (${filas.length - errores} filas válidas)</button>
+    <div id="cm-${modo}-resultado" class="mt-2"></div>`;
+}
+async function cmConfirmar(modo){
+  const cfg = CM_CONFIG[modo];
+  const filasValidas = (cmFilasActuales[modo]||[]).filter(f => cfg.requeridos.every(campo => String(f[campo]||"").trim()));
+  if(!filasValidas.length){ toast("No hay filas válidas para subir"); return; }
+  try{
+    const r = await api(cfg.endpoint(), {method:"POST", body: JSON.stringify(actorBody(Object.assign({filas: filasValidas}, cfg.bodyExtra)))});
+    const resultadoCont = document.getElementById(`cm-${modo}-resultado`);
+    const resumen = modo==="horario"
+      ? `✅ ${r.creados} bloques creados, ${r.docentesActualizados} docentes actualizados.`
+      : `✅ ${r.creadas} personas creadas, ${r.actualizadas} actualizadas.`;
+    let html = `<p class="text-[11px] text-emerald-400">${resumen}</p>`;
+    if(r.filasConError?.length){
+      html += `<div class="mt-1 space-y-1">${r.filasConError.map(fe=>`<p class="text-[10px] text-rose-400">Fila ${fe.fila}: ${esc(fe.motivo)}</p>`).join("")}</div>`;
+    }
+    resultadoCont.innerHTML = html;
+    toast("Carga completada");
+  }catch(e){ toast("No se pudo completar la carga masiva"); }
+}
 async function renderListaUsuarios(){
   const usuarios = await api(`/api/colegios/${STATE.colegioId}/usuarios`);
   document.getElementById("lista-usuarios").innerHTML = usuarios.map(u=>`
@@ -1867,6 +2032,7 @@ async function agendaPubReservar(e){
 /* ---------- Buscador restringido ---------- */
 let buscadorTimer = null;
 let fichaPersonaActual = null;
+let fichaPersonaData = null;
 function abrirBuscador(){
   document.getElementById("modal-buscador").classList.remove("hidden");
   document.getElementById("buscador-input").value = "";
@@ -1915,10 +2081,16 @@ async function abrirFichaPersona(id){
   try{
     const ficha = await api(`/api/colegios/${STATE.colegioId}/directorio/${id}/ver`, {method:"POST", body: JSON.stringify(actorBody())});
     fichaPersonaActual = id;
+    fichaPersonaData = ficha;
     document.getElementById("modal-buscador").classList.add("hidden");
     document.getElementById("modal-ficha-persona").classList.remove("hidden");
     document.getElementById("ficha-nombre").textContent = ficha.nombre;
     document.getElementById("ficha-detalle").textContent = `${ficha.tipo==="estudiante"?"Estudiante":"Funcionario/a"}${ficha.detalle?` · ${ficha.detalle}`:""}${ficha.rut?` · ${ficha.rut}`:""}`;
+    document.getElementById("ficha-badge-inactivo").classList.toggle("hidden", ficha.activo !== false);
+    document.getElementById("ficha-form-editar").classList.add("hidden");
+    const puedeAdminColegio = STATE.isMaster || STATE.perfil === "Director/a de colegio";
+    document.getElementById("ficha-btn-baja").classList.toggle("hidden", !puedeAdminColegio || ficha.activo === false);
+    document.getElementById("ficha-btn-reactivar").classList.toggle("hidden", !puedeAdminColegio || ficha.activo !== false);
     const cont = document.getElementById("ficha-historial");
     cont.innerHTML = ficha.historial.length ? ficha.historial.map(h => `
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
@@ -1952,6 +2124,50 @@ async function agregarHistorialPersona(){
     await abrirFichaPersona(fichaPersonaActual);
     toast("Agregado al historial");
   }catch(e){ toast("No se pudo agregar al historial"); }
+}
+
+function toggleEdicionFicha(){
+  const form = document.getElementById("ficha-form-editar");
+  const abrir = form.classList.contains("hidden");
+  form.classList.toggle("hidden", !abrir);
+  if(abrir && fichaPersonaData){
+    document.getElementById("fe-nombre").value = fichaPersonaData.nombre || "";
+    document.getElementById("fe-rut").value = fichaPersonaData.rut || "";
+    document.getElementById("fe-detalle").value = fichaPersonaData.detalle || "";
+    document.getElementById("fe-correo").value = fichaPersonaData.correo || "";
+  }
+}
+async function guardarEdicionFicha(){
+  if(!fichaPersonaActual) return;
+  const nombre = document.getElementById("fe-nombre").value.trim();
+  const rut = document.getElementById("fe-rut").value.trim();
+  const detalle = document.getElementById("fe-detalle").value.trim();
+  const correo = document.getElementById("fe-correo").value.trim();
+  if(!nombre) return toast("El nombre es obligatorio");
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/directorio/${fichaPersonaActual}/editar`, {
+      method:"POST", body: JSON.stringify(actorBody({nombre, rut, detalle, correo}))
+    });
+    toast("Datos actualizados");
+    await abrirFichaPersona(fichaPersonaActual);
+  }catch(e){ toast("No se pudo guardar la edición"); }
+}
+async function darDeBajaFicha(){
+  if(!fichaPersonaActual) return;
+  if(!confirm("¿Dar de baja a esta persona? Deja de aparecer en el Buscador normal, pero su historial se conserva.")) return;
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/directorio/${fichaPersonaActual}/baja`, {method:"POST", body: JSON.stringify(actorBody())});
+    toast("Persona dada de baja");
+    await abrirFichaPersona(fichaPersonaActual);
+  }catch(e){ toast("No se pudo dar de baja"); }
+}
+async function reactivarFicha(){
+  if(!fichaPersonaActual) return;
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/directorio/${fichaPersonaActual}/reactivar`, {method:"POST", body: JSON.stringify(actorBody())});
+    toast("Persona reactivada");
+    await abrirFichaPersona(fichaPersonaActual);
+  }catch(e){ toast("No se pudo reactivar"); }
 }
 
 async function reaccionar(id, tipo){
