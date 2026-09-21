@@ -245,6 +245,41 @@ app.post("/api/colegios", requireAdminKey, asyncRoute(async (req, res) => {
   res.json({ id, nombre: nombre.trim(), comuna: comuna || null, master: { correo, clave } });
 }));
 
+// Solo admin: genera una clave nueva para el usuario máster de un colegio que ya existe —
+// para cuando la clave mostrada al crear el colegio (POST /api/colegios, "se muestra una
+// sola vez") se perdió antes de guardarla. Si además llega `correoNuevo`, también actualiza
+// el correo de acceso (útil si el máster quedó con el correo por defecto director@<id>.cl en
+// vez del correo real de la persona). Si por algún motivo el colegio no tenía todavía ningún
+// usuario con perfil máster, se crea uno — mismo patrón que POST /api/colegios.
+app.post("/api/colegios/:id/reset-master", requireAdminKey, asyncRoute(async (req, res) => {
+  const { correoNuevo } = req.body || {};
+  const colegio = await pool.query("select id from colegios where id=$1", [req.params.id]);
+  if (!colegio.rows.length) return res.status(404).json({ error: "no_encontrado" });
+
+  const clave = claveAleatoria(); // se muestra una sola vez en esta respuesta
+  const claveHash = await bcrypt.hash(clave, 10);
+  const existente = await pool.query(
+    "select correo from usuarios where colegio_id=$1 and perfil=$2 order by id limit 1",
+    [req.params.id, PERFIL_MASTER]
+  );
+
+  let correo;
+  if (existente.rows.length) {
+    correo = (correoNuevo && correoNuevo.trim()) || existente.rows[0].correo;
+    await pool.query(
+      "update usuarios set correo=$3, clave_hash=$4 where colegio_id=$1 and perfil=$2",
+      [req.params.id, PERFIL_MASTER, correo, claveHash]
+    );
+  } else {
+    correo = (correoNuevo && correoNuevo.trim()) || `director@${req.params.id}.cl`;
+    await pool.query(
+      "insert into usuarios (colegio_id, nombre, correo, clave_hash, perfil) values ($1,$2,$3,$4,$5)",
+      [req.params.id, "Director ejecutivo", correo, claveHash, PERFIL_MASTER]
+    );
+  }
+  res.json({ id: req.params.id, master: { correo, clave } });
+}));
+
 // Solo admin: pega/actualiza el link al despliegue de Relacionai de este colegio, para el
 // botón cruzado del header. Se hace aparte de la creación porque Relacionai normalmente se
 // despliega después (o en paralelo) y no siempre se sabe su URL todavía al crear el colegio.
