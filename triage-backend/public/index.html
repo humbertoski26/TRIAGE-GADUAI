@@ -130,6 +130,11 @@
   .gaduai-btn-violet:hover{background:#7c3aed}
   .gaduai-btn-lime{background:linear-gradient(90deg,#7c3aed,#6d28d9)}
   .gaduai-btn-lime:hover{background:linear-gradient(90deg,#6d28d9,#5b21b6)}
+  /* Ausentismo (Fase 19) — mismo naranjo del Triage (Naranjo=Delegable): calza con lo que
+     realmente significa este botón (cubrir un bloque urgente), en vez de inventar un color
+     nuevo fuera de la paleta institucional. */
+  .gaduai-btn-amber{background:#d97706}
+  .gaduai-btn-amber:hover{background:#b45f04}
   /* ---------- Fase 9/18: PULSO GADUAI — monitor de signos vitales del colegio ----------
      Botón más grande que sus vecinos (Entrevista/Relacionai/IA GADUAI/Buscador) a propósito
      — es el primero y el más importante de la fila. Se ve como un monitor clínico: 3 líneas
@@ -338,6 +343,7 @@
           <button onclick="abrirIA()" title="IA GADUAI" class="gaduai-gradient text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-brain"></i> IA GADUAI</button>
           <button id="btn-buscador" hidden onclick="abrirBuscador()" title="Buscador" class="gaduai-btn-violet text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-magnifying-glass"></i> Buscador</button>
           <button onclick="abrirAgenda()" title="Agenda / Calendario" class="gaduai-btn-lime text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-calendar-days"></i> Agenda</button>
+          <button id="btn-ausentismo" hidden onclick="abrirAusentismo()" title="Ausentismo" class="gaduai-btn-amber text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-user-clock"></i> Ausentismo</button>
         </div>
 
         <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8 lg:p-10 text-center">
@@ -728,6 +734,48 @@
   </div>
 </div>
 
+<!-- ============ MODAL: AUSENTISMO (Fase 19) ============ -->
+<div id="modal-ausentismo" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex justify-between items-start mb-3">
+      <div>
+        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-user-clock text-amber-400"></i> Ausentismo</h3>
+        <p id="aus-fecha-label" class="text-[11px] text-slate-500"></p>
+      </div>
+      <button onclick="cerrarModalId('modal-ausentismo')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+
+    <div class="grid grid-cols-3 gap-2 mb-4">
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-center">
+        <p id="aus-kpi-ausentes" class="text-lg font-black text-amber-300">0</p>
+        <p class="text-[9px] text-slate-500">Ausentes hoy</p>
+      </div>
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-center">
+        <p id="aus-kpi-con-reemplazo" class="text-lg font-black text-emerald-400">0</p>
+        <p class="text-[9px] text-slate-500">Bloques con reemplazo</p>
+      </div>
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-center">
+        <p id="aus-kpi-sin-reemplazo" class="text-lg font-black text-rose-400">0</p>
+        <p class="text-[9px] text-slate-500">Bloques sin reemplazo</p>
+      </div>
+    </div>
+
+    <div id="aus-bloque-agregar" class="hidden bg-slate-950 border border-slate-800 rounded-xl p-3 mb-4">
+      <label class="text-[10px] text-slate-400">Buscar colaborador para marcar como ausente hoy</label>
+      <input id="aus-buscar-input" oninput="ausFiltrarBuscar()" type="text" placeholder="Nombre del funcionario…" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white" autocomplete="off">
+      <div id="aus-buscar-resultados" class="mt-1.5 space-y-1"></div>
+    </div>
+
+    <div id="aus-lista" class="space-y-3"></div>
+    <p id="aus-vacio" class="hidden text-[11px] text-slate-500 text-center py-4">Aún no hay nadie marcado como ausente en esta fecha.</p>
+
+    <div class="flex gap-2 mt-4">
+      <button onclick="ausentismoDescargarCSV()" class="flex-1 text-[11px] text-slate-300 border border-slate-700 rounded-lg py-2"><i class="fa-solid fa-download mr-1"></i> CSV</button>
+      <button onclick="ausentismoDescargarWord()" class="flex-1 text-[11px] text-cyan-300 border border-cyan-500/30 rounded-lg py-2"><i class="fa-solid fa-file-word mr-1"></i> Word</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ MODAL: BUSCADOR (restringido) ============ -->
 <div id="modal-buscador" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
   <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
@@ -774,6 +822,7 @@
     </div>
     <button id="ficha-btn-baja" onclick="darDeBajaFicha()" class="hidden w-full mb-3 text-[11px] text-rose-400 border border-rose-500/30 rounded-lg py-2"><i class="fa-solid fa-user-slash mr-1"></i> Dar de baja</button>
     <button id="ficha-btn-reactivar" onclick="reactivarFicha()" class="hidden w-full mb-3 text-[11px] text-emerald-400 border border-emerald-500/30 rounded-lg py-2"><i class="fa-solid fa-user-check mr-1"></i> Reactivar</button>
+    <button onclick="generarEntrevistaDesdeFicha()" class="w-full mb-3 text-[11px] text-indigo-300 border border-indigo-500/30 rounded-lg py-2"><i class="fa-solid fa-file-signature mr-1"></i> Generar entrevista</button>
     <div id="ficha-historial" class="space-y-2 mb-3"></div>
     <div class="space-y-2 bg-slate-950 border border-slate-800 rounded-xl p-3">
       <select id="nuevo-hist-tipo" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
@@ -1136,6 +1185,7 @@ async function entrarApp(){
   document.getElementById("ei-saludo-nombre").textContent = (STATE.persona||"").split(" ")[0] || STATE.persona;
   document.getElementById("btn-configuracion").hidden = !(STATE.isMaster || STATE.perfil === "Director/a de colegio");
   document.getElementById("btn-buscador").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
+  document.getElementById("btn-ausentismo").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
   actualizarLinkRelacionai();
   eiSetup();
   cargarInsigniaHeader();
@@ -2471,7 +2521,18 @@ async function eiAnalizar(){
   try{
     const r = await api(`/api/colegios/${STATE.colegioId}/interpretar`, {method:"POST", body: JSON.stringify(actorBody({texto}))});
     document.getElementById("ei-texto").value = "";
-    if(r.ok && r.propuesta.agendarReunion){
+    if(r.ok && r.ausentismo){
+      // GADUAI detectó un reporte de ausencia — abre directo el panel de Ausentismo (con las
+      // personas detectadas ya agregadas) en vez del formulario normal de tarea/hito.
+      document.getElementById("modal-ausentismo").classList.remove("hidden");
+      document.getElementById("aus-buscar-input").value = "";
+      document.getElementById("aus-buscar-resultados").innerHTML = "";
+      await ausCargar(r.personasDetectadas);
+      if(!r.personasDetectadas.length){
+        toast("No identifiqué a nadie del directorio en ese texto — agrégalo/a manualmente.");
+        document.getElementById("aus-buscar-input").focus();
+      }
+    } else if(r.ok && r.propuesta.agendarReunion){
       // GADUAI detectó "reunión"/"juntar" — se pregunta antes de agendar solo, en vez de
       // hacerlo directo, para que la persona confirme que de verdad quiere coordinar ahora.
       eiPropuestaPendiente = r.propuesta; eiTextoPendiente = texto;
@@ -2672,11 +2733,28 @@ async function abrirAlertas(){
 }
 
 /* ---------- entrevista formal (disponible a todos los perfiles) ---------- */
-async function abrirEntrevistaFormal(){
+let entrevistaPersonaIdActual = null;
+async function abrirEntrevistaFormal(precarga){
   ["ge-nombre","ge-correo","ge-fono","ge-cargo","ge-curso","ge-fecha","ge-hora","ge-motivo","ge-desarrollo","ge-compromisos"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("ge-entrevistador").value = STATE.persona||"";
+  entrevistaPersonaIdActual = (precarga && precarga.personaId) || null;
+  if(precarga){
+    document.getElementById("ge-nombre").value = precarga.nombre || "";
+    document.getElementById("ge-cargo").value = precarga.detalle || "";
+    document.getElementById("ge-correo").value = precarga.correo || "";
+  }
   await renderHistorialEntrevistas();
   document.getElementById("modal-entrevista").classList.remove("hidden");
+}
+// Desde la ficha de una persona en el Buscador — el formulario llega precargado con su nombre,
+// cargo/curso y correo, y la entrevista guardada queda enlazada a su historial (Fase 19).
+function generarEntrevistaDesdeFicha(){
+  if(!fichaPersonaData) return;
+  document.getElementById("modal-ficha-persona").classList.add("hidden");
+  abrirEntrevistaFormal({
+    personaId: fichaPersonaActual, nombre: fichaPersonaData.nombre,
+    detalle: fichaPersonaData.detalle, correo: fichaPersonaData.correo,
+  });
 }
 async function renderHistorialEntrevistas(){
   const lista = document.getElementById("lista-entrevistas");
@@ -2776,17 +2854,203 @@ async function guardarEntrevista(){
     entrevistador: document.getElementById("ge-entrevistador").value.trim() || STATE.persona,
     desarrollo: document.getElementById("ge-desarrollo").value.trim(),
     compromisos: document.getElementById("ge-compromisos").value.trim(),
+    personaId: entrevistaPersonaIdActual,
   };
   let guardada;
   try{
     guardada = await api(`/api/colegios/${STATE.colegioId}/entrevistas`, {method:"POST", body: JSON.stringify(actorBody(body))});
   }catch(e){ toast("No se pudo guardar la entrevista"); return; }
+  entrevistaPersonaIdActual = null;
   await descargarEntrevista(guardada);
   await renderHistorialEntrevistas();
   toast("Entrevista guardada y descargada.");
 }
 
-document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista","modal-circulo","modal-ia","modal-monitor","modal-monitor-historial","modal-buscador","modal-ficha-persona","modal-agenda"].forEach(cerrarModalId); } });
+/* ---------- Ausentismo (Fase 19) ---------- */
+let AUS_STATE = { fecha: null, ausencias: [], puedeEditar: false, indicadores: {} };
+let ausBuscarTimer = null;
+async function abrirAusentismo(){
+  document.getElementById("modal-ausentismo").classList.remove("hidden");
+  document.getElementById("aus-buscar-input").value = "";
+  document.getElementById("aus-buscar-resultados").innerHTML = "";
+  await ausCargar();
+}
+async function ausCargar(personasParaAgregar){
+  try{
+    const data = await api(`/api/colegios/${STATE.colegioId}/ausentismo`);
+    AUS_STATE = data;
+    // Si venimos de la Entrada inteligente con personas ya detectadas, las agregamos una vez
+    // (solo si todavía no están en la lista de hoy — evita duplicar si se reabre el modal).
+    if(personasParaAgregar && personasParaAgregar.length){
+      const yaAusentes = new Set(AUS_STATE.ausencias.map(a=>a.persona_id));
+      for(const p of personasParaAgregar){
+        if(!yaAusentes.has(p.id)){
+          try{ await api(`/api/colegios/${STATE.colegioId}/ausentismo/agregar`, {method:"POST", body: JSON.stringify(actorBody({personaId:p.id}))}); }catch(e){}
+        }
+      }
+      const data2 = await api(`/api/colegios/${STATE.colegioId}/ausentismo`);
+      AUS_STATE = data2;
+    }
+    ausRender();
+  }catch(e){ toast("No se pudo cargar el panorama de Ausentismo"); }
+}
+const AUS_CAUSAS = ["Licencia médica","Permiso administrativo","Ausencia injustificada","Permiso especial de jefatura"];
+function ausRender(){
+  const fechaFmt = new Date(AUS_STATE.fecha+"T12:00:00").toLocaleDateString("es-CL", {weekday:"long", day:"numeric", month:"long"});
+  document.getElementById("aus-fecha-label").textContent = fechaFmt;
+  document.getElementById("aus-kpi-ausentes").textContent = AUS_STATE.indicadores.ausentesHoy ?? 0;
+  document.getElementById("aus-kpi-con-reemplazo").textContent = AUS_STATE.indicadores.bloquesConReemplazo ?? 0;
+  document.getElementById("aus-kpi-sin-reemplazo").textContent = AUS_STATE.indicadores.bloquesSinReemplazo ?? 0;
+  document.getElementById("aus-bloque-agregar").classList.toggle("hidden", !AUS_STATE.puedeEditar);
+
+  const lista = document.getElementById("aus-lista");
+  const vacio = document.getElementById("aus-vacio");
+  vacio.classList.toggle("hidden", AUS_STATE.ausencias.length > 0);
+  lista.innerHTML = AUS_STATE.ausencias.map(a => {
+    const causaHtml = AUS_STATE.puedeEditar
+      ? `<select onchange="ausSetCausa(${a.id}, this.value)" class="bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-[11px] text-white w-full mb-2">
+          <option value="">Causa de la ausencia…</option>
+          ${AUS_CAUSAS.map(c=>`<option value="${esc(c)}" ${a.causa===c?"selected":""}>${esc(c)}</option>`).join("")}
+        </select>`
+      : `<p class="text-[10px] text-amber-300 mb-2">${esc(a.causa||"Sin causa especificada")}</p>`;
+    const bloquesHtml = a.bloques.length ? `
+      <table class="w-full text-[10px]">
+        <thead><tr class="text-slate-500 text-left"><th class="font-normal pb-1">Curso / bloque</th><th class="font-normal pb-1">Horario</th><th class="font-normal pb-1">Reemplazo</th></tr></thead>
+        <tbody>${a.bloques.map(b => `
+          <tr class="border-t border-slate-800">
+            <td class="py-1.5 text-slate-300">${esc(b.curso||"—")}${b.asignatura?` · ${esc(b.asignatura)}`:""}</td>
+            <td class="py-1.5 text-slate-300">${esc(b.hora_inicio)}–${esc(b.hora_fin)}</td>
+            <td class="py-1.5">
+              ${(b.reemplazante_nombre || b.reemplazante_nombre_libre)
+                ? `<span class="text-emerald-400">${esc(b.reemplazante_nombre || b.reemplazante_nombre_libre)}</span>`
+                : AUS_STATE.puedeEditar
+                  ? `<div class="flex flex-col gap-1">
+                      <button onclick="ausSugerir(${b.id})" class="text-cyan-300 hover:text-cyan-200 text-left"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Sugerir</button>
+                      <div id="aus-sug-${b.id}"></div>
+                      <input type="text" placeholder="o escribe un nombre…" onchange="ausAsignarReemplazoLibre(${b.id}, this.value)" class="bg-slate-900 border border-slate-700 rounded p-1 text-[10px] text-white">
+                    </div>`
+                  : `<span class="text-rose-400">Sin reemplazo</span>`
+              }
+            </td>
+          </tr>`).join("")}
+        </tbody>
+      </table>` : `<p class="text-[10px] text-slate-600">Sin bloques de horario para esta persona en este día.</p>`;
+    return `<div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
+      <div class="flex justify-between items-start gap-2 mb-2">
+        <div class="min-w-0"><b class="text-sm text-white truncate block">${esc(a.nombre)}</b><p class="text-[10px] text-slate-500 truncate">${esc(a.cargo||"")}${a.rut?` · ${esc(a.rut)}`:""}</p></div>
+        ${AUS_STATE.puedeEditar ? `<button onclick="ausQuitar(${a.id})" class="text-rose-400 hover:text-rose-300 text-[10px] flex-none"><i class="fa-solid fa-xmark mr-1"></i>Quitar</button>` : ""}
+      </div>
+      ${causaHtml}
+      ${bloquesHtml}
+    </div>`;
+  }).join("");
+}
+function ausFiltrarBuscar(){
+  clearTimeout(ausBuscarTimer);
+  const q = document.getElementById("aus-buscar-input").value.trim();
+  const cont = document.getElementById("aus-buscar-resultados");
+  if(q.length < 2){ cont.innerHTML = ""; return; }
+  ausBuscarTimer = setTimeout(async () => {
+    try{
+      const resultados = await api(`/api/colegios/${STATE.colegioId}/directorio/buscar`, {method:"POST", body: JSON.stringify(actorBody({q, tipo:"funcionario"}))});
+      cont.innerHTML = resultados.length ? resultados.map(p => `
+        <div onclick='ausAgregar(${p.id}, ${JSON.stringify(p.nombre)})' class="bg-slate-900 border border-slate-800 rounded-lg p-2 cursor-pointer hover:border-amber-500">
+          <p class="text-[11px] font-bold text-white">${esc(p.nombre)}</p>
+          <p class="text-[9px] text-slate-500">${p.detalle?esc(p.detalle):""}${p.rut?` · ${esc(p.rut)}`:""}</p>
+        </div>`).join("") : '<p class="text-[10px] text-slate-500 text-center py-2">Sin resultados.</p>';
+    }catch(e){ cont.innerHTML = '<p class="text-[10px] text-rose-400">No se pudo buscar.</p>'; }
+  }, 300);
+}
+async function ausAgregar(personaId, nombre){
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/ausentismo/agregar`, {method:"POST", body: JSON.stringify(actorBody({personaId}))});
+    document.getElementById("aus-buscar-input").value = "";
+    document.getElementById("aus-buscar-resultados").innerHTML = "";
+    await ausCargar();
+    toast(`${nombre} agregado/a a ausentes de hoy`);
+  }catch(e){
+    if(e.data && e.data.error === "ya_marcada_ausente_esa_fecha") toast(`${nombre} ya está en la lista de hoy`);
+    else toast("No se pudo agregar");
+  }
+}
+async function ausSetCausa(ausenciaId, causa){
+  try{ await api(`/api/colegios/${STATE.colegioId}/ausentismo/${ausenciaId}/causa`, {method:"POST", body: JSON.stringify(actorBody({causa}))}); }
+  catch(e){ toast("No se pudo guardar la causa"); }
+}
+async function ausQuitar(ausenciaId){
+  if(!confirm("¿Quitar a esta persona de los ausentes de hoy?")) return;
+  try{ await api(`/api/colegios/${STATE.colegioId}/ausentismo/${ausenciaId}/quitar`, {method:"POST", body: JSON.stringify(actorBody())}); await ausCargar(); }
+  catch(e){ toast("No se pudo quitar"); }
+}
+async function ausSugerir(bloqueId){
+  const cont = document.getElementById(`aus-sug-${bloqueId}`);
+  cont.innerHTML = '<p class="text-[9px] text-slate-500">Buscando…</p>';
+  try{
+    const candidatos = await api(`/api/colegios/${STATE.colegioId}/ausentismo/bloque/${bloqueId}/sugerencias`, {method:"POST", body: JSON.stringify(actorBody())});
+    cont.innerHTML = candidatos.length ? candidatos.map(c => `
+      <button onclick='ausAsignarReemplazo(${bloqueId}, ${c.id}, ${JSON.stringify(c.nombre)})' class="block w-full text-left text-[10px] text-emerald-300 hover:text-emerald-200 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 mb-0.5">${esc(c.nombre)}</button>
+    `).join("") : '<p class="text-[9px] text-slate-500">Nadie con hora libre esa hora.</p>';
+  }catch(e){ cont.innerHTML = '<p class="text-[9px] text-rose-400">No se pudo buscar sugerencias.</p>'; }
+}
+async function ausAsignarReemplazo(bloqueId, personaId, nombre){
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/ausentismo/bloque/${bloqueId}/reemplazo`, {method:"POST", body: JSON.stringify(actorBody({reemplazantePersonaId:personaId}))});
+    await ausCargar();
+    toast(`${nombre} asignado/a como reemplazo`);
+  }catch(e){ toast("No se pudo asignar el reemplazo"); }
+}
+async function ausAsignarReemplazoLibre(bloqueId, nombre){
+  if(!nombre || !nombre.trim()) return;
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/ausentismo/bloque/${bloqueId}/reemplazo`, {method:"POST", body: JSON.stringify(actorBody({reemplazanteNombreLibre:nombre.trim()}))});
+    await ausCargar();
+  }catch(e){ toast("No se pudo asignar el reemplazo"); }
+}
+function ausFilasPlano(){
+  const filas = [];
+  for(const a of AUS_STATE.ausencias){
+    if(!a.bloques.length){ filas.push([a.nombre, a.rut||"", a.cargo||"", a.causa||"Sin especificar", "—", "—", "Sin reemplazo"]); continue; }
+    for(const b of a.bloques){
+      filas.push([a.nombre, a.rut||"", a.cargo||"", a.causa||"Sin especificar", `${b.curso||""}${b.asignatura?" · "+b.asignatura:""}`, `${b.hora_inicio}-${b.hora_fin}`, b.reemplazante_nombre||b.reemplazante_nombre_libre||"Sin reemplazo"]);
+    }
+  }
+  return filas;
+}
+function ausentismoDescargarCSV(){
+  const encabezado = ["Funcionario","RUT","Cargo","Causa","Curso/Bloque","Horario","Reemplazo"];
+  const filas = [encabezado, ...ausFilasPlano()];
+  const csv = filas.map(f => f.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `Panorama_Ausentismo_${STATE.colegio.nombre.replace(/\s+/g,"_")}_${AUS_STATE.fecha}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+async function ausentismoDescargarWord(){
+  try{
+    const insignia = await obtenerInsignia();
+    const filasHtml = ausFilasPlano().map(f => `<tr>${f.map(v=>`<td>${esc(v)}</td>`).join("")}</tr>`).join("") || '<tr><td colspan="7">Sin ausencias registradas.</td></tr>';
+    const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      @page{size:11in 8.5in;margin:0.7in} body{font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#111}
+      .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+      h1{font-size:14pt;margin:0} table{width:100%;border-collapse:collapse;margin-top:10px}
+      th,td{border:1px solid #999;padding:5px 7px;text-align:left;font-size:9.5pt} th{background:#1F3864;color:#fff}
+    </style></head><body>
+      <div class="top">${insignia?`<img src="${insignia}" style="height:60px;">`:"<div></div>"}<div style="text-align:right;font-size:9pt">Fecha: ${AUS_STATE.fecha}</div></div>
+      <h1>Panorama de Ausentismo · ${esc(STATE.colegio.nombre)}</h1>
+      <table><thead><tr><th>Funcionario</th><th>RUT</th><th>Cargo</th><th>Causa</th><th>Curso/Bloque</th><th>Horario</th><th>Reemplazo</th></tr></thead><tbody>${filasHtml}</tbody></table>
+    </body></html>`;
+    const blob = window.htmlDocx.asBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Panorama_Ausentismo_${STATE.colegio.nombre.replace(/\s+/g,"_")}_${AUS_STATE.fecha}.docx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  }catch(e){ toast("No se pudo generar el Word del panorama"); }
+}
+
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista","modal-circulo","modal-ia","modal-monitor","modal-monitor-historial","modal-buscador","modal-ficha-persona","modal-agenda","modal-ausentismo"].forEach(cerrarModalId); } });
 init();
 </script>
 </body>
