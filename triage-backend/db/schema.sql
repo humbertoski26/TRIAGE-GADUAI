@@ -267,6 +267,36 @@ create table if not exists docentes_horario (
 create index if not exists docentes_horario_persona_idx on docentes_horario(persona_id, dia_semana);
 create index if not exists docentes_horario_colegio_idx on docentes_horario(colegio_id, dia_semana);
 
+-- Fase 19: si la entrevista nace desde la ficha de una persona del Buscador (o desde el
+-- panel de Ausentismo), queda enlazada a esa persona y aparece sola en su historial.
+-- Nullable: una entrevista puede seguir siendo a alguien fuera del directorio (ej. apoderado).
+alter table entrevistas add column if not exists persona_id bigint references directorio_personas(id);
+
+-- Ausentismo del día — nace vacío cada mañana, queda para siempre como historial real (a
+-- diferencia del prototipo de referencia, que solo guardaba el estado "de hoy" en memoria).
+create table if not exists ausencias (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  persona_id bigint not null references directorio_personas(id) on delete cascade,
+  fecha date not null,
+  causa text,
+  creado_por text not null,
+  perfil_creador text not null,
+  creado_en timestamptz not null default now(),
+  unique (persona_id, fecha)
+);
+create index if not exists ausencias_colegio_fecha_idx on ausencias(colegio_id, fecha);
+
+create table if not exists ausencias_bloques (
+  id bigserial primary key,
+  ausencia_id bigint not null references ausencias(id) on delete cascade,
+  docente_horario_id bigint not null references docentes_horario(id) on delete cascade,
+  reemplazante_persona_id bigint references directorio_personas(id),
+  reemplazante_nombre_libre text,   -- por si el reemplazo no es alguien del directorio
+  creado_en timestamptz not null default now()
+);
+create index if not exists ausencias_bloques_ausencia_idx on ausencias_bloques(ausencia_id);
+
 -- ---------- Agenda / Calendario (Fase 10) ----------
 -- Solo se guarda una fila cuando un bloque de 45 min deja de estar "abierto" — la ausencia
 -- de fila para (persona, fecha, hora) dentro del horario fijo (08:00-16:15 lun-vie) significa

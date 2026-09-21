@@ -154,6 +154,20 @@ function slug(s) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
+// Sin depender de rangos Unicode de tildes (ambiguos de escribir/leer en el código fuente) —
+// reemplazo directo de las 5 vocales acentuadas, usado por la carga de horario docente para
+// que "miércoles"/"Miércoles" calcen con la clave "miercoles" sin tilde (Fase 19).
+function sinTildes(s) {
+  return String(s || "").replace(/á/g, "a").replace(/é/g, "e").replace(/í/g, "i").replace(/ó/g, "o").replace(/ú/g, "u");
+}
+// Normaliza "8:00" / "08:00" / " 8:5 " a "08:00" con cero a la izquierda — así la comparación
+// de solapamiento de bloques en /ausentismo/bloque/:id/sugerencias (que compara como texto,
+// "08:00" < "08:45") funciona sin importar cómo se haya escrito la hora en la planilla.
+function normHora(s) {
+  const m = String(s || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return String(s || "").trim();
+  return String(m[1]).padStart(2, "0") + ":" + m[2];
+}
 const PERFIL_MASTER = "Director ejecutivo/máster";
 // Mismo listado exacto que PERFILES en public/index.html — usado para validar el perfil al
 // guardar el rango de Eventos Críticos de PULSO GADUAI (ver /pulso-eventos-rango más abajo).
@@ -710,16 +724,31 @@ app.post("/api/colegios/:id/entrevistas", asyncRoute(async (req, res) => {
   const actor = await verificarActor(req.params.id, b.actorCorreo, b.actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   if (!b.nombreEntrevistado || !b.nombreEntrevistado.trim()) return res.status(400).json({ error: "nombre_requerido" });
+  // personaId (Fase 19): si la entrevista nace desde la ficha de alguien del Buscador (o desde
+  // Ausentismo), se valida que esa persona exista en este colegio y, al guardar, queda también
+  // como una entrada en su historial — sin duplicar el dato, solo referenciándolo.
+  let personaId = null;
+  if (b.personaId) {
+    const persona = await pool.query("select id from directorio_personas where id=$1 and colegio_id=$2", [b.personaId, req.params.id]);
+    if (persona.rows.length) personaId = persona.rows[0].id;
+  }
   const r = await pool.query(
-    `insert into entrevistas (colegio_id, nombre_entrevistado, correo, cargo, fono, fecha, hora, curso, motivo, entrevistador, desarrollo, compromisos, creado_por, perfil_creador)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) returning *`,
+    `insert into entrevistas (colegio_id, nombre_entrevistado, correo, cargo, fono, fecha, hora, curso, motivo, entrevistador, desarrollo, compromisos, creado_por, perfil_creador, persona_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) returning *`,
     [
       req.params.id, b.nombreEntrevistado.trim(), b.correo || null, b.cargo || null, b.fono || null,
       b.fecha || null, b.hora || null, b.curso || null, b.motivo || null,
       b.entrevistador || actor.nombre, b.desarrollo || null, b.compromisos || null,
-      actor.nombre, actor.perfil,
+      actor.nombre, actor.perfil, personaId,
     ]
   );
+  if (personaId) {
+    await pool.query(
+      `insert into historial_persona (persona_id, tipo, titulo, descripcion, autor, perfil)
+       values ($1,'entrevista',$2,$3,$4,$5)`,
+      [personaId, `Entrevista · ${b.fecha || new Date().toISOString().slice(0, 10)}`, b.motivo || null, actor.nombre, actor.perfil]
+    ).catch(err => console.error("historial_persona (entrevista):", err.message));
+  }
   res.json(r.rows[0]);
 }));
 
@@ -1167,12 +1196,40 @@ function detectaReunion(texto) {
   return RAIZ_REUNION_RE.test(texto);
 }
 
+// Fase 19: si alguien con acceso a Ausentismo escribe que una persona faltó, GADUAI no abre
+// el formulario normal de tarea/hito — abre directo el panel de Ausentismo con esa persona ya
+// agregada. Regla determinística (no depende de IA), mismo patrón que detectaReunion.
+const RAIZ_AUSENCIA_RE = /\b(falt|ausent|licencia)/i;
+function detectaAusencia(texto) {
+  return RAIZ_AUSENCIA_RE.test(texto);
+}
+// ¿El nombre de esta persona aparece mencionado en el texto? Exige al menos 2 tokens del
+// nombre (o el único token, si el nombre es de una sola palabra) para evitar falsos positivos
+// con un apellido muy común mencionado por otro motivo.
+function nombreMencionadoEnTexto(nombrePersona, textoNorm) {
+  const tokens = nombrePersona.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+  if (!tokens.length) return false;
+  const encontrados = tokens.filter(t => textoNorm.includes(t));
+  return encontrados.length >= Math.min(2, tokens.length);
+}
+
 app.post("/api/colegios/:id/interpretar", asyncRoute(async (req, res) => {
   const { actorCorreo, actorClave, texto } = req.body || {};
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   if (!texto || !texto.trim()) return res.status(400).json({ error: "texto_requerido" });
   const textoLimpio = texto.trim();
+
+  if (detectaAusencia(textoLimpio) && PERFILES_BUSCADOR.includes(actor.perfil)) {
+    const funcionarios = (await pool.query(
+      "select id, nombre from directorio_personas where colegio_id=$1 and tipo='funcionario' and activo=true",
+      [req.params.id]
+    )).rows;
+    const textoNorm = textoLimpio.toLowerCase();
+    const personasDetectadas = funcionarios.filter(f => nombreMencionadoEnTexto(f.nombre, textoNorm));
+    return res.json({ ok: true, ausentismo: true, personasDetectadas });
+  }
+
   const personas = (await pool.query(
     "select nombre, perfil from usuarios where colegio_id=$1 order by nombre", [req.params.id]
   )).rows;
@@ -1664,16 +1721,19 @@ async function actorAdminDirectorio(colegioId, correo, clave) {
 // Búsqueda y ficha van por POST (no GET) aunque sean lecturas: así la clave del actor nunca
 // viaja en la URL/query string (no queda en logs ni en el historial del navegador).
 app.post("/api/colegios/:id/directorio/buscar", asyncRoute(async (req, res) => {
-  const { actorCorreo, actorClave, q, incluirInactivos } = req.body || {};
+  const { actorCorreo, actorClave, q, incluirInactivos, tipo } = req.body || {};
   const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(403).json({ error: "sin_permiso" });
   const termino = (q || "").trim();
   if (termino.length < 2) return res.json([]);
+  const filtroTipo = ["funcionario", "estudiante"].includes(tipo) ? "and tipo=$3" : "";
+  const params = [req.params.id, `%${termino}%`];
+  if (filtroTipo) params.push(tipo);
   const r = await pool.query(
     `select id, tipo, nombre, rut, detalle, correo, activo from directorio_personas
-     where colegio_id=$1 and (nombre ilike $2 or rut ilike $2) ${incluirInactivos ? "" : "and activo=true"}
+     where colegio_id=$1 and (nombre ilike $2 or rut ilike $2) ${incluirInactivos ? "" : "and activo=true"} ${filtroTipo}
      order by nombre asc limit 30`,
-    [req.params.id, `%${termino}%`]
+    params
   );
   res.json(r.rows);
 }));
@@ -1809,11 +1869,6 @@ app.post("/api/colegios/:id/docentes-horario/carga-masiva", asyncRoute(async (re
   if (!Array.isArray(filas) || !filas.length) return res.status(400).json({ error: "sin_filas" });
 
   const DIAS = { lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5 };
-  // Sin depender de rangos Unicode de tildes (ambiguos de escribir en el código fuente) —
-  // reemplazo directo de las 5 vocales acentuadas que pueden venir en "miércoles".
-  function sinTildes(s) {
-    return s.replace(/á/g, "a").replace(/é/g, "e").replace(/í/g, "i").replace(/ó/g, "o").replace(/ú/g, "u");
-  }
   let creados = 0;
   const filasConError = [];
   const rutsTocados = new Set();
@@ -1824,8 +1879,8 @@ app.post("/api/colegios/:id/docentes-horario/carga-masiva", asyncRoute(async (re
       const f = filas[i] || {};
       const rut = (f.rut || f.rutDocente || "").trim();
       const diaSemana = DIAS[sinTildes((f.dia || "").trim().toLowerCase())];
-      const horaInicio = (f.horaInicio || "").trim();
-      const horaFin = (f.horaFin || "").trim();
+      const horaInicio = normHora(f.horaInicio);
+      const horaFin = normHora(f.horaFin);
       if (!rut || !diaSemana || !horaInicio || !horaFin) {
         filasConError.push({ fila: i + 1, motivo: "faltan campos obligatorios (rut, día, hora inicio/fin)" });
         continue;
@@ -1876,6 +1931,168 @@ app.post("/api/colegios/:id/directorio/:personaId/historial", asyncRoute(async (
     [req.params.personaId, tipo, titulo.trim(), descripcion || null, actor.nombre, actor.perfil, archivoNombre || null, archivoData || null]
   );
   res.json(r.rows[0]);
+}));
+
+// ---------- Ausentismo (Fase 19): panorama del día y propuesta de reemplazo ----------
+// Mismos 4 perfiles del Buscador pueden VER el panorama; solo 3 de ellos pueden EDITARLO
+// (Director ejecutivo/máster queda en solo-lectura, igual que en el prototipo de referencia:
+// ve el panorama completo del colegio pero no registra ausencias ni asigna reemplazos).
+const PERFILES_AUSENTISMO_EDITA = ["Director/a de colegio", "UTP", "Inspector General"];
+function diaSemanaDe(fechaStr) {
+  const d = new Date(fechaStr + "T12:00:00"); // mediodía: evita cruzar de día por huso horario
+  const dow = d.getDay(); // 0=domingo … 6=sábado
+  return dow >= 1 && dow <= 5 ? dow : null;
+}
+
+app.get("/api/colegios/:id/ausentismo", asyncRoute(async (req, res) => {
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await actorConAccesoBuscador(req.params.id, correo, clave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  const fecha = /^\d{4}-\d{2}-\d{2}$/.test(req.query.fecha || "") ? req.query.fecha : new Date().toISOString().slice(0, 10);
+  const ausencias = (await pool.query(
+    `select a.id, a.persona_id, dp.nombre, dp.rut, dp.detalle as cargo, a.causa, a.creado_por, a.creado_en
+     from ausencias a join directorio_personas dp on dp.id = a.persona_id
+     where a.colegio_id=$1 and a.fecha=$2 order by a.creado_en`,
+    [req.params.id, fecha]
+  )).rows;
+  let bloques = [];
+  if (ausencias.length) {
+    bloques = (await pool.query(
+      `select ab.id, ab.ausencia_id, ab.docente_horario_id, ab.reemplazante_persona_id, ab.reemplazante_nombre_libre,
+              dh.hora_inicio, dh.hora_fin, dh.curso, dh.asignatura, rp.nombre as reemplazante_nombre
+       from ausencias_bloques ab
+       join docentes_horario dh on dh.id = ab.docente_horario_id
+       left join directorio_personas rp on rp.id = ab.reemplazante_persona_id
+       where ab.ausencia_id = any($1) order by dh.hora_inicio`,
+      [ausencias.map(a => a.id)]
+    )).rows;
+  }
+  const porAusencia = {};
+  for (const b of bloques) (porAusencia[b.ausencia_id] = porAusencia[b.ausencia_id] || []).push(b);
+  const resultado = ausencias.map(a => ({ ...a, bloques: porAusencia[a.id] || [] }));
+  const conReemplazo = bloques.filter(b => b.reemplazante_persona_id || b.reemplazante_nombre_libre).length;
+  res.json({
+    fecha,
+    ausencias: resultado,
+    puedeEditar: PERFILES_AUSENTISMO_EDITA.includes(actor.perfil),
+    indicadores: {
+      ausentesHoy: ausencias.length,
+      bloquesConReemplazo: conReemplazo,
+      bloquesSinReemplazo: bloques.length - conReemplazo,
+    },
+  });
+}));
+
+app.post("/api/colegios/:id/ausentismo/agregar", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, personaId, causa, fecha } = req.body || {};
+  const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  if (!PERFILES_AUSENTISMO_EDITA.includes(actor.perfil)) return res.status(403).json({ error: "solo_lectura" });
+  if (!personaId) return res.status(400).json({ error: "persona_requerida" });
+  const fechaUsar = /^\d{4}-\d{2}-\d{2}$/.test(fecha || "") ? fecha : new Date().toISOString().slice(0, 10);
+  const persona = await pool.query(
+    "select id from directorio_personas where id=$1 and colegio_id=$2 and tipo='funcionario' and activo=true",
+    [personaId, req.params.id]
+  );
+  if (!persona.rows.length) return res.status(404).json({ error: "persona_no_encontrada" });
+  let ausenciaId;
+  try {
+    const r = await pool.query(
+      "insert into ausencias (colegio_id, persona_id, fecha, causa, creado_por, perfil_creador) values ($1,$2,$3,$4,$5,$6) returning id",
+      [req.params.id, personaId, fechaUsar, causa || null, actor.nombre, actor.perfil]
+    );
+    ausenciaId = r.rows[0].id;
+  } catch (e) {
+    if (e.code === "23505") return res.status(409).json({ error: "ya_marcada_ausente_esa_fecha" });
+    throw e;
+  }
+  const diaSemana = diaSemanaDe(fechaUsar);
+  if (diaSemana) {
+    const bloquesDia = (await pool.query(
+      "select id from docentes_horario where persona_id=$1 and dia_semana=$2", [personaId, diaSemana]
+    )).rows;
+    for (const b of bloquesDia) {
+      await pool.query("insert into ausencias_bloques (ausencia_id, docente_horario_id) values ($1,$2)", [ausenciaId, b.id]);
+    }
+  }
+  res.json({ ok: true, ausenciaId });
+}));
+
+app.post("/api/colegios/:id/ausentismo/:ausenciaId/causa", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, causa } = req.body || {};
+  const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  if (!PERFILES_AUSENTISMO_EDITA.includes(actor.perfil)) return res.status(403).json({ error: "solo_lectura" });
+  const r = await pool.query(
+    "update ausencias set causa=$3 where id=$1 and colegio_id=$2 returning id",
+    [req.params.ausenciaId, req.params.id, causa || null]
+  );
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrada" });
+  res.json({ ok: true });
+}));
+
+app.post("/api/colegios/:id/ausentismo/:ausenciaId/quitar", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave } = req.body || {};
+  const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  if (!PERFILES_AUSENTISMO_EDITA.includes(actor.perfil)) return res.status(403).json({ error: "solo_lectura" });
+  const r = await pool.query(
+    "delete from ausencias where id=$1 and colegio_id=$2 returning id",
+    [req.params.ausenciaId, req.params.id]
+  );
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrada" });
+  res.json({ ok: true });
+}));
+
+// Candidatos a reemplazo: docentes con horario cargado, sin clase propia a esa misma hora ese
+// día, y que no estén ellos mismos marcados ausentes esa fecha — hasta 5, ordenados por menor
+// carga horaria semanal (para repartir parejo). No cruza con bloqueos de Agenda (Fase 10):
+// queda para una iteración futura si las sugerencias resultan poco precisas en la práctica.
+app.post("/api/colegios/:id/ausentismo/bloque/:bloqueId/sugerencias", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave } = req.body || {};
+  const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  const bloque = (await pool.query(
+    `select ab.id, ab.ausencia_id, dh.dia_semana, dh.hora_inicio, dh.hora_fin, a.fecha, a.persona_id as ausente_persona_id
+     from ausencias_bloques ab
+     join docentes_horario dh on dh.id = ab.docente_horario_id
+     join ausencias a on a.id = ab.ausencia_id
+     where ab.id=$1 and a.colegio_id=$2`,
+    [req.params.bloqueId, req.params.id]
+  )).rows[0];
+  if (!bloque) return res.status(404).json({ error: "no_encontrado" });
+  const candidatos = (await pool.query(
+    `select dp.id, dp.nombre, count(dh_all.id) as horas_semana
+     from directorio_personas dp
+     join docentes_horario dh_all on dh_all.persona_id = dp.id
+     where dp.colegio_id=$1 and dp.tipo='funcionario' and dp.activo=true and dp.id <> $2
+       and not exists (
+         select 1 from docentes_horario dh2
+         where dh2.persona_id = dp.id and dh2.dia_semana=$3 and dh2.hora_inicio < $5 and dh2.hora_fin > $4
+       )
+       and not exists (
+         select 1 from ausencias a2 where a2.persona_id = dp.id and a2.fecha=$6
+       )
+     group by dp.id, dp.nombre
+     order by horas_semana asc, dp.nombre asc
+     limit 5`,
+    [req.params.id, bloque.ausente_persona_id, bloque.dia_semana, bloque.hora_inicio, bloque.hora_fin, bloque.fecha]
+  )).rows;
+  res.json(candidatos);
+}));
+
+app.post("/api/colegios/:id/ausentismo/bloque/:bloqueId/reemplazo", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, reemplazantePersonaId, reemplazanteNombreLibre } = req.body || {};
+  const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(403).json({ error: "sin_permiso" });
+  if (!PERFILES_AUSENTISMO_EDITA.includes(actor.perfil)) return res.status(403).json({ error: "solo_lectura" });
+  const r = await pool.query(
+    `update ausencias_bloques set reemplazante_persona_id=$3, reemplazante_nombre_libre=$4
+     where id=$1 and ausencia_id in (select id from ausencias where colegio_id=$2) returning id`,
+    [req.params.bloqueId, req.params.id, reemplazantePersonaId || null, reemplazanteNombreLibre || null]
+  );
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  res.json({ ok: true });
 }));
 
 app.post("/api/sistema/normativa", requireNormativaKey, asyncRoute(async (req, res) => {
