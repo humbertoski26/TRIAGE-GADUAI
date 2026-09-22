@@ -1200,6 +1200,13 @@ async function cargarPulsoEventosRango(){
   try{ STATE.pulsoEventosRango = await api(`/api/colegios/${STATE.colegioId}/pulso-eventos-rango`); }
   catch(e){ /* se queda con el default {min:1,max:4} ya en STATE */ }
 }
+// Ejemplo de la caja inteligente, ajustado al perfil — a un Docente no le sirve un ejemplo
+// pensado para quien reporta ausentismo, algo como agendar una reunión con un apoderado es lo
+// que de verdad escribe a diario. El resto de los perfiles mantiene el ejemplo de siempre.
+function eiPlaceholderEjemplo(perfil){
+  if(perfil==="Docente") return "Cuéntame qué está pasando... ej. Agendar reunión con la apoderada de José Pérez del 8vo A";
+  return "Cuéntame qué está pasando... ej. Faltó el profesor Juan Pérez, el 7°B quedó sin clases";
+}
 async function entrarApp(){
   // La cuenta (servidor) manda sobre lo que hubiera guardado en este dispositivo — así un
   // cambio de tema hecho en otro celular/computador se refleja acá al entrar.
@@ -1208,6 +1215,7 @@ async function entrarApp(){
   document.getElementById("app-perfil-label").textContent = STATE.perfil;
   document.getElementById("app-colegio-label").textContent = STATE.colegio.nombre;
   document.getElementById("ei-saludo-nombre").textContent = (STATE.persona||"").split(" ")[0] || STATE.persona;
+  document.getElementById("ei-texto").placeholder = eiPlaceholderEjemplo(STATE.perfil);
   document.getElementById("btn-configuracion").hidden = !(STATE.isMaster || STATE.perfil === "Director/a de colegio");
   document.getElementById("btn-buscador").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
   document.getElementById("btn-ausentismo").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
