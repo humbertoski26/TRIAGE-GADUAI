@@ -225,6 +225,15 @@ create table if not exists directorio_personas (
   actualizado_por text,
   actualizado_en timestamptz
 );
+-- Bug real detectado en producción: esta tabla ya existía desde antes de la Fase 18 (con menos
+-- columnas), así que "create table if not exists" arriba no la vuelve a crear ni le agrega las
+-- columnas nuevas en una base ya migrada — hace falta el ALTER explícito, mismo patrón que
+-- "colegios" (ver relacionai_url/insignia_data más arriba). Sin esto, cualquier consulta que
+-- mencione correo/activo/actualizado_* falla con "column ... does not exist".
+alter table directorio_personas add column if not exists correo text;
+alter table directorio_personas add column if not exists activo boolean not null default true;
+alter table directorio_personas add column if not exists actualizado_por text;
+alter table directorio_personas add column if not exists actualizado_en timestamptz;
 create index if not exists directorio_personas_colegio_idx on directorio_personas(colegio_id);
 create index if not exists directorio_personas_nombre_idx on directorio_personas(colegio_id, nombre);
 create index if not exists directorio_personas_rut_idx on directorio_personas(colegio_id, rut);
