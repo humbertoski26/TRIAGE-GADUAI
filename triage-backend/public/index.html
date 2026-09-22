@@ -1213,6 +1213,22 @@ function eiPlaceholderEjemplo(perfil){
   return "Cuéntame qué está pasando... ej. Faltó el profesor Juan Pérez, el 7°B quedó sin clases";
 }
 async function entrarApp(){
+  // Asegura que la URL visible lleve siempre ?colegio=<id> — si se entró sin ese parámetro (ej.
+  // un despliegue de un solo colegio, donde el servidor lo resuelve solo vía /api/config, o una
+  // sesión guardada que se reanuda desde el dominio pelado), la barra de direcciones nunca lo
+  // mostraba. El problema real: en iPhone, "Agregar a pantalla de inicio" a veces no respeta el
+  // start_url del manifest y guarda tal cual la URL que se ve en ese momento — si esa URL no
+  // tenía el colegio, el ícono guardado queda apuntando a la portada genérica para siempre, sin
+  // forma de entrar. Se corrige la URL (sin recargar la página) y se refresca el manifest para
+  // que quede consistente antes de que alguien decida guardar el ícono.
+  if(STATE.colegioId){
+    const params = new URLSearchParams(location.search);
+    if(params.get("colegio") !== STATE.colegioId){
+      params.set("colegio", STATE.colegioId);
+      history.replaceState(null, "", location.pathname + "?" + params.toString());
+      document.getElementById("pwa-manifest").href = "/manifest.webmanifest?" + params.toString();
+    }
+  }
   // La cuenta (servidor) manda sobre lo que hubiera guardado en este dispositivo — así un
   // cambio de tema hecho en otro celular/computador se refleja acá al entrar.
   aplicarTema(STATE.tema);
