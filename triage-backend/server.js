@@ -623,12 +623,14 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
   sql += " order by creado_en desc, id desc";
   const items = await pool.query(sql, params);
   const ids = items.rows.map(i => i.id);
-  let chats = [], alertas = [], circulo = [];
+  let chats = [], alertas = [], circulo = [], leidos = [];
   if (ids.length) {
     chats = (await pool.query("select * from chat_mensajes where item_id = any($1) order by id", [ids])).rows;
     alertas = (await pool.query("select * from alertas where item_id = any($1) order by id", [ids])).rows;
     circulo = (await pool.query("select * from circulo_historial where item_id = any($1) order by id", [ids])).rows;
+    leidos = (await pool.query("select item_id, leido_en from chat_leido where persona=$1 and item_id = any($2)", [persona || "", ids])).rows;
   }
+  const leidoEnPorItem = new Map(leidos.map(l => [l.item_id, l.leido_en]));
   const out = items.rows.map(it => ({
     id: it.id,
     tipo: it.tipo,
@@ -657,6 +659,7 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
     relacionaiMotivo: it.relacionai_motivo,
     relacionaiSugerencia: it.relacionai_sugerencia,
     soloLectura: perfil === PERFIL_MASTER && !enHiloPropio(it, perfil, persona || ""),
+    chatNoLeidos: chats.filter(c => c.item_id === it.id && c.autor !== persona && c.creado_en > (leidoEnPorItem.get(it.id) || new Date(0))).length,
     chat: chats.filter(c => c.item_id === it.id).map(c => ({ autor: c.autor, perfil: c.perfil, texto: c.texto, fecha: c.fecha })),
     alertas: alertas.filter(a => a.item_id === it.id).map(a => ({ id: a.id, autor: a.autor, destinatario: a.destinatario, mensaje: a.mensaje, fecha: a.fecha, leida: a.leida })),
     circuloHistorial: circulo.filter(c => c.item_id === it.id).map(c => ({ paso: c.paso, autor: c.autor, perfil: c.perfil, mensaje: c.mensaje, archivoNombre: c.archivo_nombre, archivoData: c.archivo_data, fecha: c.creado_en }))
@@ -1001,14 +1004,39 @@ app.post("/api/colegios/:id/sso/relacionai-token", asyncRoute(async (req, res) =
 }));
 
 // ---------- chat por ítem ----------
+// El chat es solo para Hitos: una Tarea de Triage ya tiene su propio espacio para responder
+// formalmente antes de aceptar/rechazar (el Círculo de la promesa) — no tiene sentido duplicar
+// esa conversación en otro lado. Solo pueden escribir quienes de verdad son parte del hito: quien
+// lo creó, el responsable y los copiados — no cualquier cuenta del colegio.
 app.post("/api/colegios/:id/timeline/:itemId/chat", asyncRoute(async (req, res) => {
   const { texto, actorCorreo, actorClave } = req.body || {};
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   if (!texto || !texto.trim()) return res.status(400).json({ error: "texto_requerido" });
+  const it = await pool.query("select tipo, persona, responsable, copiados from items where id=$1 and colegio_id=$2", [req.params.itemId, req.params.id]);
+  if (!it.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  const item = it.rows[0];
+  if (item.tipo !== "hito") return res.status(400).json({ error: "chat_solo_para_hitos" });
+  const esParte = actor.nombre === item.persona || actor.nombre === item.responsable || (item.copiados || []).includes(actor.nombre);
+  if (!esParte) return res.status(403).json({ error: "no_participa_en_este_hito" });
   await pool.query(
     "insert into chat_mensajes (item_id, autor, perfil, texto, fecha) values ($1,$2,$3,$4,$5)",
     [req.params.itemId, actor.nombre, actor.perfil, texto.trim(), new Date().toLocaleString("es-CL")]
+  );
+  await pool.query(
+    "insert into chat_leido (item_id, persona, leido_en) values ($1,$2,now()) on conflict (item_id, persona) do update set leido_en=now()",
+    [req.params.itemId, actor.nombre]
+  );
+  res.json({ ok: true });
+}));
+
+app.post("/api/colegios/:id/timeline/:itemId/chat-leido", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  await pool.query(
+    "insert into chat_leido (item_id, persona, leido_en) values ($1,$2,now()) on conflict (item_id, persona) do update set leido_en=now()",
+    [req.params.itemId, actor.nombre]
   );
   res.json({ ok: true });
 }));

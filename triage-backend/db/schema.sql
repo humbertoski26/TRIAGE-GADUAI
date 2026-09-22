@@ -127,6 +127,16 @@ create table if not exists chat_mensajes (
 );
 create index if not exists chat_item_idx on chat_mensajes(item_id);
 
+-- Marca de "hasta cuándo leyó cada persona el chat de este ítem" — una fila por (ítem, persona),
+-- se actualiza a la hora actual cada vez que esa persona abre el chat. Sin fila = nunca lo abrió
+-- (todo lo que no sea suyo cuenta como no leído).
+create table if not exists chat_leido (
+  item_id bigint not null references items(id) on delete cascade,
+  persona text not null,
+  leido_en timestamptz not null default now(),
+  primary key (item_id, persona)
+);
+
 create table if not exists alertas (
   id bigserial primary key,
   item_id bigint not null references items(id) on delete cascade,
