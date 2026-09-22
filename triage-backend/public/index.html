@@ -11,15 +11,23 @@
 <meta name="apple-mobile-web-app-title" content="GADUAI">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="icon" href="/icons/icon-192.png">
-<link rel="manifest" id="pwa-manifest" href="/manifest.webmanifest">
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script>
-  // El manifest lleva el ?colegio= actual, para que "Instalar app" abra directo ese colegio
-  // la próxima vez, sin pasar por la portada.
-  document.getElementById("pwa-manifest").href = "/manifest.webmanifest" + location.search;
+  // El manifest lleva el ?colegio= actual, para que "Instalar app" abra directo ese colegio la
+  // próxima vez, sin pasar por la portada. Bug real: si el <link rel="manifest"> ya viene en el
+  // HTML (como estaba antes), el propio navegador puede adelantarse a buscarlo (preload scanner)
+  // ANTES de que este script alcance a corregirle el href — en un colegio del despliegue
+  // compartido (sin colegio por defecto) eso deja el manifest sin colegio para siempre, y
+  // "Agregar a pantalla de inicio" en iPhone guarda un ícono roto que nunca abre nada. Por eso el
+  // <link> no existe en el HTML: se crea acá, ya con el colegio puesto, sin ninguna carrera
+  // posible.
+  const linkManifest = document.createElement("link");
+  linkManifest.rel = "manifest"; linkManifest.id = "pwa-manifest";
+  linkManifest.href = "/manifest.webmanifest" + location.search;
+  document.head.appendChild(linkManifest);
   if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{});
   // Aplica el tema guardado en este dispositivo ANTES de pintar nada, para no mostrar un
   // parpadeo de oscuro→claro — la cuenta (server) es la fuente de verdad real y se reconcilia
