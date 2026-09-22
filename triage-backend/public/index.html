@@ -1858,6 +1858,7 @@ const AGENDA_MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","
 let agendaVista = "semana"; // 'semana' | 'mes' | 'dia'
 let agendaOffset = 0;       // desplazamiento en semanas / meses / días según la vista
 let agendaBloquesCache = [];
+let agendaVencimientosCache = [];
 
 function agendaFechaISO(d){ return d.toISOString().slice(0,10); }
 // Ancla a mediodía ANTES de calcular el lunes — si se deja la hora tal cual venía en `d`
@@ -1916,8 +1917,10 @@ async function agendaRecargar(){
   const {desde,hasta} = agendaRangoActual();
   document.getElementById("agenda-vista").innerHTML = '<p class="text-[11px] text-slate-500 text-center py-10">Cargando…</p>';
   try{
-    agendaBloquesCache = await api(`/api/colegios/${STATE.colegioId}/agenda?persona=${encodeURIComponent(STATE.persona)}&desde=${desde}&hasta=${hasta}`);
-  }catch(e){ agendaBloquesCache = []; }
+    const r = await api(`/api/colegios/${STATE.colegioId}/agenda?persona=${encodeURIComponent(STATE.persona)}&desde=${desde}&hasta=${hasta}`);
+    agendaBloquesCache = r.bloques || [];
+    agendaVencimientosCache = r.vencimientos || [];
+  }catch(e){ agendaBloquesCache = []; agendaVencimientosCache = []; }
   const hoyISO=agendaHoyISO(), topeISO=agendaTopeISO();
   document.getElementById("agenda-btn-next").disabled = desde >= topeISO;
   document.getElementById("agenda-btn-next").classList.toggle("opacity-30", desde >= topeISO);
@@ -1927,6 +1930,33 @@ async function agendaRecargar(){
 }
 function agendaNavegar(delta){ agendaOffset += delta; agendaRecargar(); }
 function agendaBloqueEn(fecha,hora){ return agendaBloquesCache.find(b=>b.fecha===fecha && b.hora===hora); }
+function agendaVencimientosEn(fecha){ return agendaVencimientosCache.filter(v=>v.fecha===fecha); }
+// Cierra la Agenda y lleva a la tarjeta real en el Timeline — reutiliza el mismo modal del
+// círculo de la promesa para tareas; los hitos no tienen modal propio, así que se hace scroll
+// hasta su tarjeta y se resalta un instante para que quede claro cuál es.
+function agendaIrAlItem(itemId, tipo, ev){
+  if(ev) ev.stopPropagation();
+  cerrarModalId("modal-agenda");
+  const seccion = document.getElementById("timeline-seccion");
+  if(seccion && seccion.hidden) toggleTimelineSeccion();
+  if(tipo==="tarea"){ abrirCirculo(itemId); return; }
+  setTimeout(()=>{
+    const card = document.getElementById("item-card-"+itemId);
+    if(!card) return;
+    card.scrollIntoView({behavior:"smooth", block:"center"});
+    card.classList.add("ring-2","ring-lime-400");
+    setTimeout(()=>card.classList.remove("ring-2","ring-lime-400"), 2200);
+  }, 150);
+}
+function agendaVencimientoChip(v){
+  const cfg = TRIAGE[v.triage] || {color:"#64748b"};
+  const rolTxt = v.rol==="diste" ? "Diste" : "Recibiste";
+  return `<div onclick="agendaIrAlItem(${v.itemId},'${v.tipo}',event)" class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 cursor-pointer">
+    <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${cfg.color}"></span>
+    <span class="text-[10px] font-bold text-white truncate flex-1">${esc(v.titulo)}</span>
+    <span class="text-[8px] font-bold uppercase ${v.rol==='diste'?'text-sky-300':'text-amber-300'}">${rolTxt}</span>
+  </div>`;
+}
 function agendaClaseBloque(b){
   if(!b) return "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 cursor-pointer";
   if(b.estado==="bloqueado") return "bg-slate-800 text-slate-500";
@@ -1948,6 +1978,11 @@ function agendaEtiquetaLabel(){
 }
 function agendaRenderDia(fechaIso){
   document.getElementById("agenda-periodo-label").textContent = agendaEtiquetaLabel();
+  const vencimientosDia = agendaVencimientosEn(fechaIso);
+  const bloqueVencimientos = vencimientosDia.length ? `<div class="mb-3 space-y-1">
+    <p class="text-[9px] font-bold uppercase text-slate-500">Vence este día</p>
+    ${vencimientosDia.map(agendaVencimientoChip).join("")}
+  </div>` : "";
   const filas = AGENDA_HORAS.map(hora=>{
     const b = agendaBloqueEn(fechaIso,hora);
     const clase = agendaClaseBloque(b);
@@ -1957,7 +1992,7 @@ function agendaRenderDia(fechaIso){
       <span>${hora}</span><span class="font-normal text-[10px] truncate ml-2">${detalle}</span>
     </div>`;
   }).join("");
-  document.getElementById("agenda-vista").innerHTML = `<div class="space-y-1.5">${filas}</div>`;
+  document.getElementById("agenda-vista").innerHTML = `${bloqueVencimientos}<div class="space-y-1.5">${filas}</div>`;
 }
 function agendaRenderSemana(lunesIso){
   document.getElementById("agenda-periodo-label").textContent = agendaEtiquetaLabel();
@@ -1971,6 +2006,7 @@ function agendaRenderSemana(lunesIso){
     const reservados = bloquesDia.filter(b=>b.estado==="reservado").length;
     const bloqueados = bloquesDia.filter(b=>b.estado==="bloqueado").length;
     const abiertos = AGENDA_HORAS.length - bloquesDia.length;
+    const vencen = agendaVencimientosEn(iso).length;
     columnas += `<div onclick="agendaIrADia('${iso}')" class="rounded-xl p-2.5 cursor-pointer border ${iso===hoyISO?'border-emerald-500 bg-emerald-600/10':'border-slate-800 bg-slate-950 hover:bg-slate-900'}">
       <p class="text-[9px] text-slate-500 uppercase">${AGENDA_DIAS_NOMBRE[i].slice(0,3)}${iso===hoyISO?' · hoy':''}</p>
       <p class="text-base font-black text-white">${d.getDate()}</p>
@@ -1978,6 +2014,7 @@ function agendaRenderSemana(lunesIso){
         <div class="text-emerald-400">${abiertos} libres</div>
         ${reservados?`<div class="text-rose-300">${reservados} reservado${reservados>1?'s':''}</div>`:''}
         ${bloqueados?`<div class="text-slate-500">${bloqueados} bloqueado${bloqueados>1?'s':''}</div>`:''}
+        ${vencen?`<div class="text-violet-300">${vencen} vence${vencen>1?'n':''}</div>`:''}
       </div>
     </div>`;
   }
@@ -1996,10 +2033,14 @@ function agendaRenderMes(primerDiaIso){
     const iso = agendaFechaISO(d);
     const esFinde = d.getDay()===0 || d.getDay()===6;
     const reservados = agendaBloquesCache.filter(b=>b.fecha===iso && b.estado==="reservado").length;
+    const vencen = agendaVencimientosEn(iso).length;
     const fueraDeTope = iso < hoyISO || iso > topeISO;
     celdas += `<div ${esFinde?'':`onclick="agendaIrADia('${iso}')"`} class="rounded-lg p-1.5 text-center border ${esFinde?'border-transparent text-slate-700':fueraDeTope?'border-slate-900 text-slate-600 cursor-pointer':'border-slate-800 bg-slate-950 hover:bg-slate-900 cursor-pointer'} ${iso===hoyISO?'ring-1 ring-emerald-500':''}">
       <p class="text-[11px] font-bold text-white">${dia}</p>
-      ${reservados?`<span class="inline-block w-1.5 h-1.5 rounded-full bg-rose-400 mt-0.5"></span>`:''}
+      <span class="inline-flex gap-0.5 mt-0.5">
+        ${reservados?`<span class="inline-block w-1.5 h-1.5 rounded-full bg-rose-400"></span>`:''}
+        ${vencen?`<span class="inline-block w-1.5 h-1.5 rounded-full bg-violet-400"></span>`:''}
+      </span>
     </div>`;
   }
   document.getElementById("agenda-vista").innerHTML = `
@@ -2286,7 +2327,7 @@ function pintarTimeline(){
     // Al cerrarse (círculo de la promesa para tareas, "Marcar cumplido" para hitos) la tarjeta
     // se ve más transparente — señal visual de que ya no requiere atención.
     const terminado = h.tipo==='tarea' ? h.circuloEstado==='cerrado' : !!react.done;
-    return `<div ${h.tipo==='tarea'?`onclick="abrirCirculo(${h.id})"`:''} class="bg-slate-900/70 border ${h.tipo==='hito' && !react.done ? 'border-rose-500/40':'border-slate-800'} rounded-2xl p-4 triage-card fade-in ${h.tipo==='tarea'?'cursor-pointer':''} ${terminado?'opacity-60':''}">
+    return `<div id="item-card-${h.id}" ${h.tipo==='tarea'?`onclick="abrirCirculo(${h.id})"`:''} class="bg-slate-900/70 border ${h.tipo==='hito' && !react.done ? 'border-rose-500/40':'border-slate-800'} rounded-2xl p-4 triage-card fade-in ${h.tipo==='tarea'?'cursor-pointer':''} ${terminado?'opacity-60':''}">
       <div class="flex justify-between gap-2 items-start flex-wrap">
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full inline-block" style="background:${cfg.color}"></span>

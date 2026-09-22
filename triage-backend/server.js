@@ -2203,6 +2203,33 @@ async function agendaBloquesDe(colegioId, persona, desde, hasta) {
   return r.rows.map(b => ({ ...b, fecha: agendaFechaISO(b.fecha), hora: agendaHoraTexto(b.hora) }));
 }
 
+// Toda tarea/hito con fecha de vencimiento se sincroniza sola al calendario de cada persona
+// involucrada — tanto de quien la dio (persona=creador) como de quien la recibió (responsable) —
+// sin depender de "Agendar reunión automática" (eso es un mecanismo aparte, para coordinar una
+// reunión puntual). Es una lectura en vivo de `items`, no una copia: si la fecha cambia, el
+// título cambia, o la tarea/hito se cierra, el calendario queda al día solo, sin ningún cron ni
+// sincronización manual de por medio. Solo se listan las abiertas (no terminadas) — una vez
+// cerrada una tarea o cumplido un hito, deja de ocupar el calendario.
+async function agendaVencimientosDe(colegioId, persona, desde, hasta) {
+  const r = await pool.query(
+    `select id, tipo, triage, titulo, fecha, persona as creador, responsable, circulo_estado, react
+     from items
+     where colegio_id=$1 and fecha>=$2 and fecha<=$3 and (persona=$4 or responsable=$4)
+       and ((tipo='tarea' and circulo_estado <> 'cerrado')
+         or (tipo='hito' and coalesce((react->>'done')::boolean, false) = false))
+     order by fecha`,
+    [colegioId, desde, hasta, persona]
+  );
+  return r.rows.map(it => ({
+    itemId: it.id,
+    tipo: it.tipo,
+    triage: it.triage,
+    titulo: it.titulo,
+    fecha: agendaFechaISO(it.fecha),
+    rol: it.creador === persona ? "diste" : "recibiste",
+  }));
+}
+
 // Busca el primer bloque de 45 min, dentro de los próximos `ventanaDias`, en que TODAS las
 // `quienes` estén libres a la vez (lun-vie, sin ofrecer horas ya pasadas si es hoy). "hoy" y
 // "ahora" se calculan en hora de Chile (ver agendaAhoraChile), no en la del proceso.
@@ -2283,7 +2310,11 @@ app.get("/api/colegios/:id/agenda", asyncRoute(async (req, res) => {
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   const { persona, desde, hasta } = req.query;
   if (!persona || !desde || !hasta) return res.status(400).json({ error: "persona_desde_hasta_requeridos" });
-  res.json(await agendaBloquesDe(req.params.id, persona, desde, hasta));
+  const [bloques, vencimientos] = await Promise.all([
+    agendaBloquesDe(req.params.id, persona, desde, hasta),
+    agendaVencimientosDe(req.params.id, persona, desde, hasta),
+  ]);
+  res.json({ bloques, vencimientos });
 }));
 
 app.post("/api/colegios/:id/agenda/bloquear", asyncRoute(async (req, res) => {
