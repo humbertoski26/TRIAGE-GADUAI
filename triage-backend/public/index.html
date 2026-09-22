@@ -460,15 +460,39 @@
     <label class="block text-[11px] text-slate-400 mb-1">Adjuntar documento (queda almacenado en el servidor)</label>
     <input id="f-archivo" type="file" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-4">
 
-    <label class="block text-[11px] text-slate-400 mb-1">Responsable de la acción <span class="text-slate-600">(toca un nombre)</span></label>
-    <div id="f-responsable-lista" class="space-y-1 mb-4 max-h-40 overflow-y-auto bg-slate-950 border border-slate-700 rounded-xl p-1.5" onclick="const el=event.target.closest('[data-nombre]'); if(el) elegirResponsable(el.dataset.nombre)"></div>
+    <label class="block text-[11px] text-slate-400 mb-1">Enviar la tarea a</label>
+    <div class="grid grid-cols-3 gap-1.5 mb-2">
+      <button type="button" id="f-modo-btn-persona" onclick="fModoDestinatario('persona')" class="text-[10px] font-bold py-2 rounded-lg border">Una persona</button>
+      <button type="button" id="f-modo-btn-todos" onclick="fModoDestinatario('todos')" class="text-[10px] font-bold py-2 rounded-lg border">Todos de un perfil</button>
+      <button type="button" id="f-modo-btn-grupo" onclick="fModoDestinatario('grupo')" class="text-[10px] font-bold py-2 rounded-lg border">Un grupo</button>
+    </div>
+
+    <div id="f-bloque-persona">
+      <input id="f-responsable-buscar" placeholder="Escribe nombre y apellido para buscar..." oninput="fFiltrarResponsable()" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-1.5">
+      <div id="f-responsable-lista" class="space-y-1 mb-4 max-h-40 overflow-y-auto bg-slate-950 border border-slate-700 rounded-xl p-1.5" onclick="const el=event.target.closest('[data-nombre]'); if(el) elegirResponsable(el.dataset.nombre)"></div>
+    </div>
+
+    <div id="f-bloque-todos" class="hidden mb-4">
+      <select id="f-todos-perfil" onchange="fActualizarConteoTodos()" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white"></select>
+      <p id="f-todos-conteo" class="text-[10px] text-slate-500 mt-1.5"></p>
+    </div>
+
+    <div id="f-bloque-grupo" class="hidden mb-4">
+      <select id="f-grupo-select" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2"></select>
+      <button type="button" onclick="fAbrirCrearGrupo()" class="text-[10px] text-violet-300 underline">+ Crear grupo nuevo</button>
+      <div id="f-crear-grupo" class="hidden mt-2 bg-slate-950 border border-slate-700 rounded-xl p-2.5">
+        <input id="f-grupo-nombre" placeholder="Nombre del grupo (ej. Profesores 5° básico)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[11px] text-white mb-2">
+        <div id="f-grupo-personas-lista" class="space-y-1 max-h-32 overflow-y-auto mb-2" onclick="const el=event.target.closest('[data-nombre]'); if(el) fToggleGrupoPersona(el.dataset.nombre)"></div>
+        <button type="button" onclick="fGuardarGrupo()" class="w-full bg-violet-600 hover:bg-violet-500 text-white text-[10px] font-bold py-2 rounded-lg">Guardar grupo</button>
+      </div>
+    </div>
 
     <label class="block text-[11px] text-slate-400 mb-1">Copiar a <span class="text-slate-600">(selección múltiple)</span></label>
     <div id="f-copiar-lista" class="space-y-1 mb-5 max-h-40 overflow-y-auto bg-slate-950 border border-slate-700 rounded-xl p-1.5" onclick="const el=event.target.closest('[data-nombre]'); if(el) toggleCopiado(el.dataset.nombre)"></div>
 
-    <label class="flex items-center gap-2 text-[11px] text-lime-300 bg-lime-500/10 border border-lime-500/30 rounded-t-xl p-3 cursor-pointer">
+    <label id="f-agendar-reunion-label" class="flex items-center gap-2 text-[11px] text-lime-300 bg-lime-500/10 border border-lime-500/30 rounded-t-xl p-3 cursor-pointer">
       <input id="f-agendar-reunion" type="checkbox" class="accent-lime-500 w-4 h-4" onchange="actualizarBloqueLugarReunion()">
-      <span>📅 Agendar reunión automática de 45 min con el responsable y los copiados — GADUAI busca un bloque libre en la Agenda de todos según la urgencia. Se marca solo al detectar "reunión" o "juntar" en la entrada inteligente.</span>
+      <span>📅 Agendar reunión automática de 45 min con el responsable y los copiados — GADUAI busca un bloque libre en la Agenda de todos según la urgencia. Se marca solo al detectar "reunión" o "juntar" en la entrada inteligente. Disponible solo cuando se envía a una persona.</span>
     </label>
     <div id="bloque-lugar-reunion" class="hidden mb-5 bg-lime-500/10 border border-t-0 border-lime-500/30 rounded-b-xl p-3">
       <label class="block text-[11px] text-lime-300 mb-1">📍 Lugar de la reunión <span class="text-lime-400/70">(opcional — presencial por defecto)</span></label>
@@ -2332,6 +2356,7 @@ function pintarTimeline(){
           <p class="text-sm font-black text-white">${esc(h.titulo)}</p>
           ${h.tipo==='hito'?'<span class="text-[9px] font-bold uppercase bg-slate-700 text-slate-200 rounded px-1.5 py-0.5">Hito</span>':''}
           ${h.reunionHora?'<span class="text-[9px] font-bold uppercase bg-lime-600/20 text-lime-300 rounded px-1.5 py-0.5"><i class="fa-solid fa-calendar-days mr-0.5"></i>Reunión agendada</span>':''}
+          ${h.loteId?`<span class="text-[9px] font-bold uppercase bg-violet-600/20 text-violet-300 rounded px-1.5 py-0.5" title="Se envió la misma tarea a ${h.loteTotal} personas, cada una con su propio Círculo de la promesa"><i class="fa-solid fa-people-group mr-0.5"></i>Enviada a ${h.loteTotal}</span>`:''}
           ${!h.revisado?'<span class="text-[9px] font-bold uppercase bg-rose-600 text-white rounded-full px-2 py-0.5">Nuevo</span>':''}
           ${h.soloLectura?'<span class="text-[9px] font-bold uppercase bg-slate-700 text-slate-400 rounded px-1.5 py-0.5" title="Visible como sostenedor — lo resuelve el Director/a de colegio"><i class="fa-solid fa-eye mr-1"></i>Solo lectura</span>':''}
         </div>
@@ -2494,8 +2519,12 @@ async function relacionaiSugerenciaElegir(decision){
 /* ---------- modal registrar ---------- */
 let quadSel = "Rojo";
 let formPersonas = [];        // [{nombre, perfil}] disponibles para Responsable/Copiar a
-let formResponsable = null;   // nombre elegido (selección única)
+let formResponsable = null;   // nombre elegido (selección única, modo "persona")
 let formCopiados = new Set(); // nombres elegidos (selección múltiple)
+let formModoDestinatario = "persona"; // 'persona' | 'todos' | 'grupo'
+let formGrupos = [];
+let formGrupoPersonasSeleccion = new Set();
+function fNormalizar(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,""); }
 async function abrirModal(propuesta, textoOriginal){
   document.getElementById("modal-triage").classList.remove("hidden");
   document.getElementById("f-tipo").value = propuesta ? propuesta.tipo : "tarea";
@@ -2512,6 +2541,10 @@ async function abrirModal(propuesta, textoOriginal){
   formPersonas = usuarios.length ? usuarios.map(u=>({nombre:u.nombre, perfil:u.perfil})) : PERFILES.map(p=>({nombre:p, perfil:null}));
   formResponsable = (propuesta && propuesta.responsableSugerido) || STATE.persona;
   formCopiados = new Set(propuesta ? (propuesta.copiadosSugeridos||[]) : []);
+  document.getElementById("f-responsable-buscar").value = "";
+  fModoDestinatario("persona");
+  fPoblarSelectTodos();
+  fCargarGrupos();
   renderFormPersonasListas();
   setQuad(propuesta ? propuesta.triage : "Rojo");
   const banner = document.getElementById("f-motivo-ia");
@@ -2596,21 +2629,104 @@ async function confirmarReunion(agendar){
   if(!agendar && propuesta) propuesta.agendarReunion = false;
   await abrirModal(propuesta, texto);
 }
-function renderFormPersonasListas(){
-  const filaResponsable = p => `<label class="flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer hover:bg-slate-900 ${formResponsable===p.nombre?'bg-indigo-600/15':''}" data-nombre="${esc(p.nombre)}">
+const FORM_PERSONAS_VACIO = '<p class="text-[10px] text-slate-600 p-2">Sin personas registradas todavía.</p>';
+function filaResponsableHtml(p){
+  return `<label class="flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer hover:bg-slate-900 ${formResponsable===p.nombre?'bg-indigo-600/15':''}" data-nombre="${esc(p.nombre)}">
       <span class="w-4 h-4 rounded-full border-2 flex-none ${formResponsable===p.nombre?'border-indigo-400 bg-indigo-500':'border-slate-600'}"></span>
       <span class="text-xs text-white flex-1 truncate">${esc(p.nombre)}${p.perfil?` <span class="text-slate-500">· ${esc(p.perfil)}</span>`:''}</span>
     </label>`;
-  const filaCopiado = p => `<label class="flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer hover:bg-slate-900" data-nombre="${esc(p.nombre)}">
+}
+function filaCopiadoHtml(p){
+  return `<label class="flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer hover:bg-slate-900" data-nombre="${esc(p.nombre)}">
       <span class="w-4 h-4 rounded border-2 flex-none flex items-center justify-center text-[9px] text-white ${formCopiados.has(p.nombre)?'border-sky-400 bg-sky-500':'border-slate-600'}">${formCopiados.has(p.nombre)?'✓':''}</span>
       <span class="text-xs text-white flex-1 truncate">${esc(p.nombre)}${p.perfil?` <span class="text-slate-500">· ${esc(p.perfil)}</span>`:''}</span>
     </label>`;
-  const vacio = '<p class="text-[10px] text-slate-600 p-2">Sin personas registradas todavía.</p>';
-  document.getElementById("f-responsable-lista").innerHTML = formPersonas.map(filaResponsable).join("") || vacio;
-  document.getElementById("f-copiar-lista").innerHTML = formPersonas.map(filaCopiado).join("") || vacio;
 }
-function elegirResponsable(nombre){ formResponsable = nombre; renderFormPersonasListas(); }
+function renderFormPersonasListas(){
+  document.getElementById("f-copiar-lista").innerHTML = formPersonas.map(filaCopiadoHtml).join("") || FORM_PERSONAS_VACIO;
+  fFiltrarResponsable();
+}
+// Buscador tipo Buscador: se escribe nombre y apellido y filtra en vivo la lista de personas con
+// cuenta GADUAI — reemplaza la lista larga de siempre por algo más rápido de encontrar.
+function fFiltrarResponsable(){
+  const q = fNormalizar(document.getElementById("f-responsable-buscar").value);
+  const filtradas = q ? formPersonas.filter(p=>fNormalizar(p.nombre).includes(q)) : formPersonas;
+  document.getElementById("f-responsable-lista").innerHTML = filtradas.map(filaResponsableHtml).join("")
+    || (q ? '<p class="text-[10px] text-slate-600 p-2">Sin coincidencias.</p>' : FORM_PERSONAS_VACIO);
+}
+function elegirResponsable(nombre){ formResponsable = nombre; fFiltrarResponsable(); }
 function toggleCopiado(nombre){ formCopiados.has(nombre) ? formCopiados.delete(nombre) : formCopiados.add(nombre); renderFormPersonasListas(); }
+
+// ---------- Fase 20: enviar la tarea a una persona / a todos de un perfil / a un grupo propio ----------
+function fModoDestinatario(modo){
+  formModoDestinatario = modo;
+  document.getElementById("f-bloque-persona").classList.toggle("hidden", modo!=="persona");
+  document.getElementById("f-bloque-todos").classList.toggle("hidden", modo!=="todos");
+  document.getElementById("f-bloque-grupo").classList.toggle("hidden", modo!=="grupo");
+  ["persona","todos","grupo"].forEach(m=>{
+    const btn = document.getElementById("f-modo-btn-"+m);
+    btn.classList.toggle("bg-indigo-600", m===modo);
+    btn.classList.toggle("border-indigo-500", m===modo);
+    btn.classList.toggle("text-white", m===modo);
+    btn.classList.toggle("border-slate-700", m!==modo);
+    btn.classList.toggle("text-slate-400", m!==modo);
+  });
+  // El agendamiento automático de reunión asume un solo responsable — se deshabilita al enviar
+  // a varios destinatarios a la vez (no tiene sentido buscar un bloque en común para todo el
+  // colegio o para un grupo completo).
+  const chk = document.getElementById("f-agendar-reunion");
+  chk.disabled = modo!=="persona";
+  document.getElementById("f-agendar-reunion-label").classList.toggle("opacity-40", modo!=="persona");
+  if(modo!=="persona" && chk.checked){ chk.checked=false; actualizarBloqueLugarReunion(); }
+}
+function fPoblarSelectTodos(){
+  const perfiles = Array.from(new Set(formPersonas.map(p=>p.perfil).filter(Boolean)));
+  const sel = document.getElementById("f-todos-perfil");
+  sel.innerHTML = perfiles.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join("") || '<option value="">Sin perfiles disponibles</option>';
+  if(perfiles.includes("Docente")) sel.value = "Docente";
+  fActualizarConteoTodos();
+}
+function fActualizarConteoTodos(){
+  const perfil = document.getElementById("f-todos-perfil").value;
+  const n = formPersonas.filter(p=>p.perfil===perfil).length;
+  document.getElementById("f-todos-conteo").textContent = perfil
+    ? `Se creará una tarea individual para cada una de las ${n} persona${n===1?'':'s'} con perfil "${perfil}" — cada quien la acepta/rechaza por su cuenta.`
+    : "";
+}
+async function fCargarGrupos(){
+  try{ formGrupos = await api(`/api/colegios/${STATE.colegioId}/grupos`); }catch(e){ formGrupos = []; }
+  document.getElementById("f-grupo-select").innerHTML = formGrupos.length
+    ? formGrupos.map(g=>`<option value="${g.id}">${esc(g.nombre)} (${g.personas.length})</option>`).join("")
+    : '<option value="">Aún no tienes grupos — crea uno abajo</option>';
+}
+function fAbrirCrearGrupo(){
+  const bloque = document.getElementById("f-crear-grupo");
+  bloque.classList.toggle("hidden");
+  if(!bloque.classList.contains("hidden")){
+    document.getElementById("f-grupo-nombre").value = "";
+    formGrupoPersonasSeleccion = new Set();
+    fRenderGrupoPersonasLista();
+  }
+}
+function fRenderGrupoPersonasLista(){
+  document.getElementById("f-grupo-personas-lista").innerHTML = formPersonas.map(p=>`<label class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-slate-900" data-nombre="${esc(p.nombre)}">
+      <span class="w-4 h-4 rounded border-2 flex-none flex items-center justify-center text-[9px] text-white ${formGrupoPersonasSeleccion.has(p.nombre)?'border-violet-400 bg-violet-500':'border-slate-600'}">${formGrupoPersonasSeleccion.has(p.nombre)?'✓':''}</span>
+      <span class="text-xs text-white flex-1 truncate">${esc(p.nombre)}${p.perfil?` <span class="text-slate-500">· ${esc(p.perfil)}</span>`:''}</span>
+    </label>`).join("") || FORM_PERSONAS_VACIO;
+}
+function fToggleGrupoPersona(nombre){ formGrupoPersonasSeleccion.has(nombre) ? formGrupoPersonasSeleccion.delete(nombre) : formGrupoPersonasSeleccion.add(nombre); fRenderGrupoPersonasLista(); }
+async function fGuardarGrupo(){
+  const nombre = document.getElementById("f-grupo-nombre").value.trim();
+  if(!nombre){ toast("Ponle un nombre al grupo"); return; }
+  if(!formGrupoPersonasSeleccion.size){ toast("Selecciona al menos una persona"); return; }
+  try{
+    const g = await api(`/api/colegios/${STATE.colegioId}/grupos`, {method:"POST", body: JSON.stringify(actorBody({nombre, personas:[...formGrupoPersonasSeleccion]}))});
+    document.getElementById("f-crear-grupo").classList.add("hidden");
+    await fCargarGrupos();
+    document.getElementById("f-grupo-select").value = g.id;
+    toast("Grupo guardado");
+  }catch(e){ toast("No se pudo guardar el grupo"); }
+}
 function cerrarModal(){ document.getElementById("modal-triage").classList.add("hidden"); }
 function setQuad(q){
   quadSel = q;
@@ -2631,6 +2747,18 @@ document.addEventListener("change", e=>{
 async function registrar(){
   const titulo = document.getElementById("f-titulo").value.trim();
   if(!titulo){ toast("Ingrese la situación / acción / hallazgo"); return; }
+  const destino = {};
+  if(formModoDestinatario==="todos"){
+    const perfil = document.getElementById("f-todos-perfil").value;
+    if(!perfil){ toast("Elige un perfil"); return; }
+    destino.todosPerfil = perfil;
+  } else if(formModoDestinatario==="grupo"){
+    const grupoId = document.getElementById("f-grupo-select").value;
+    if(!grupoId){ toast("Elige un grupo, o crea uno nuevo abajo"); return; }
+    destino.grupoId = grupoId;
+  } else {
+    destino.responsable = formResponsable;
+  }
   const body = actorBody({
     tipo: document.getElementById("f-tipo").value,
     triage: quadSel,
@@ -2638,18 +2766,20 @@ async function registrar(){
     desc: document.getElementById("f-desc").value.trim(),
     fecha: document.getElementById("f-fecha").value || new Date().toISOString().slice(0,10),
     fechaFinal: document.getElementById("f-fecha-final").value || null,
-    responsable: formResponsable,
+    ...destino,
     copiados: [...formCopiados],
     archivoNombre: archivoPendiente ? archivoPendiente.nombre : null,
     archivoData: archivoPendiente ? archivoPendiente.data : null,
-    agendarReunion: document.getElementById("f-agendar-reunion").checked,
+    agendarReunion: formModoDestinatario==="persona" && document.getElementById("f-agendar-reunion").checked,
     reunionLugar: document.getElementById("f-reunion-lugar").value.trim() || null
   });
   try{
-    await api(`/api/colegios/${STATE.colegioId}/timeline`, {method:"POST", body: JSON.stringify(body)});
+    const r = await api(`/api/colegios/${STATE.colegioId}/timeline`, {method:"POST", body: JSON.stringify(body)});
     cerrarModal();
     await cargarTimeline();
-    toast(`Incorporado al Timeline: ${TRIAGE[quadSel].icon} ${TRIAGE[quadSel].nombre}${body.archivoNombre?' · documento almacenado':''}`);
+    toast(r.total
+      ? `Incorporado al Timeline: enviado a ${r.total} personas (${TRIAGE[quadSel].icon} ${TRIAGE[quadSel].nombre})`
+      : `Incorporado al Timeline: ${TRIAGE[quadSel].icon} ${TRIAGE[quadSel].nombre}${body.archivoNombre?' · documento almacenado':''}`);
   }catch(e){ toast("No se pudo registrar (revise su conexión)"); }
 }
 

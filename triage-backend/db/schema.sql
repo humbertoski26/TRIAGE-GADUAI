@@ -80,6 +80,26 @@ alter table items add column if not exists reunion_hora text;
 -- convoca puede escribir al marcar "Agendar reunión automática" — se muestra junto a la fecha y
 -- hora en el Timeline. Vacío = presencial sin lugar específico indicado.
 alter table items add column if not exists reunion_lugar text;
+-- Envío a varios destinatarios a la vez (un docente / todos los docentes / un grupo armado por
+-- quien crea la tarea): cada destinatario recibe su PROPIO ítem (con su propio responsable, su
+-- propio Círculo de la promesa) — nunca un solo ítem con varios responsables. lote_id agrupa
+-- esos ítems hermanos solo para mostrar en el Timeline "enviada a N personas"; lote_total evita
+-- tener que contarlos con una consulta aparte.
+alter table items add column if not exists lote_id uuid;
+alter table items add column if not exists lote_total integer;
+
+-- Grupos personales para enviar una tarea a varios docentes de una vez (ej. "Profesores de 5°
+-- básico") — privados: cada quien arma y ve solo sus propios grupos, no se comparten entre
+-- perfiles ni personas.
+create table if not exists grupos_triage (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  creado_por text not null,
+  nombre text not null,
+  personas text[] not null default '{}',
+  creado_en timestamptz not null default now()
+);
+create index if not exists grupos_triage_creador_idx on grupos_triage(colegio_id, creado_por);
 
 -- Bitácora estructurada del círculo de la promesa (distinta del chat libre): un mensaje +
 -- adjunto opcional por cada paso (aceptar, rechazar, ok, cerrar, like).

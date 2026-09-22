@@ -645,6 +645,8 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
     creadoEn: it.creado_en,
     reunionHora: it.reunion_hora,
     reunionLugar: it.reunion_lugar,
+    loteId: it.lote_id,
+    loteTotal: it.lote_total,
     revisado: it.revisado,
     archivoNombre: it.archivo_nombre,
     archivoData: it.archivo_data,
@@ -662,52 +664,132 @@ app.get("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
   res.json(out);
 }));
 
+// Resuelve la lista final de destinatarios (nombres, cada uno con su propia cuenta GADUAI) para
+// un envío de tarea/hito. Prioridad: destinatarios explícitos > "todos los de un perfil" > grupo
+// guardado > responsable único (comportamiento de siempre). Solo cuentan personas con cuenta
+// real en `usuarios` de este colegio — quien no puede iniciar sesión no puede usar el Círculo de
+// la promesa, así que no tiene sentido asignarle una tarea como responsable.
+async function resolverDestinatarios(colegioId, b) {
+  if (Array.isArray(b.destinatarios) && b.destinatarios.length) {
+    return Array.from(new Set(b.destinatarios.map(n => (n || "").trim()).filter(Boolean)));
+  }
+  if (b.todosPerfil && b.todosPerfil.trim()) {
+    const r = await pool.query("select distinct nombre from usuarios where colegio_id=$1 and perfil=$2", [colegioId, b.todosPerfil.trim()]);
+    return r.rows.map(x => x.nombre);
+  }
+  if (b.grupoId) {
+    const r = await pool.query("select personas from grupos_triage where id=$1 and colegio_id=$2", [b.grupoId, colegioId]);
+    return r.rows.length ? Array.from(new Set((r.rows[0].personas || []).filter(Boolean))) : [];
+  }
+  return b.responsable && b.responsable.trim() ? [b.responsable.trim()] : [null];
+}
+
 app.post("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
   const b = req.body || {};
   const actor = await verificarActor(req.params.id, b.actorCorreo, b.actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   if (!b.titulo || !b.titulo.trim()) return res.status(400).json({ error: "titulo_requerido" });
   const titulo = b.titulo.trim();
-  const r = await pool.query(
-    `insert into items (colegio_id, tipo, triage, titulo, descripcion, fecha, fecha_final, responsable, copiados, persona, perfil, creado, archivo_nombre, archivo_data)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) returning id`,
-    [
-      req.params.id, b.tipo || "tarea", b.triage || "Rojo", titulo, b.desc || null,
-      b.fecha, b.fechaFinal || null, b.responsable || null, b.copiados || [], actor.nombre, actor.perfil,
-      new Date().toLocaleDateString("es-CL"), b.archivoNombre || null, b.archivoData || null
-    ]
-  );
-  const itemId = r.rows[0].id;
-  res.json({ id: itemId });
+  const colegioId = req.params.id;
+  const destinatarios = await resolverDestinatarios(colegioId, b);
+  if (!destinatarios.length) return res.status(400).json({ error: "sin_destinatarios" });
+  // uuid v4 nativo de Node (sin dependencia nueva) — solo se usa para AGRUPAR visualmente los
+  // ítems hermanos en el Timeline; con un único destinatario no hace falta agrupar nada.
+  const loteId = destinatarios.length > 1 ? crypto.randomUUID() : null;
+  const loteTotal = destinatarios.length > 1 ? destinatarios.length : null;
+  const ids = [];
+  for (const responsableUno of destinatarios) {
+    const r = await pool.query(
+      `insert into items (colegio_id, tipo, triage, titulo, descripcion, fecha, fecha_final, responsable, copiados, persona, perfil, creado, archivo_nombre, archivo_data, lote_id, lote_total)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) returning id`,
+      [
+        colegioId, b.tipo || "tarea", b.triage || "Rojo", titulo, b.desc || null,
+        b.fecha, b.fechaFinal || null, responsableUno, b.copiados || [], actor.nombre, actor.perfil,
+        new Date().toLocaleDateString("es-CL"), b.archivoNombre || null, b.archivoData || null, loteId, loteTotal
+      ]
+    );
+    ids.push(r.rows[0].id);
+  }
+  res.json(loteId ? { ids, loteId, total: loteTotal } : { id: ids[0] });
 
-  // Correo a quien entrega (el actor, cuyo correo ya se tiene) y a quien recibe (buscado por
-  // nombre, ya que "responsable" es texto libre y no una FK a usuarios) — best-effort, no
-  // bloquea la respuesta ni falla la creación del ítem si el correo no se puede enviar.
+  // Correo y alerta de asignación — mismo best-effort de siempre, ahora una vez por cada ítem
+  // hermano del lote (cada destinatario recibe su propio aviso individual).
   const asunto = `Nueva tarea GADUAI: ${titulo}`;
   const texto = `${actor.nombre} te asignó una tarea en GADUAI.\n\nTítulo: ${titulo}\nFecha: ${b.fecha || "—"}\n${b.desc ? `Descripción: ${b.desc}\n` : ""}`;
   enviarCorreo({ to: actor.correo, asunto, texto }).catch(() => {});
-  if (b.responsable && b.responsable.trim() && b.responsable.trim() !== actor.nombre) {
-    pool.query("select correo from usuarios where colegio_id=$1 and nombre=$2", [req.params.id, b.responsable.trim()])
-      .then(ur => { if (ur.rows[0]) enviarCorreo({ to: ur.rows[0].correo, asunto, texto }).catch(() => {}); })
-      .catch(() => {});
-  }
-
-  // Avisos en la campanita del círculo de la promesa (solo tareas): al responsable que le
-  // asignaron algo, y al remitente confirmando que quedó registrado — best-effort.
-  if ((b.tipo || "tarea") === "tarea") {
-    if (b.responsable && b.responsable.trim()) {
-      crearAlerta(req.params.id, itemId, b.responsable.trim(), `Nueva tarea asignada: ${titulo}`).catch(() => {});
+  for (let i = 0; i < destinatarios.length; i++) {
+    const responsableUno = destinatarios[i], itemId = ids[i];
+    if (responsableUno && responsableUno !== actor.nombre) {
+      pool.query("select correo from usuarios where colegio_id=$1 and nombre=$2", [colegioId, responsableUno])
+        .then(ur => { if (ur.rows[0]) enviarCorreo({ to: ur.rows[0].correo, asunto, texto }).catch(() => {}); })
+        .catch(() => {});
     }
-    crearAlerta(req.params.id, itemId, actor.nombre, `Registraste la tarea: ${titulo}`).catch(() => {});
-    evaluarRelacionaiTarea(req.params.id, itemId, titulo, b.desc || "").catch(err => console.error("evaluarRelacionaiTarea:", err));
+    if ((b.tipo || "tarea") === "tarea" && responsableUno) {
+      crearAlerta(colegioId, itemId, responsableUno, `Nueva tarea asignada: ${titulo}`).catch(() => {});
+    }
   }
-  // El agendamiento automático aplica tanto a tareas como a hitos — cuando el cerebro GADUAI
-  // detecta "reunión"/"juntar" en la entrada inteligente (ver detectaReunion), el hito llega
-  // acá con agendarReunion=true igual que una tarea con el checkbox marcado.
-  if (b.agendarReunion) {
-    agendaAgendarReunionAutomatica(req.params.id, itemId, actor, b.responsable, b.copiados || [], b.triage || "Rojo", titulo, b.reunionLugar)
+  if ((b.tipo || "tarea") === "tarea") {
+    crearAlerta(colegioId, ids[0], actor.nombre, loteId ? `Registraste la tarea: ${titulo} (enviada a ${destinatarios.length} personas)` : `Registraste la tarea: ${titulo}`).catch(() => {});
+    // El título/descripción es idéntico para todo el lote, así que el cerebro GADUAI solo lo
+    // evalúa UNA vez (sobre el primer ítem) y copia el mismo veredicto al resto — evita llamar a
+    // la IA una vez por cada destinatario cuando se envía a un grupo grande.
+    evaluarRelacionaiTarea(colegioId, ids[0], titulo, b.desc || "")
+      .then(async () => {
+        if (ids.length <= 1) return;
+        const veredicto = await pool.query("select relacionai_sugerido, relacionai_motivo from items where id=$1", [ids[0]]);
+        if (veredicto.rows[0] && veredicto.rows[0].relacionai_sugerido) {
+          await pool.query("update items set relacionai_sugerido=true, relacionai_motivo=$1 where id = any($2)", [veredicto.rows[0].relacionai_motivo, ids.slice(1)]);
+        }
+      })
+      .catch(err => console.error("evaluarRelacionaiTarea:", err));
+  }
+  // El agendamiento automático de reunión asume UN responsable — con varios destinatarios a la
+  // vez (todos/grupo) no tiene sentido buscar un solo bloque en común para todo el colegio, así
+  // que se omite (el frontend ya deshabilita el checkbox cuando hay más de un destinatario).
+  if (b.agendarReunion && !loteId) {
+    agendaAgendarReunionAutomatica(colegioId, ids[0], actor, destinatarios[0], b.copiados || [], b.triage || "Rojo", titulo, b.reunionLugar)
       .catch(err => console.error("agendaAgendarReunionAutomatica:", err));
   }
+}));
+
+// ---------- grupos personales para enviar una tarea a varios docentes de una vez ----------
+app.get("/api/colegios/:id/grupos", asyncRoute(async (req, res) => {
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await verificarActor(req.params.id, correo, clave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  const r = await pool.query(
+    "select id, nombre, personas from grupos_triage where colegio_id=$1 and creado_por=$2 order by nombre",
+    [req.params.id, actor.nombre]
+  );
+  res.json(r.rows);
+}));
+
+app.post("/api/colegios/:id/grupos", asyncRoute(async (req, res) => {
+  const b = req.body || {};
+  const actor = await verificarActor(req.params.id, b.actorCorreo, b.actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  const nombre = (b.nombre || "").trim();
+  if (!nombre) return res.status(400).json({ error: "nombre_requerido" });
+  const pedidas = Array.isArray(b.personas) ? Array.from(new Set(b.personas.map(n => (n || "").trim()).filter(Boolean))) : [];
+  if (!pedidas.length) return res.status(400).json({ error: "personas_requeridas" });
+  // Solo se guardan nombres que de verdad tienen cuenta en este colegio — evita grupos con
+  // gente que después no puede recibir la tarea.
+  const validas = await pool.query("select nombre from usuarios where colegio_id=$1 and nombre = any($2)", [req.params.id, pedidas]);
+  const personas = validas.rows.map(x => x.nombre);
+  if (!personas.length) return res.status(400).json({ error: "ninguna_persona_valida" });
+  const r = await pool.query(
+    "insert into grupos_triage (colegio_id, creado_por, nombre, personas) values ($1,$2,$3,$4) returning id, nombre, personas",
+    [req.params.id, actor.nombre, nombre, personas]
+  );
+  res.json(r.rows[0]);
+}));
+
+app.post("/api/colegios/:id/grupos/:grupoId/eliminar", asyncRoute(async (req, res) => {
+  const b = req.body || {};
+  const actor = await verificarActor(req.params.id, b.actorCorreo, b.actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  await pool.query("delete from grupos_triage where id=$1 and colegio_id=$2 and creado_por=$3", [req.params.grupoId, req.params.id, actor.nombre]);
+  res.json({ ok: true });
 }));
 
 // ---------- entrevista formal (disponible a todos los perfiles) ----------
@@ -1554,7 +1636,7 @@ app.get("/api/sistema/exportar/:id", requireMigracionKey, asyncRoute(async (req,
   const c = req.params.id;
   const colegio = (await pool.query("select * from colegios where id=$1", [c])).rows[0];
   if (!colegio) return res.status(404).json({ error: "no_encontrado" });
-  const [usuarios, items, circuloHistorial, chatMensajes, alertas, pushSubs, entrevistas, documentos, chatIa, monitorTareas, directorioPersonas, historialPersona, agendaBloques] = await Promise.all([
+  const [usuarios, items, circuloHistorial, chatMensajes, alertas, pushSubs, entrevistas, documentos, chatIa, monitorTareas, directorioPersonas, historialPersona, agendaBloques, gruposTriage] = await Promise.all([
     pool.query("select * from usuarios where colegio_id=$1", [c]),
     pool.query("select * from items where colegio_id=$1", [c]),
     pool.query("select ch.* from circulo_historial ch join items i on i.id=ch.item_id where i.colegio_id=$1", [c]),
@@ -1568,6 +1650,7 @@ app.get("/api/sistema/exportar/:id", requireMigracionKey, asyncRoute(async (req,
     pool.query("select * from directorio_personas where colegio_id=$1", [c]),
     pool.query("select hp.* from historial_persona hp join directorio_personas dp on dp.id=hp.persona_id where dp.colegio_id=$1", [c]),
     pool.query("select * from agenda_bloques where colegio_id=$1", [c]),
+    pool.query("select * from grupos_triage where colegio_id=$1", [c]),
   ]);
   res.json({
     colegio,
@@ -1576,6 +1659,7 @@ app.get("/api/sistema/exportar/:id", requireMigracionKey, asyncRoute(async (req,
     entrevistas: entrevistas.rows, documentos: documentos.rows, chatIa: chatIa.rows,
     monitorTareas: monitorTareas.rows, directorioPersonas: directorioPersonas.rows,
     historialPersona: historialPersona.rows, agendaBloques: agendaBloques.rows,
+    gruposTriage: gruposTriage.rows,
   });
 }));
 
@@ -1614,9 +1698,9 @@ app.post("/api/sistema/importar", requireMigracionKey, asyncRoute(async (req, re
     const mapaItems = {};
     for (const it of d.items || []) {
       const r = await cliente.query(
-        `insert into items (colegio_id,tipo,triage,titulo,descripcion,fecha,responsable,copiados,persona,perfil,creado,revisado,archivo_nombre,archivo_data,react,creado_en,recordatorio_enviado,recordatorio_etapa,circulo_estado,circulo_like,fecha_final,relacionai_sugerido,relacionai_motivo,relacionai_sugerencia,reunion_hora,reunion_lugar)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) returning id`,
-        [it.colegio_id, it.tipo, it.triage, it.titulo, it.descripcion, it.fecha, it.responsable, it.copiados, it.persona, it.perfil, it.creado, it.revisado, it.archivo_nombre, it.archivo_data, it.react, it.creado_en, it.recordatorio_enviado, it.recordatorio_etapa, it.circulo_estado, it.circulo_like, it.fecha_final, it.relacionai_sugerido, it.relacionai_motivo, it.relacionai_sugerencia, it.reunion_hora, it.reunion_lugar]
+        `insert into items (colegio_id,tipo,triage,titulo,descripcion,fecha,responsable,copiados,persona,perfil,creado,revisado,archivo_nombre,archivo_data,react,creado_en,recordatorio_enviado,recordatorio_etapa,circulo_estado,circulo_like,fecha_final,relacionai_sugerido,relacionai_motivo,relacionai_sugerencia,reunion_hora,reunion_lugar,lote_id,lote_total)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) returning id`,
+        [it.colegio_id, it.tipo, it.triage, it.titulo, it.descripcion, it.fecha, it.responsable, it.copiados, it.persona, it.perfil, it.creado, it.revisado, it.archivo_nombre, it.archivo_data, it.react, it.creado_en, it.recordatorio_enviado, it.recordatorio_etapa, it.circulo_estado, it.circulo_like, it.fecha_final, it.relacionai_sugerido, it.relacionai_motivo, it.relacionai_sugerencia, it.reunion_hora, it.reunion_lugar, it.lote_id, it.lote_total]
       );
       mapaItems[it.id] = r.rows[0].id;
     }
@@ -1690,6 +1774,12 @@ app.post("/api/sistema/importar", requireMigracionKey, asyncRoute(async (req, re
         [ab.colegio_id, ab.persona, ab.fecha, ab.hora, ab.estado, ab.titulo, ab.modalidad, ab.meet_link, ab.reservado_por, ab.item_id ? mapaItems[ab.item_id] : null, ab.origen, ab.creado_en]
       );
     }
+    for (const g of d.gruposTriage || []) {
+      await cliente.query(
+        `insert into grupos_triage (colegio_id,creado_por,nombre,personas,creado_en) values ($1,$2,$3,$4,$5)`,
+        [g.colegio_id, g.creado_por, g.nombre, g.personas, g.creado_en]
+      );
+    }
     await cliente.query("COMMIT");
     res.json({
       ok: true,
@@ -1700,7 +1790,7 @@ app.post("/api/sistema/importar", requireMigracionKey, asyncRoute(async (req, re
         entrevistas: (d.entrevistas || []).length, documentos: (d.documentos || []).length,
         chatIa: (d.chatIa || []).length, monitorTareas: (d.monitorTareas || []).length,
         directorioPersonas: (d.directorioPersonas || []).length, historialPersona: (d.historialPersona || []).length,
-        agendaBloques: (d.agendaBloques || []).length,
+        agendaBloques: (d.agendaBloques || []).length, gruposTriage: (d.gruposTriage || []).length,
       }
     });
   } catch (err) {
