@@ -735,14 +735,18 @@ app.post("/api/colegios/:id/entrevistas", asyncRoute(async (req, res) => {
     const persona = await pool.query("select id, rut from directorio_personas where id=$1 and colegio_id=$2", [b.personaId, req.params.id]);
     if (persona.rows.length) { personaId = persona.rows[0].id; rut = persona.rows[0].rut || null; }
   }
+  // Carpeta del historial (Fase 19b): elegida explícitamente en el formulario (con sugerencia
+  // automática si el nombre vino del directorio) — nunca se adivina en el servidor.
+  const TIPOS_ENTREVISTADO_VALIDOS = ["docente", "asistente", "estudiante", "apoderado", "otro"];
+  const tipoEntrevistado = TIPOS_ENTREVISTADO_VALIDOS.includes(b.tipoEntrevistado) ? b.tipoEntrevistado : "otro";
   const r = await pool.query(
-    `insert into entrevistas (colegio_id, nombre_entrevistado, correo, cargo, fono, fecha, hora, curso, motivo, entrevistador, desarrollo, compromisos, creado_por, perfil_creador, persona_id, rut)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) returning *`,
+    `insert into entrevistas (colegio_id, nombre_entrevistado, correo, cargo, fono, fecha, hora, curso, motivo, entrevistador, desarrollo, compromisos, creado_por, perfil_creador, persona_id, rut, tipo_entrevistado)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) returning *`,
     [
       req.params.id, b.nombreEntrevistado.trim(), b.correo || null, b.cargo || null, b.fono || null,
       b.fecha || null, b.hora || null, b.curso || null, b.motivo || null,
       b.entrevistador || actor.nombre, b.desarrollo || null, b.compromisos || null,
-      actor.nombre, actor.perfil, personaId, rut,
+      actor.nombre, actor.perfil, personaId, rut, tipoEntrevistado,
     ]
   );
   if (personaId) {
@@ -2038,6 +2042,13 @@ app.post("/api/colegios/:id/ausentismo/agregar", asyncRoute(async (req, res) => 
       await pool.query("insert into ausencias_bloques (ausencia_id, docente_horario_id) values ($1,$2)", [ausenciaId, b.id]);
     }
   }
+  // La ficha de una persona en el Buscador debe mostrar TODA su información — historial,
+  // entrevistas, y también sus ausencias, no solo lo que se registró desde su propia ficha.
+  await pool.query(
+    `insert into historial_persona (persona_id, tipo, titulo, descripcion, autor, perfil)
+     values ($1,'ausencia',$2,$3,$4,$5)`,
+    [personaId, `Ausencia · ${fechaUsar}`, causa || null, actor.nombre, actor.perfil]
+  ).catch(err => console.error("historial_persona (ausencia):", err.message));
   res.json({ ok: true, ausenciaId });
 }));
 

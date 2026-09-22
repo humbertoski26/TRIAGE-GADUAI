@@ -284,6 +284,11 @@ alter table entrevistas add column if not exists persona_id bigint references di
 -- directorio (funcionario o estudiante); si se escribió manualmente, queda vacío y el
 -- documento impreso deja el espacio en blanco para escribirlo a mano.
 alter table entrevistas add column if not exists rut text;
+-- Carpeta del historial de Entrevistas: 'docente' | 'asistente' | 'estudiante' | 'apoderado' |
+-- 'otro' — se elige explícitamente al crear (con sugerencia automática si el nombre vino del
+-- directorio), nunca se adivina solo por el texto del cargo. El año de cada carpeta sale de
+-- "fecha" (o de creado_en si no se llenó fecha), calculado en el frontend al agrupar.
+alter table entrevistas add column if not exists tipo_entrevistado text not null default 'otro';
 
 -- Ausentismo del día — nace vacío cada mañana, queda para siempre como historial real (a
 -- diferencia del prototipo de referencia, que solo guardaba el estado "de hoy" en memoria).

@@ -905,6 +905,7 @@
       <input id="ge-nombre" oninput="entFiltrarNombre()" autocomplete="off" placeholder="Nombre entrevistado/a — empieza a escribir para buscar en el directorio" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
       <div id="ge-nombre-resultados" class="col-span-2 space-y-1"></div>
       <input id="ge-rut" placeholder="RUT (se completa solo al elegir de la lista)" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
+      <select id="ge-tipo" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></select>
       <input id="ge-correo" placeholder="Correo" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
       <input id="ge-fono" placeholder="Fono" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
       <input id="ge-cargo" placeholder="Cargo / rol" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
@@ -919,7 +920,7 @@
     <button onclick="guardarEntrevista()" class="w-full brand-gradient text-white text-xs font-bold py-2.5 rounded-xl mt-2"><i class="fa-solid fa-file-word mr-1"></i> Guardar y descargar .docx</button>
     <div class="border-t border-slate-800 mt-4 pt-3">
       <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-2">Historial de este colegio</p>
-      <div id="lista-entrevistas" class="space-y-1.5 max-h-40 overflow-y-auto"></div>
+      <div id="lista-entrevistas" class="space-y-1.5 max-h-64 overflow-y-auto"></div>
     </div>
   </div>
 </div>
@@ -2131,7 +2132,7 @@ async function agregarPersona(){
     toast("Persona agregada al directorio");
   }catch(e){ toast("No se pudo agregar"); }
 }
-const HIST_TIPOS = {entrevista:"Entrevista", anotacion:"Anotación", dato:"Dato relevante"};
+const HIST_TIPOS = {entrevista:"Entrevista", anotacion:"Anotación", dato:"Dato relevante", ausencia:"Ausencia"};
 async function abrirFichaPersona(id){
   try{
     const ficha = await api(`/api/colegios/${STATE.colegioId}/directorio/${id}/ver`, {method:"POST", body: JSON.stringify(actorBody())});
@@ -2736,10 +2737,27 @@ async function abrirAlertas(){
 
 /* ---------- entrevista formal (disponible a todos los perfiles) ---------- */
 let entrevistaPersonaIdActual = null;
+// Carpetas del historial de Entrevistas (Fase 19b) — mismo orden en el selector del formulario
+// y en las carpetas del historial. Elegido siempre a mano; el directorio solo lo SUGIERE.
+const TIPOS_ENTREVISTADO = [
+  {id:"docente", label:"Docente"},
+  {id:"asistente", label:"Asistente de la educación"},
+  {id:"estudiante", label:"Estudiante"},
+  {id:"apoderado", label:"Apoderado/a"},
+  {id:"otro", label:"Otro"},
+];
+function sugerirTipoEntrevistado(tipoDirectorio, detalle){
+  if(tipoDirectorio === "estudiante") return "estudiante";
+  if(tipoDirectorio === "funcionario") return /profesor|docente/i.test(detalle||"") ? "docente" : "asistente";
+  return "otro";
+}
 async function abrirEntrevistaFormal(precarga){
   ["ge-nombre","ge-rut","ge-correo","ge-fono","ge-cargo","ge-curso","ge-fecha","ge-hora","ge-motivo","ge-desarrollo","ge-compromisos"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("ge-nombre-resultados").innerHTML = "";
   document.getElementById("ge-entrevistador").value = STATE.persona||"";
+  const selTipo = document.getElementById("ge-tipo");
+  if(!selTipo.options.length) selTipo.innerHTML = TIPOS_ENTREVISTADO.map(t=>`<option value="${t.id}">${esc(t.label)}</option>`).join("");
+  selTipo.value = (precarga && precarga.tipoEntrevistado) || "otro";
   entrevistaPersonaIdActual = (precarga && precarga.personaId) || null;
   if(precarga){
     document.getElementById("ge-nombre").value = precarga.nombre || "";
@@ -2751,13 +2769,15 @@ async function abrirEntrevistaFormal(precarga){
   document.getElementById("modal-entrevista").classList.remove("hidden");
 }
 // Desde la ficha de una persona en el Buscador — el formulario llega precargado con su nombre,
-// RUT, cargo/curso y correo, y la entrevista guardada queda enlazada a su historial (Fase 19).
+// RUT, cargo/curso, correo y el tipo de entrevistado/a sugerido, y la entrevista guardada
+// queda enlazada a su historial (Fase 19).
 function generarEntrevistaDesdeFicha(){
   if(!fichaPersonaData) return;
   document.getElementById("modal-ficha-persona").classList.add("hidden");
   abrirEntrevistaFormal({
     personaId: fichaPersonaActual, nombre: fichaPersonaData.nombre, rut: fichaPersonaData.rut,
     detalle: fichaPersonaData.detalle, correo: fichaPersonaData.correo,
+    tipoEntrevistado: sugerirTipoEntrevistado(fichaPersonaData.tipo, fichaPersonaData.detalle),
   });
 }
 let entNombreTimer = null;
@@ -2789,19 +2809,52 @@ function entElegirPersona(p){
   if(p.correo) document.getElementById("ge-correo").value = p.correo;
   entrevistaPersonaIdActual = p.id;
   document.getElementById("ge-nombre-resultados").innerHTML = "";
+  // Sugiere el tipo de entrevistado/a según el match — queda editable igual en el selector.
+  document.getElementById("ge-tipo").value = sugerirTipoEntrevistado(p.tipo, p.detalle);
 }
+// Historial organizado en carpetas — primero por tipo de entrevistado/a (Docentes, Asistentes
+// de la educación, Estudiantes, Apoderados/as, Otros), y dentro de cada una, por año (de
+// "fecha", o de "creado_en" si la entrevista no tiene fecha cargada). Carpetas vacías no se
+// muestran. <details> nativo — sin JS extra para expandir/colapsar.
 async function renderHistorialEntrevistas(){
   const lista = document.getElementById("lista-entrevistas");
   try{
     const entrevistas = await api(`/api/colegios/${STATE.colegioId}/entrevistas`);
-    lista.innerHTML = entrevistas.map(e=>`
-      <div class="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg p-2">
+    if(!entrevistas.length){ lista.innerHTML = '<p class="text-[10px] text-slate-600">Aún no hay entrevistas registradas.</p>'; return; }
+    const porTipo = {};
+    for(const e of entrevistas){
+      const tipo = TIPOS_ENTREVISTADO.some(t=>t.id===e.tipo_entrevistado) ? e.tipo_entrevistado : "otro";
+      (porTipo[tipo] = porTipo[tipo] || []).push(e);
+    }
+    const filaEntrevista = e => `
+      <div class="flex items-center justify-between gap-2 bg-slate-900 border border-slate-800 rounded-lg p-2">
         <div class="min-w-0">
           <p class="text-[11px] font-bold text-white truncate">${esc(e.nombre_entrevistado)}</p>
           <p class="text-[9px] text-slate-500 truncate">${e.fecha||'—'} · ${esc(e.entrevistador)} · ${esc(e.perfil_creador)}</p>
         </div>
-        <button onclick='descargarEntrevista(${JSON.stringify(e).replace(/'/g,"&#39;")})' class="text-cyan-300 hover:text-cyan-200 text-xs px-2"><i class="fa-solid fa-download"></i></button>
-      </div>`).join("") || '<p class="text-[10px] text-slate-600">Aún no hay entrevistas registradas.</p>';
+        <button onclick='descargarEntrevista(${JSON.stringify(e).replace(/'/g,"&#39;")})' class="text-cyan-300 hover:text-cyan-200 text-xs px-2 flex-none"><i class="fa-solid fa-download"></i></button>
+      </div>`;
+    lista.innerHTML = TIPOS_ENTREVISTADO.filter(t => porTipo[t.id]?.length).map(t => {
+      const porAnio = {};
+      for(const e of porTipo[t.id]){
+        const anio = (e.fecha || e.creado_en || "").slice(0,4) || "Sin fecha";
+        (porAnio[anio] = porAnio[anio] || []).push(e);
+      }
+      const anios = Object.keys(porAnio).sort((a,b)=>b.localeCompare(a));
+      return `<details class="bg-slate-950 border border-slate-800 rounded-lg mb-1.5">
+        <summary class="text-[11px] font-bold text-white px-2.5 py-2 cursor-pointer flex justify-between items-center">
+          <span><i class="fa-solid fa-folder text-amber-300 mr-1.5"></i>${esc(t.label)}</span>
+          <span class="text-slate-500 font-normal">${porTipo[t.id].length}</span>
+        </summary>
+        <div class="px-2 pb-2 space-y-1.5">
+          ${anios.map(anio => `
+            <details class="ml-1" open>
+              <summary class="text-[10px] text-slate-400 cursor-pointer py-1">${esc(anio)} (${porAnio[anio].length})</summary>
+              <div class="space-y-1 mt-1">${porAnio[anio].map(filaEntrevista).join("")}</div>
+            </details>`).join("")}
+        </div>
+      </details>`;
+    }).join("");
   }catch(e){ lista.innerHTML = '<p class="text-[10px] text-rose-400">No se pudo cargar el historial.</p>'; }
 }
 // Insignia institucional del documento — primero intenta el logo propio del colegio (subido
@@ -2809,28 +2862,50 @@ async function renderHistorialEntrevistas(){
 // como respaldo. Se busca una sola vez y se cachea, para que html-docx-js no dependa de un
 // fetch en el momento exacto de generar el .docx.
 let _insigniaDataUri = null;
+// Insignia PROPIA del colegio — ya no cae de respaldo al ícono de GADUAI: ahora el logo de
+// GADUAI siempre se muestra aparte, a la derecha (ver obtenerLogoGaduai), así que si el colegio
+// no subió su propia insignia, el lado izquierdo del encabezado simplemente queda vacío.
 async function obtenerInsignia(){
   if(_insigniaDataUri) return _insigniaDataUri;
   try{
     const propia = await api(`/api/colegios/${STATE.colegioId}/insignia`);
     if(propia.insignia){ _insigniaDataUri = propia.insignia; return _insigniaDataUri; }
   }catch(e){}
+  return null;
+}
+let _logoGaduaiDataUri = null;
+// Logo oficial de GADUAI (transparente) — mismo archivo para cualquier colegio, servido desde
+// el propio backend (no depende de qué insignia haya subido cada colegio). Va SIEMPRE a la
+// derecha del encabezado de cualquier documento o informe que se emita.
+async function obtenerLogoGaduai(){
+  if(_logoGaduaiDataUri) return _logoGaduaiDataUri;
   try{
-    const resp = await fetch("/icons/icon-512.png");
+    const resp = await fetch("/img/gaduai-logo-oficial.png");
     const blob = await resp.blob();
-    _insigniaDataUri = await new Promise((resolve, reject)=>{
+    _logoGaduaiDataUri = await new Promise((resolve, reject)=>{
       const reader = new FileReader();
       reader.onload = ()=>resolve(reader.result);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-  }catch(e){ _insigniaDataUri = null; }
-  return _insigniaDataUri;
+  }catch(e){ _logoGaduaiDataUri = null; }
+  return _logoGaduaiDataUri;
+}
+// Encabezado estándar de cualquier documento/informe emitido por GADUAI: insignia del colegio
+// a la izquierda (si tiene una subida), logo oficial de GADUAI a la derecha (siempre) — mismo
+// patrón para Entrevista formal, Panorama de Ausentismo, y cualquier documento nuevo que se
+// agregue después. Vale para todos los colegios, dedicados o del servicio compartido.
+function encabezadoDocumentoHtml(insigniaColegio, logoGaduai, fechaTexto){
+  return `<div class="encabezado-doc">
+    <div>${insigniaColegio?`<img src="${insigniaColegio}" style="height:60px;">`:""}</div>
+    <div style="text-align:right;font-size:9pt;color:#555;">${fechaTexto||""}</div>
+    <div>${logoGaduai?`<img src="${logoGaduai}" style="height:60px;">`:""}</div>
+  </div>`;
 }
 // Réplica del formato formal del prototipo GADUAI (tablas con bordes, celdas rotuladas,
 // firmas con RUT y nota legal al pie) — antes esta función solo armaba párrafos sueltos,
 // sin insignia ni el diseño de ficha oficial.
-function entrevistaHtmlDoc(e, insignia){
+function entrevistaHtmlDoc(e, insignia, logoGaduai){
   const oficio = ((e.desarrollo||"").length + (e.compromisos||"").length) > 1600;
   const pageSize = oficio ? "8.5in 13in" : "8.5in 11in";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
@@ -2846,8 +2921,9 @@ function entrevistaHtmlDoc(e, insignia){
     .rol{font-size:8pt;color:#555;font-weight:normal;margin-bottom:5px}
     .nota{font-size:8pt;margin-top:18px;font-style:italic}
     .desarrollo{min-height:220px}
+    .encabezado-doc{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
   </style></head><body>
-    ${insignia?`<img src="${insignia}" width="70" height="70" style="width:70px;height:70px;">`:''}
+    ${encabezadoDocumentoHtml(insignia, logoGaduai, e.fecha?`Fecha: ${e.fecha}`:"")}
     <h1>REGISTRO DE ENTREVISTA</h1>
     <table><tr><td class="lbl">Nombre Entrevistado/a</td><td>${esc(e.nombre_entrevistado)}</td><td class="lbl" style="width:15%">RUT</td><td>${esc(e.rut||'')}</td></tr></table>
     <table><tr><td class="lbl">Colegio</td><td>${esc(STATE.colegio.nombre)}</td><td class="lbl" style="width:15%">Correo</td><td>${esc(e.correo||'')}</td></tr></table>
@@ -2865,8 +2941,8 @@ function entrevistaHtmlDoc(e, insignia){
 }
 async function descargarEntrevista(e){
   try{
-    const insignia = await obtenerInsignia();
-    const blob = window.htmlDocx.asBlob(entrevistaHtmlDoc(e, insignia));
+    const [insignia, logoGaduai] = await Promise.all([obtenerInsignia(), obtenerLogoGaduai()]);
+    const blob = window.htmlDocx.asBlob(entrevistaHtmlDoc(e, insignia, logoGaduai));
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `Entrevista_${(e.nombre_entrevistado||"registro").replace(/[^a-zA-Z0-9]+/g,"_")}.docx`;
@@ -2890,6 +2966,7 @@ async function guardarEntrevista(){
     entrevistador: document.getElementById("ge-entrevistador").value.trim() || STATE.persona,
     desarrollo: document.getElementById("ge-desarrollo").value.trim(),
     compromisos: document.getElementById("ge-compromisos").value.trim(),
+    tipoEntrevistado: document.getElementById("ge-tipo").value,
     personaId: entrevistaPersonaIdActual,
   };
   let guardada;
@@ -3065,15 +3142,15 @@ function ausentismoDescargarCSV(){
 }
 async function ausentismoDescargarWord(){
   try{
-    const insignia = await obtenerInsignia();
+    const [insignia, logoGaduai] = await Promise.all([obtenerInsignia(), obtenerLogoGaduai()]);
     const filasHtml = ausFilasPlano().map(f => `<tr>${f.map(v=>`<td>${esc(v)}</td>`).join("")}</tr>`).join("") || '<tr><td colspan="7">Sin ausencias registradas.</td></tr>';
     const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
       @page{size:11in 8.5in;margin:0.7in} body{font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#111}
-      .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+      .encabezado-doc{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
       h1{font-size:14pt;margin:0} table{width:100%;border-collapse:collapse;margin-top:10px}
       th,td{border:1px solid #999;padding:5px 7px;text-align:left;font-size:9.5pt} th{background:#1F3864;color:#fff}
     </style></head><body>
-      <div class="top">${insignia?`<img src="${insignia}" style="height:60px;">`:"<div></div>"}<div style="text-align:right;font-size:9pt">Fecha: ${AUS_STATE.fecha}</div></div>
+      ${encabezadoDocumentoHtml(insignia, logoGaduai, `Fecha: ${AUS_STATE.fecha}`)}
       <h1>Panorama de Ausentismo · ${esc(STATE.colegio.nombre)}</h1>
       <table><thead><tr><th>Funcionario</th><th>RUT</th><th>Cargo</th><th>Causa</th><th>Curso/Bloque</th><th>Horario</th><th>Reemplazo</th></tr></thead><tbody>${filasHtml}</tbody></table>
     </body></html>`;
