@@ -2772,7 +2772,7 @@ function entFiltrarNombre(){
   if(q.length < 2){ cont.innerHTML = ""; return; }
   entNombreTimer = setTimeout(async () => {
     try{
-      const resultados = await api(`/api/colegios/${STATE.colegioId}/directorio/buscar`, {method:"POST", body: JSON.stringify(actorBody({q}))});
+      const resultados = await api(`/api/colegios/${STATE.colegioId}/directorio/buscar-entrevista`, {method:"POST", body: JSON.stringify(actorBody({q}))});
       cont.innerHTML = resultados.length ? resultados.map(p => `
         <div onclick='entElegirPersona(${JSON.stringify(p)})' class="bg-slate-800 border border-slate-700 rounded-lg p-2 cursor-pointer hover:border-indigo-400">
           <p class="text-[11px] font-bold text-white">${esc(p.nombre)}</p>

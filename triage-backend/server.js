@@ -726,11 +726,11 @@ app.post("/api/colegios/:id/entrevistas", asyncRoute(async (req, res) => {
   if (!b.nombreEntrevistado || !b.nombreEntrevistado.trim()) return res.status(400).json({ error: "nombre_requerido" });
   // personaId (Fase 19): si el nombre se eligió del autocompletar del directorio (Buscador o
   // Ausentismo incluidos), se valida que esa persona exista en este colegio y, al guardar,
-  // queda también como una entrada en su historial. El RUT sale del directorio, no de lo que
-  // mande el cliente — así no depende de que el frontend lo haya copiado bien, y si se escribió
-  // el nombre a mano (sin match) simplemente queda null y el documento deja el espacio para
-  // escribirlo a mano.
-  let personaId = null, rut = null;
+  // queda también como una entrada en su historial. Con match, el RUT sale del directorio (no
+  // de lo que mande el cliente, para no depender de que el frontend lo haya copiado bien); sin
+  // match, se respeta un RUT escrito a mano si lo hay, y si tampoco eso, queda null y el
+  // documento deja el espacio en blanco para escribirlo a mano.
+  let personaId = null, rut = (b.rut || "").trim() || null;
   if (b.personaId) {
     const persona = await pool.query("select id, rut from directorio_personas where id=$1 and colegio_id=$2", [b.personaId, req.params.id]);
     if (persona.rows.length) { personaId = persona.rows[0].id; rut = persona.rows[0].rut || null; }
@@ -1737,6 +1737,26 @@ app.post("/api/colegios/:id/directorio/buscar", asyncRoute(async (req, res) => {
      where colegio_id=$1 and (nombre ilike $2 or rut ilike $2) ${incluirInactivos ? "" : "and activo=true"} ${filtroTipo}
      order by nombre asc limit 30`,
     params
+  );
+  res.json(r.rows);
+}));
+
+// Autocompletar del nombre en Entrevista formal — a propósito NO usa actorConAccesoBuscador:
+// Entrevista está disponible para todos los perfiles (no solo los 4 del Buscador), así que
+// cualquier actor verificado del colegio puede buscar aquí. Devuelve menos que /buscar (sin
+// "activo", ya filtrado a activos — no tiene sentido ofrecer para entrevistar a alguien dado
+// de baja) y solo para autocompletar un formulario, no para explorar el directorio completo.
+app.post("/api/colegios/:id/directorio/buscar-entrevista", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, q } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  const termino = (q || "").trim();
+  if (termino.length < 2) return res.json([]);
+  const r = await pool.query(
+    `select id, tipo, nombre, rut, detalle, correo from directorio_personas
+     where colegio_id=$1 and activo=true and (nombre ilike $2 or rut ilike $2)
+     order by nombre asc limit 30`,
+    [req.params.id, `%${termino}%`]
   );
   res.json(r.rows);
 }));
