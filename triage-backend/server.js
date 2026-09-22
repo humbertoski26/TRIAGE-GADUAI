@@ -724,22 +724,25 @@ app.post("/api/colegios/:id/entrevistas", asyncRoute(async (req, res) => {
   const actor = await verificarActor(req.params.id, b.actorCorreo, b.actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   if (!b.nombreEntrevistado || !b.nombreEntrevistado.trim()) return res.status(400).json({ error: "nombre_requerido" });
-  // personaId (Fase 19): si la entrevista nace desde la ficha de alguien del Buscador (o desde
-  // Ausentismo), se valida que esa persona exista en este colegio y, al guardar, queda también
-  // como una entrada en su historial — sin duplicar el dato, solo referenciándolo.
-  let personaId = null;
+  // personaId (Fase 19): si el nombre se eligió del autocompletar del directorio (Buscador o
+  // Ausentismo incluidos), se valida que esa persona exista en este colegio y, al guardar,
+  // queda también como una entrada en su historial. El RUT sale del directorio, no de lo que
+  // mande el cliente — así no depende de que el frontend lo haya copiado bien, y si se escribió
+  // el nombre a mano (sin match) simplemente queda null y el documento deja el espacio para
+  // escribirlo a mano.
+  let personaId = null, rut = null;
   if (b.personaId) {
-    const persona = await pool.query("select id from directorio_personas where id=$1 and colegio_id=$2", [b.personaId, req.params.id]);
-    if (persona.rows.length) personaId = persona.rows[0].id;
+    const persona = await pool.query("select id, rut from directorio_personas where id=$1 and colegio_id=$2", [b.personaId, req.params.id]);
+    if (persona.rows.length) { personaId = persona.rows[0].id; rut = persona.rows[0].rut || null; }
   }
   const r = await pool.query(
-    `insert into entrevistas (colegio_id, nombre_entrevistado, correo, cargo, fono, fecha, hora, curso, motivo, entrevistador, desarrollo, compromisos, creado_por, perfil_creador, persona_id)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) returning *`,
+    `insert into entrevistas (colegio_id, nombre_entrevistado, correo, cargo, fono, fecha, hora, curso, motivo, entrevistador, desarrollo, compromisos, creado_por, perfil_creador, persona_id, rut)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) returning *`,
     [
       req.params.id, b.nombreEntrevistado.trim(), b.correo || null, b.cargo || null, b.fono || null,
       b.fecha || null, b.hora || null, b.curso || null, b.motivo || null,
       b.entrevistador || actor.nombre, b.desarrollo || null, b.compromisos || null,
-      actor.nombre, actor.perfil, personaId,
+      actor.nombre, actor.perfil, personaId, rut,
     ]
   );
   if (personaId) {

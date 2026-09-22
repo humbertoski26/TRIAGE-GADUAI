@@ -280,6 +280,10 @@ create index if not exists docentes_horario_colegio_idx on docentes_horario(cole
 -- panel de Ausentismo), queda enlazada a esa persona y aparece sola en su historial.
 -- Nullable: una entrevista puede seguir siendo a alguien fuera del directorio (ej. apoderado).
 alter table entrevistas add column if not exists persona_id bigint references directorio_personas(id);
+-- RUT del entrevistado/a — se rellena solo cuando el nombre se eligió del autocompletar del
+-- directorio (funcionario o estudiante); si se escribió manualmente, queda vacío y el
+-- documento impreso deja el espacio en blanco para escribirlo a mano.
+alter table entrevistas add column if not exists rut text;
 
 -- Ausentismo del día — nace vacío cada mañana, queda para siempre como historial real (a
 -- diferencia del prototipo de referencia, que solo guardaba el estado "de hoy" en memoria).
