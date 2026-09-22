@@ -12,7 +12,13 @@ const path = require("path");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const express = require("express");
-const { Pool } = require("pg");
+const { Pool, types } = require("pg");
+// node-postgres devuelve las columnas "date" (ej. entrevistas.fecha, items.fecha) como objetos
+// Date de JS por defecto — al pasar por JSON.stringify() quedan como timestamp completo
+// ("2026-09-21T00:00:00.000Z") en vez de la fecha simple ("2026-09-21") que espera el
+// frontend. OID 1082 = tipo "date" en Postgres; se deja pasar tal cual viene de la base
+// ("YYYY-MM-DD"), sin tocar timestamptz (creado_en, etc.), que sí debe seguir siendo parseable.
+types.setTypeParser(1082, val => val);
 const { enviarCorreo } = require("./email");
 const { enviarPush } = require("./push");
 const Anthropic = require("@anthropic-ai/sdk");

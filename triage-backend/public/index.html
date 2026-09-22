@@ -2895,12 +2895,17 @@ async function obtenerLogoGaduai(){
 // a la izquierda (si tiene una subida), logo oficial de GADUAI a la derecha (siempre) — mismo
 // patrón para Entrevista formal, Panorama de Ausentismo, y cualquier documento nuevo que se
 // agregue después. Vale para todos los colegios, dedicados o del servicio compartido.
+// Tabla, no flexbox: los conversores HTML→DOCX (html-docx-js/Word) no soportan display:flex —
+// con divs se ve bien en el navegador pero colapsa a bloques apilados en el .docx real. Una
+// tabla sin bordes es lo que ya usa el resto del documento (ver .firmas) y sí funciona.
+// width/height como ATRIBUTO (no solo CSS) porque Word ignora el "style" de <img> al importar
+// y muestra la imagen a su tamaño real (512×512) si no lo tiene explícito en el atributo.
 function encabezadoDocumentoHtml(insigniaColegio, logoGaduai, fechaTexto){
-  return `<div class="encabezado-doc">
-    <div>${insigniaColegio?`<img src="${insigniaColegio}" style="height:60px;">`:""}</div>
-    <div style="text-align:right;font-size:9pt;color:#555;">${fechaTexto||""}</div>
-    <div>${logoGaduai?`<img src="${logoGaduai}" style="height:60px;">`:""}</div>
-  </div>`;
+  return `<table class="encabezado-doc"><tr>
+    <td style="border:none;width:33%;text-align:left;">${insigniaColegio?`<img src="${insigniaColegio}" width="50" height="50" style="width:50px;height:50px;">`:""}</td>
+    <td style="border:none;width:34%;text-align:center;font-size:9pt;color:#555;">${fechaTexto||""}</td>
+    <td style="border:none;width:33%;text-align:right;">${logoGaduai?`<img src="${logoGaduai}" width="50" height="50" style="width:50px;height:50px;">`:""}</td>
+  </tr></table>`;
 }
 // Réplica del formato formal del prototipo GADUAI (tablas con bordes, celdas rotuladas,
 // firmas con RUT y nota legal al pie) — antes esta función solo armaba párrafos sueltos,
@@ -2921,11 +2926,12 @@ function entrevistaHtmlDoc(e, insignia, logoGaduai){
     .rol{font-size:8pt;color:#555;font-weight:normal;margin-bottom:5px}
     .nota{font-size:8pt;margin-top:18px;font-style:italic}
     .desarrollo{min-height:220px}
-    .encabezado-doc{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .encabezado-doc{margin-bottom:14px}
+    .encabezado-doc td{border:none;padding:0}
   </style></head><body>
     ${encabezadoDocumentoHtml(insignia, logoGaduai, e.fecha?`Fecha: ${e.fecha}`:"")}
     <h1>REGISTRO DE ENTREVISTA</h1>
-    <table><tr><td class="lbl">Nombre Entrevistado/a</td><td>${esc(e.nombre_entrevistado)}</td><td class="lbl" style="width:15%">RUT</td><td>${esc(e.rut||'')}</td></tr></table>
+    <table><tr><td class="lbl">Nombre Entrevistado/a</td><td>${esc(e.nombre_entrevistado)}</td></tr></table>
     <table><tr><td class="lbl">Colegio</td><td>${esc(STATE.colegio.nombre)}</td><td class="lbl" style="width:15%">Correo</td><td>${esc(e.correo||'')}</td></tr></table>
     <table><tr><td class="lbl">Cargo</td><td>${esc(e.cargo||'')}</td><td class="lbl" style="width:15%">Fono</td><td>${esc(e.fono||'')}</td></tr></table>
     <table><tr><td class="lbl">Fecha</td><td>${e.fecha||''}</td><td class="lbl" style="width:15%">Hora</td><td>${e.hora||''}</td><td class="lbl" style="width:15%">Curso</td><td>${esc(e.curso||'')}</td></tr></table>
@@ -3146,7 +3152,8 @@ async function ausentismoDescargarWord(){
     const filasHtml = ausFilasPlano().map(f => `<tr>${f.map(v=>`<td>${esc(v)}</td>`).join("")}</tr>`).join("") || '<tr><td colspan="7">Sin ausencias registradas.</td></tr>';
     const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
       @page{size:11in 8.5in;margin:0.7in} body{font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#111}
-      .encabezado-doc{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+      .encabezado-doc{margin-bottom:14px}
+      .encabezado-doc td{border:none;padding:0}
       h1{font-size:14pt;margin:0} table{width:100%;border-collapse:collapse;margin-top:10px}
       th,td{border:1px solid #999;padding:5px 7px;text-align:left;font-size:9.5pt} th{background:#1F3864;color:#fff}
     </style></head><body>
