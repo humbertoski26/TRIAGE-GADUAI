@@ -32,7 +32,7 @@
   // Aplica el tema guardado en este dispositivo ANTES de pintar nada, para no mostrar un
   // parpadeo de oscuro→claro — la cuenta (server) es la fuente de verdad real y se reconcilia
   // más abajo en entrarApp(), esto es solo para la primera pintura.
-  try{ document.documentElement.dataset.theme = localStorage.getItem("gaduai-tema")==="claro" ? "claro" : "oscuro"; }catch(e){}
+  try{ document.documentElement.dataset.theme = localStorage.getItem("gaduai-tema")==="oscuro" ? "oscuro" : "claro"; }catch(e){}
 </script>
 <style>
   :root{color-scheme:dark}
@@ -955,9 +955,9 @@
       <input id="ge-fecha" type="date" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
       <input id="ge-hora" type="time" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
       <input id="ge-entrevistador" placeholder="Entrevistador/a" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
-      <textarea id="ge-motivo" placeholder="Motivo de la entrevista" rows="2" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
-      <textarea id="ge-desarrollo" placeholder="Desarrollo de la entrevista" rows="3" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
-      <textarea id="ge-compromisos" placeholder="Compromisos / acuerdos" rows="2" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
+      <textarea id="ge-motivo" spellcheck="true" lang="es" placeholder="Motivo de la entrevista" rows="2" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
+      <textarea id="ge-desarrollo" spellcheck="true" lang="es" placeholder="Desarrollo de la entrevista" rows="3" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
+      <textarea id="ge-compromisos" spellcheck="true" lang="es" placeholder="Compromisos / acuerdos" rows="2" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
     </div>
     <button onclick="guardarEntrevista()" class="w-full brand-gradient text-white text-xs font-bold py-2.5 rounded-xl mt-2"><i class="fa-solid fa-file-word mr-1"></i> Guardar y descargar .docx</button>
     <div class="border-t border-slate-800 mt-4 pt-3">
@@ -1173,7 +1173,7 @@ async function ingresar(){
 
 /* ---------- modo claro/oscuro (Fase 6) — guardado por cuenta, no por dispositivo ---------- */
 function aplicarTema(tema){
-  const t = tema==="claro" ? "claro" : "oscuro";
+  const t = tema==="oscuro" ? "oscuro" : "claro";
   document.documentElement.dataset.theme = t;
   try{ localStorage.setItem("gaduai-tema", t); }catch(e){}
   const btn = document.getElementById("btn-tema");

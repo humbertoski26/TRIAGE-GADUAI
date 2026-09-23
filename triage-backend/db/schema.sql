@@ -33,6 +33,13 @@ create table if not exists usuarios (
 -- Preferencia de tema guardada por cuenta (no por dispositivo) — 'oscuro' por defecto para
 -- no cambiar el aspecto de nadie hasta que alguien elija modo claro.
 alter table usuarios add column if not exists tema text not null default 'oscuro';
+-- Toda cuenta nueva (en cualquier colegio, existente o futuro) parte en modo claro — quien
+-- prefiera oscuro lo elige desde su propio interruptor. `add column ... default` de arriba solo
+-- rige la primera vez que la columna se crea; en las bases ya migradas hace falta este ALTER
+-- aparte para que el default de la columna cambie de verdad. Las cuentas que ya existen NO se
+-- tocan (siguen con lo que ya tenían guardado) — esto solo cambia el punto de partida de las
+-- cuentas que se creen de ahora en adelante.
+alter table usuarios alter column tema set default 'claro';
 -- Notificaciones push activadas por defecto para todos: cada cuenta puede apagarlas desde su
 -- propio menú (no depende del perfil, cualquiera controla las suyas). Independiente del permiso
 -- del navegador (Notification.permission) — esto es el interruptor a nivel de cuenta/servidor:
