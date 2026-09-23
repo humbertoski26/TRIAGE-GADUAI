@@ -218,6 +218,19 @@
   .ortografia-input::placeholder{color:#64748b; opacity:1}
   .ortografia-backdrop{white-space:pre-wrap; word-wrap:break-word; overflow:hidden}
   .ortografia-error{text-decoration:underline; text-decoration-color:#ef4444; text-decoration-style:wavy; text-underline-offset:3px; text-decoration-thickness:1.5px; cursor:help}
+
+  /* ---------- Post-it: notas personales flotantes ----------
+     Viven en localStorage de este dispositivo (por colegio+cuenta), no en el servidor — por eso
+     sobreviven a cerrar sesión: solo desaparecen si se borran desde su propia cruz. */
+  .postit{position:fixed; width:180px; min-height:150px; display:flex; flex-direction:column; border-radius:6px; box-shadow:2px 5px 14px rgba(0,0,0,.3); z-index:200; font-family:inherit}
+  .postit-barra{display:flex; align-items:center; justify-content:space-between; padding:5px 6px; cursor:grab; user-select:none; touch-action:none}
+  .postit-barra:active{cursor:grabbing}
+  .postit-colores{display:flex; gap:5px}
+  .postit-color{width:14px; height:14px; border-radius:9999px; border:1px solid rgba(0,0,0,.35); padding:0; cursor:pointer}
+  .postit-cerrar{background:none; border:none; font-size:13px; font-weight:900; line-height:1; padding:2px 3px; cursor:pointer; color:rgba(0,0,0,.55)}
+  .postit-cerrar:hover{color:#000}
+  .postit-texto{flex:1; resize:none; border:none; background:transparent; padding:2px 8px 8px; font-size:12.5px; color:#1a1a1a; outline:none; font-family:inherit}
+  .postit-texto::placeholder{color:rgba(0,0,0,.4)}
 </style>
 </head>
 <body class="text-slate-200 min-h-screen">
@@ -308,6 +321,7 @@
       </button>
       <div class="flex items-center gap-3 flex-wrap md:justify-self-end">
         <span id="sync-indicator" class="text-[10px] text-emerald-400" title="Sincronizado con el servidor"><i class="fa-solid fa-cloud"></i></span>
+        <button onclick="crearPostit()" title="Agregar nota post-it" class="text-lg text-amber-500 hover:text-amber-400 p-1"><i class="fa-solid fa-note-sticky"></i></button>
         <div class="bg-white rounded-lg px-1.5 py-1 flex-none leading-none">
           <img src="/img/gaduai-logo-app.png" alt="GADUAI · Inteligencia Organizacional" title="GADUAI" class="w-[85px] sm:w-[110px] md:w-[140px] h-auto block">
         </div>
@@ -1289,6 +1303,7 @@ async function entrarApp(){
   actualizarRelojHeader();
   if(relojTimer) clearInterval(relojTimer);
   relojTimer = setInterval(actualizarRelojHeader, 1000);
+  pintarPostits(); // reaparecen las notas guardadas en este dispositivo, si las hay
 }
 const HEADER_RELOJ_DIAS = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 const HEADER_RELOJ_MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
@@ -1299,6 +1314,90 @@ function actualizarRelojHeader(){
   const ahora = new Date();
   horaEl.textContent = String(ahora.getHours()).padStart(2,"0") + ":" + String(ahora.getMinutes()).padStart(2,"0");
   fechaEl.textContent = `${HEADER_RELOJ_DIAS[ahora.getDay()]} ${ahora.getDate()} ${HEADER_RELOJ_MESES[ahora.getMonth()]}`;
+}
+
+/* ---------- Post-it: notas personales flotantes (Fase 20) ----------
+   Viven en localStorage de ESTE dispositivo, no en el servidor — por eso "aunque cierren la
+   sesión" siguen ahí: cerrarSesion() solo borra la sesión guardada, nunca esta clave. Cada
+   colegio+cuenta tiene su propio set de notas, para que un dispositivo compartido no mezcle
+   las de una persona con las de otra. */
+const POSTIT_COLORES = ["#39FF14", "#FFEB3B", "#FF3EC9"]; // verde flúor (por defecto), amarillo, fucsia
+let postitContador = 0;
+function postitStorageKey(){ return `gaduai-postits-${STATE.colegioId}-${(STATE.correo||"").toLowerCase()}`; }
+function postitsObtener(){
+  try{ return JSON.parse(localStorage.getItem(postitStorageKey())) || []; }catch(e){ return []; }
+}
+function postitsGuardar(notas){
+  try{ localStorage.setItem(postitStorageKey(), JSON.stringify(notas)); }catch(e){}
+}
+function crearPostit(){
+  const notas = postitsObtener();
+  const offset = (notas.length % 6) * 26;
+  const x = Math.max(8, Math.min((window.innerWidth||360) - 196, 60 + offset));
+  const y = Math.max(80, Math.min((window.innerHeight||640) - 200, 100 + offset));
+  notas.push({ id: Date.now() + (postitContador++), texto: "", color: POSTIT_COLORES[0], x, y });
+  postitsGuardar(notas);
+  pintarPostits();
+}
+function postitEliminar(id){
+  postitsGuardar(postitsObtener().filter(n=>n.id!==id));
+  pintarPostits();
+}
+function postitCambiarColor(id, color){
+  const notas = postitsObtener();
+  const n = notas.find(n=>n.id===id);
+  if(!n) return;
+  n.color = color;
+  postitsGuardar(notas);
+  pintarPostits();
+}
+function postitGuardarTexto(id, texto){
+  const notas = postitsObtener();
+  const n = notas.find(n=>n.id===id);
+  if(!n) return;
+  n.texto = texto;
+  postitsGuardar(notas);
+}
+// Arrastre con Pointer Events (unifica mouse y touch, funciona igual en celular). Se agarra solo
+// desde la barra superior de la nota, nunca desde el textarea (para no pelear con el teclado).
+function postitIniciarArrastre(ev, id){
+  ev.preventDefault();
+  const nota = document.getElementById("postit-"+id);
+  if(!nota) return;
+  const rect = nota.getBoundingClientRect();
+  const offsetX = ev.clientX - rect.left, offsetY = ev.clientY - rect.top;
+  function mover(e){
+    const x = Math.max(0, Math.min(window.innerWidth - rect.width, e.clientX - offsetX));
+    const y = Math.max(0, Math.min(window.innerHeight - rect.height, e.clientY - offsetY));
+    nota.style.left = x + "px";
+    nota.style.top = y + "px";
+  }
+  function soltar(){
+    document.removeEventListener("pointermove", mover);
+    document.removeEventListener("pointerup", soltar);
+    const notas = postitsObtener();
+    const n = notas.find(n=>n.id===id);
+    if(n){ n.x = parseInt(nota.style.left, 10); n.y = parseInt(nota.style.top, 10); postitsGuardar(notas); }
+  }
+  document.addEventListener("pointermove", mover);
+  document.addEventListener("pointerup", soltar);
+}
+function pintarPostits(){
+  let cont = document.getElementById("postits-contenedor");
+  if(!cont){
+    cont = document.createElement("div");
+    cont.id = "postits-contenedor";
+    document.body.appendChild(cont);
+  }
+  const notas = postitsObtener();
+  cont.innerHTML = notas.map(n => `
+    <div id="postit-${n.id}" class="postit" style="left:${n.x}px;top:${n.y}px;background:${n.color}">
+      <div class="postit-barra" onpointerdown="postitIniciarArrastre(event,${n.id})">
+        <span class="postit-colores">${POSTIT_COLORES.map(c=>`<button type="button" class="postit-color" style="background:${c}" onclick="postitCambiarColor(${n.id},'${c}')" title="Cambiar color"></button>`).join("")}</span>
+        <button type="button" class="postit-cerrar" onclick="postitEliminar(${n.id})" title="Eliminar nota">✕</button>
+      </div>
+      <textarea class="postit-texto" placeholder="Escribe algo…" oninput="postitGuardarTexto(${n.id}, this.value)">${esc(n.texto)}</textarea>
+    </div>`).join("");
 }
 
 async function renderMenuPerfiles(){
