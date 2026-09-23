@@ -25,6 +25,12 @@ create table if not exists usuarios (
 -- Preferencia de tema guardada por cuenta (no por dispositivo) — 'oscuro' por defecto para
 -- no cambiar el aspecto de nadie hasta que alguien elija modo claro.
 alter table usuarios add column if not exists tema text not null default 'oscuro';
+-- Notificaciones push activadas por defecto para todos: cada cuenta puede apagarlas desde su
+-- propio menú (no depende del perfil, cualquiera controla las suyas). Independiente del permiso
+-- del navegador (Notification.permission) — esto es el interruptor a nivel de cuenta/servidor:
+-- aunque el navegador ya haya concedido el permiso, si esta columna está en false, enviarPush()
+-- no manda nada.
+alter table usuarios add column if not exists push_habilitado boolean not null default true;
 -- Auditoría de seguridad (antes de vender a un colegio real): las contraseñas dejaron de
 -- guardarse en texto plano. `clave_hash` (bcrypt) es la fuente de verdad desde ahora; `clave`
 -- se deja de escribir pero no se borra todavía (server.js migra las filas existentes a

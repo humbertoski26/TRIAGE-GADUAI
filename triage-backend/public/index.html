@@ -342,7 +342,7 @@
           <div id="menu-perfiles" class="space-y-1 mb-3 max-h-32 overflow-y-auto"></div>
           <button id="btn-tema" onclick="cambiarTema()" class="w-full text-[11px] text-sky-300 border border-sky-500/30 rounded-lg py-2"><i class="fa-solid fa-sun mr-1"></i> Modo claro</button>
           <button id="btn-configuracion" onclick="abrirUsuarios()" hidden class="w-full mt-2 text-[11px] text-slate-300 border border-slate-600/40 rounded-lg py-2"><i class="fa-solid fa-gear mr-1"></i> Configuración</button>
-          <button id="btn-activar-push" onclick="activarPush()" class="w-full mt-2 text-[11px] text-amber-300 border border-amber-500/30 rounded-lg py-2"><i class="fa-solid fa-bell mr-1"></i> Activar notificaciones</button>
+          <button id="btn-activar-push" onclick="activarPush()" title="Notificaciones activadas por defecto — toca para desactivarlas" class="w-full mt-2 text-[11px] text-amber-300 border border-amber-500/30 rounded-lg py-2"><i class="fa-solid fa-bell mr-1"></i> Notificaciones activadas</button>
         </div>
       </div>
 
@@ -1059,7 +1059,7 @@ const TRIAGE = {
   Gris:   {orden:3, color:"#64748b", icon:"⚪", nombre:"Diferible",   desc:"No urgente + no importante · Programar/eliminar"}
 };
 
-let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, filtroTipo:"todos", filtroColor:"todos", filtroVencimiento:"todas", pulsoEventosRango:{min:1,max:4}, pulsoCongelado:{} };
+let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, pushHabilitado:true, filtroTipo:"todos", filtroColor:"todos", filtroVencimiento:"todas", pulsoEventosRango:{min:1,max:4}, pulsoCongelado:{} };
 let archivoPendiente = null;
 let timelineCache = [];
 let timelineCacheJson = "";
@@ -1132,7 +1132,7 @@ async function init(){
       const r = await api(`/api/colegios/${sesion.colegioId}/login`, {method:"POST", body: JSON.stringify({correo:sesion.correo, clave:sesion.clave})});
       STATE.colegio = colegio; STATE.colegioId = colegio.id;
       STATE.correo = sesion.correo; STATE.clave = sesion.clave;
-      STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken; STATE.tema = r.usuario.tema;
+      STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken; STATE.tema = r.usuario.tema; STATE.pushHabilitado = r.usuario.push_habilitado !== false;
       await entrarApp();
       return;
     }catch(e){ borrarSesion(); }
@@ -1158,7 +1158,7 @@ async function ingresar(){
   try{
     const r = await api(`/api/colegios/${STATE.colegioId}/login`, {method:"POST", body: JSON.stringify({correo, clave})});
     STATE.correo = correo; STATE.clave = clave;
-    STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken; STATE.tema = r.usuario.tema;
+    STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken; STATE.tema = r.usuario.tema; STATE.pushHabilitado = r.usuario.push_habilitado !== false;
     guardarSesion();
     await entrarApp();
   }catch(e){ toast("Correo o clave incorrectos para este colegio"); }
@@ -1251,6 +1251,7 @@ async function entrarApp(){
   actualizarLinkRelacionai();
   eiSetup();
   cargarInsigniaHeader();
+  intentarActivarPushAutomatico(); // no bloquea: puede abrir el diálogo nativo de permiso
   await Promise.all([renderMenuPerfiles(), cargarPulsoEventosRango(), cargarTimeline()]);
   if(pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(cargarTimeline, 5000); // sincronización con otros dispositivos
@@ -1271,22 +1272,63 @@ function urlBase64ToUint8Array(base64String){
   const rawData = atob(base64);
   return Uint8Array.from([...rawData].map(c=>c.charCodeAt(0)));
 }
-async function activarPush(){
+// Suscribe este dispositivo al navegador (pide permiso si hace falta) y lo registra en el
+// servidor. silencioso=true no muestra toasts (se usa en el intento automático al entrar, para
+// no molestar si el navegador no soporta push o la persona ya lo rechazó antes) — silencioso=
+// false es el uso manual desde el botón, que sí explica qué pasó.
+async function suscribirPush(silencioso){
   if(!("serviceWorker" in navigator) || !("PushManager" in window)){
-    toast("Este navegador no soporta notificaciones push. En iPhone, agrega GADUAI a la pantalla de inicio primero.");
-    return;
+    if(!silencioso) toast("Este navegador no soporta notificaciones push. En iPhone, agrega GADUAI a la pantalla de inicio primero.");
+    return false;
   }
   try{
     const permiso = await Notification.requestPermission();
-    if(permiso !== "granted"){ toast("No se concedió el permiso de notificaciones."); return; }
+    if(permiso !== "granted"){ if(!silencioso) toast("No se concedió el permiso de notificaciones."); return false; }
     const { publicKey } = await api("/api/push-public-key");
-    if(!publicKey){ toast("Las notificaciones push todavía no están configuradas en el servidor."); return; }
+    if(!publicKey){ if(!silencioso) toast("Las notificaciones push todavía no están configuradas en el servidor."); return false; }
     const registro = await navigator.serviceWorker.ready;
     let sub = await registro.pushManager.getSubscription();
     if(!sub) sub = await registro.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
     await api(`/api/colegios/${STATE.colegioId}/push-subscripcion`, {method:"POST", body: JSON.stringify(actorBody({subscription: sub.toJSON()}))});
-    toast("Notificaciones activadas ✅");
-  }catch(e){ toast("No se pudo activar las notificaciones (revisa los permisos del navegador)."); }
+    return true;
+  }catch(e){ if(!silencioso) toast("No se pudo activar las notificaciones (revisa los permisos del navegador)."); return false; }
+}
+// Intento automático al entrar (Fase 20): las notificaciones vienen activadas por defecto para
+// toda cuenta nueva (push_habilitado=true en el servidor) — en vez de obligar a buscar un botón
+// escondido, se pide el permiso del navegador solo. Sin ruido si falla (silencioso=true): un
+// navegador que no soporta push, o alguien que ya rechazó el permiso antes, no debe ver un toast
+// en cada login. Si la cuenta apagó la preferencia (STATE.pushHabilitado=false) no se intenta.
+async function intentarActivarPushAutomatico(){
+  if(!STATE.pushHabilitado) { actualizarBotonPush(); return; }
+  if(typeof Notification === "undefined" || Notification.permission !== "default") { actualizarBotonPush(); return; }
+  await suscribirPush(true);
+  actualizarBotonPush();
+}
+function actualizarBotonPush(){
+  const btn = document.getElementById("btn-activar-push");
+  if(!btn) return;
+  if(STATE.pushHabilitado){
+    btn.innerHTML = '<i class="fa-solid fa-bell mr-1"></i> Notificaciones activadas';
+    btn.classList.remove("text-slate-500","border-slate-600/40");
+    btn.classList.add("text-amber-300","border-amber-500/30");
+  } else {
+    btn.innerHTML = '<i class="fa-solid fa-bell-slash mr-1"></i> Notificaciones desactivadas';
+    btn.classList.remove("text-amber-300","border-amber-500/30");
+    btn.classList.add("text-slate-500","border-slate-600/40");
+  }
+}
+// El botón alterna el interruptor de cuenta (push_habilitado) — al prender, además intenta
+// suscribir este dispositivo si el navegador todavía no lo hizo.
+async function activarPush(){
+  STATE.pushHabilitado = !STATE.pushHabilitado;
+  actualizarBotonPush();
+  try{ await api(`/api/colegios/${STATE.colegioId}/usuarios/push-preferencia`, {method:"POST", body: JSON.stringify(actorBody({habilitado: STATE.pushHabilitado}))}); }catch(e){}
+  if(STATE.pushHabilitado){
+    const ok = await suscribirPush(false);
+    if(ok) toast("Notificaciones activadas ✅");
+  } else {
+    toast("Notificaciones desactivadas");
+  }
 }
 
 function cerrarSesion(){

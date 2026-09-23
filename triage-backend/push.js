@@ -26,8 +26,14 @@ function asegurarConfig() {
 
 // Busca todas las suscripciones de esa persona en ese colegio y les manda la notificación.
 // Si una suscripción devuelve 404/410 (venció o el usuario desinstaló/revocó), se borra sola.
+// Interruptor por cuenta (usuarios.push_habilitado, activado por defecto): si la persona apagó
+// las notificaciones desde su menú, no se manda nada aunque tenga suscripciones activas del
+// navegador — quien no tiene cuenta de usuario (destinatario de texto libre) no tiene fila que
+// consultar, así que sigue de largo (nunca tuvo suscripción de todos modos).
 async function enviarPush(pool, colegioId, persona, { titulo, cuerpo, url }) {
   if (!configurado() || !persona) return 0;
+  const pref = await pool.query("select push_habilitado from usuarios where colegio_id=$1 and nombre=$2", [colegioId, persona]);
+  if (pref.rows.length && pref.rows[0].push_habilitado === false) return 0;
   asegurarConfig();
   const subs = await pool.query(
     "select id, endpoint, p256dh, auth from push_subscripciones where colegio_id=$1 and persona=$2",

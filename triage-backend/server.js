@@ -210,7 +210,7 @@ function generarSsoToken(correo, nombre, perfil) {
 async function verificarActor(colegioId, correo, clave) {
   if (!correo || !clave) return null;
   const r = await pool.query(
-    "select nombre, correo, perfil, tema, clave_hash from usuarios where colegio_id=$1 and lower(correo)=lower($2)",
+    "select nombre, correo, perfil, tema, push_habilitado, clave_hash from usuarios where colegio_id=$1 and lower(correo)=lower($2)",
     [colegioId, correo]
   );
   const fila = r.rows[0];
@@ -585,6 +585,16 @@ app.post("/api/colegios/:id/usuarios/tema", asyncRoute(async (req, res) => {
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   if (tema !== "claro" && tema !== "oscuro") return res.status(400).json({ error: "tema_invalido" });
   await pool.query("update usuarios set tema=$1 where colegio_id=$2 and lower(correo)=lower($3)", [tema, req.params.id, actorCorreo]);
+  res.json({ ok: true });
+}));
+
+// Mismo patrón que la preferencia de tema: cada quien prende/apaga sus propias notificaciones
+// push, activadas por defecto (columna push_habilitado, default true) — no requiere ser máster.
+app.post("/api/colegios/:id/usuarios/push-preferencia", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, habilitado } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  await pool.query("update usuarios set push_habilitado=$1 where colegio_id=$2 and lower(correo)=lower($3)", [!!habilitado, req.params.id, actorCorreo]);
   res.json({ ok: true });
 }));
 
@@ -1013,7 +1023,7 @@ app.post("/api/colegios/:id/timeline/:itemId/chat", asyncRoute(async (req, res) 
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   if (!texto || !texto.trim()) return res.status(400).json({ error: "texto_requerido" });
-  const it = await pool.query("select tipo, persona, responsable, copiados from items where id=$1 and colegio_id=$2", [req.params.itemId, req.params.id]);
+  const it = await pool.query("select titulo, tipo, persona, responsable, copiados from items where id=$1 and colegio_id=$2", [req.params.itemId, req.params.id]);
   if (!it.rows.length) return res.status(404).json({ error: "no_encontrado" });
   const item = it.rows[0];
   if (item.tipo !== "hito") return res.status(400).json({ error: "chat_solo_para_hitos" });
@@ -1028,6 +1038,13 @@ app.post("/api/colegios/:id/timeline/:itemId/chat", asyncRoute(async (req, res) 
     [req.params.itemId, actor.nombre]
   );
   res.json({ ok: true });
+
+  // Aviso (campanita + push) al resto de los participantes del hito — el remitente ya vio su
+  // propio mensaje, así que no se avisa a sí mismo. Best-effort, no bloquea la respuesta.
+  const otros = Array.from(new Set([item.persona, item.responsable, ...(item.copiados || [])].filter(p => p && p !== actor.nombre)));
+  for (const p of otros) {
+    crearAlerta(req.params.id, req.params.itemId, p, `${actor.nombre} escribió en el chat de: ${item.titulo}`).catch(() => {});
+  }
 }));
 
 app.post("/api/colegios/:id/timeline/:itemId/chat-leido", asyncRoute(async (req, res) => {
