@@ -204,6 +204,18 @@
   #modal-monitor details>summary::-webkit-details-marker{display:none}
   #modal-monitor details[open]>summary i{transform:rotate(90deg)}
   [hidden]{display:none!important}
+
+  /* ---------- Corrector ortográfico en vivo (Entrevista formal) ----------
+     El texto real vive en un <textarea> normal (cursor, teclado y deshacer nativos, intactos);
+     el textarea queda con el texto invisible y solo el cursor visible, y un <div> detrás
+     (mismo padding/tamaño de letra, position:absolute dentro de un wrapper position:relative)
+     pinta el mismo texto con las palabras mal escritas subrayadas en rojo. Evita el problema
+     clásico de contentEditable (el cursor salta al reescribir el HTML en cada chequeo). */
+  .ortografia-input{color:transparent!important; caret-color:#fff}
+  :root[data-theme="claro"] .ortografia-input{caret-color:#0f172a}
+  .ortografia-input::placeholder{color:#64748b; opacity:1}
+  .ortografia-backdrop{white-space:pre-wrap; word-wrap:break-word; overflow:hidden}
+  .ortografia-error{text-decoration:underline; text-decoration-color:#ef4444; text-decoration-style:wavy; text-underline-offset:3px; text-decoration-thickness:1.5px; cursor:help}
 </style>
 </head>
 <body class="text-slate-200 min-h-screen">
@@ -955,9 +967,18 @@
       <input id="ge-fecha" type="date" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
       <input id="ge-hora" type="time" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
       <input id="ge-entrevistador" placeholder="Entrevistador/a" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus">
-      <textarea id="ge-motivo" spellcheck="true" lang="es" placeholder="Motivo de la entrevista" rows="2" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
-      <textarea id="ge-desarrollo" spellcheck="true" lang="es" placeholder="Desarrollo de la entrevista" rows="3" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
-      <textarea id="ge-compromisos" spellcheck="true" lang="es" placeholder="Compromisos / acuerdos" rows="2" class="col-span-2 bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
+      <div class="col-span-2 relative">
+        <div id="ge-motivo-backdrop" aria-hidden="true" class="ortografia-backdrop absolute inset-0 bg-slate-800 border border-slate-700 text-white text-xs p-2.5 rounded-lg"></div>
+        <textarea id="ge-motivo" oninput="ortografiaRevisar('ge-motivo')" onscroll="ortografiaSincronizarScroll('ge-motivo')" spellcheck="true" lang="es" placeholder="Motivo de la entrevista" rows="2" class="relative w-full ortografia-input bg-transparent border border-transparent text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
+      </div>
+      <div class="col-span-2 relative">
+        <div id="ge-desarrollo-backdrop" aria-hidden="true" class="ortografia-backdrop absolute inset-0 bg-slate-800 border border-slate-700 text-white text-xs p-2.5 rounded-lg"></div>
+        <textarea id="ge-desarrollo" oninput="ortografiaRevisar('ge-desarrollo')" onscroll="ortografiaSincronizarScroll('ge-desarrollo')" spellcheck="true" lang="es" placeholder="Desarrollo de la entrevista" rows="3" class="relative w-full ortografia-input bg-transparent border border-transparent text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
+      </div>
+      <div class="col-span-2 relative">
+        <div id="ge-compromisos-backdrop" aria-hidden="true" class="ortografia-backdrop absolute inset-0 bg-slate-800 border border-slate-700 text-white text-xs p-2.5 rounded-lg"></div>
+        <textarea id="ge-compromisos" oninput="ortografiaRevisar('ge-compromisos')" onscroll="ortografiaSincronizarScroll('ge-compromisos')" spellcheck="true" lang="es" placeholder="Compromisos / acuerdos" rows="2" class="relative w-full ortografia-input bg-transparent border border-transparent text-xs rounded-lg p-2.5 outline-none focus:ring-2 gaduai-focus"></textarea>
+      </div>
     </div>
     <button onclick="guardarEntrevista()" class="w-full brand-gradient text-white text-xs font-bold py-2.5 rounded-xl mt-2"><i class="fa-solid fa-file-word mr-1"></i> Guardar y descargar .docx</button>
     <div class="border-t border-slate-800 mt-4 pt-3">
@@ -3028,12 +3049,18 @@ function sugerirTipoEntrevistado(tipoDirectorio, detalle){
 }
 async function abrirEntrevistaFormal(precarga){
   ["ge-nombre","ge-rut","ge-correo","ge-fono","ge-cargo","ge-curso","ge-fecha","ge-hora","ge-motivo","ge-desarrollo","ge-compromisos"].forEach(id=>document.getElementById(id).value="");
+  ORTOGRAFIA_IDS.forEach(ortografiaPintarInmediato); // limpia el fondo con el subrayado de la vez anterior
   document.getElementById("ge-nombre-resultados").innerHTML = "";
   document.getElementById("ge-entrevistador").value = STATE.persona||"";
   const selTipo = document.getElementById("ge-tipo");
   if(!selTipo.options.length) selTipo.innerHTML = TIPOS_ENTREVISTADO.map(t=>`<option value="${t.id}">${esc(t.label)}</option>`).join("");
   selTipo.value = (precarga && precarga.tipoEntrevistado) || "otro";
   entrevistaPersonaIdActual = (precarga && precarga.personaId) || null;
+  // Día y hora se rellenan solos con el momento actual — queda editable igual, por si la
+  // entrevista se registra después o se agenda para otro momento.
+  const ahora = new Date();
+  document.getElementById("ge-fecha").value = ahora.toLocaleDateString("sv-SE"); // "YYYY-MM-DD" en hora local, no UTC
+  document.getElementById("ge-hora").value = String(ahora.getHours()).padStart(2,"0") + ":" + String(ahora.getMinutes()).padStart(2,"0");
   if(precarga){
     document.getElementById("ge-nombre").value = precarga.nombre || "";
     document.getElementById("ge-rut").value = precarga.rut || "";
@@ -3042,6 +3069,69 @@ async function abrirEntrevistaFormal(precarga){
   }
   await renderHistorialEntrevistas();
   document.getElementById("modal-entrevista").classList.remove("hidden");
+}
+
+/* ---------- Corrector ortográfico en vivo (español) para Entrevista formal ----------
+   nspell + dictionary-es (diccionario real Hunspell) cargados una sola vez, bajo demanda
+   (recién cuando se abre la primera entrevista) para no pesar el arranque de la app a nadie
+   que nunca la use. Los .aff/.dic se piden como archivos sueltos (no vía el paquete
+   "dictionary-es" completo, que intenta leerlos con fs de Node y no funciona en el navegador
+   tal cual lo empaqueta jsDelivr) — se probaron ambos en vivo antes de integrarlos. */
+const ORTOGRAFIA_IDS = ["ge-motivo","ge-desarrollo","ge-compromisos"];
+let ortografiaSpeller = null, ortografiaCargando = null, ortografiaTimers = {};
+async function ortografiaAsegurarCargada(){
+  if(ortografiaSpeller) return ortografiaSpeller;
+  if(!ortografiaCargando){
+    ortografiaCargando = (async()=>{
+      const nspellMod = await import("https://cdn.jsdelivr.net/npm/nspell/+esm");
+      const [aff, dic] = await Promise.all([
+        fetch("https://cdn.jsdelivr.net/npm/dictionary-es@4.0.0/index.aff").then(r=>r.text()),
+        fetch("https://cdn.jsdelivr.net/npm/dictionary-es@4.0.0/index.dic").then(r=>r.text()),
+      ]);
+      ortografiaSpeller = nspellMod.default(aff, dic);
+      return ortografiaSpeller;
+    })().catch(err=>{ console.error("No se pudo cargar el corrector ortográfico:", err); ortografiaCargando = null; return null; });
+  }
+  return ortografiaCargando;
+}
+// Se llama en cada tecla: pinta el texto plano al instante (para que nunca se sienta invisible
+// mientras se escribe, ya que el textarea real queda con el texto transparente) y deja pendiente
+// el chequeo ortográfico real, con un pequeño debounce para no re-analizar en cada letra.
+function ortografiaRevisar(id){
+  ortografiaPintarInmediato(id);
+  clearTimeout(ortografiaTimers[id]);
+  ortografiaTimers[id] = setTimeout(()=>ortografiaPintar(id), 400);
+}
+function ortografiaPintarInmediato(id){
+  const ta = document.getElementById(id), backdrop = document.getElementById(id+"-backdrop");
+  if(!ta || !backdrop) return;
+  backdrop.textContent = ta.value;
+  ortografiaSincronizarScroll(id);
+}
+async function ortografiaPintar(id){
+  const ta = document.getElementById(id), backdrop = document.getElementById(id+"-backdrop");
+  if(!ta || !backdrop) return;
+  const speller = await ortografiaAsegurarCargada();
+  if(!speller || ta.value === "") return;
+  const texto = ta.value;
+  const partes = texto.split(/(\s+)/); // conserva los separadores tal cual, para no mover nada
+  backdrop.innerHTML = partes.map(parte=>{
+    if(!parte || /^\s+$/.test(parte)) return esc(parte);
+    const limpio = parte.replace(/^[¿¡"'“”«(]+/, "").replace(/["'”)»«.,;:!?]+$/, "");
+    if(!limpio || limpio.length < 3 || /^\d+$/.test(limpio)) return esc(parte);
+    let ok = true;
+    try{ ok = speller.correct(limpio) || speller.correct(limpio.toLowerCase()); }catch(e){ ok = true; }
+    if(ok) return esc(parte);
+    let sugerencias = [];
+    try{ sugerencias = speller.suggest(limpio).slice(0,3); }catch(e){}
+    const titulo = sugerencias.length ? `¿Quisiste decir: ${sugerencias.join(", ")}?` : "Posible falta de ortografía";
+    return `<span class="ortografia-error" title="${esc(titulo)}">${esc(parte)}</span>`;
+  }).join("");
+  ortografiaSincronizarScroll(id);
+}
+function ortografiaSincronizarScroll(id){
+  const ta = document.getElementById(id), backdrop = document.getElementById(id+"-backdrop");
+  if(ta && backdrop){ backdrop.scrollTop = ta.scrollTop; backdrop.scrollLeft = ta.scrollLeft; }
 }
 // Desde la ficha de una persona en el Buscador — el formulario llega precargado con su nombre,
 // RUT, cargo/curso, correo y el tipo de entrevistado/a sugerido, y la entrevista guardada
