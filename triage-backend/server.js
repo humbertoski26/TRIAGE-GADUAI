@@ -1347,7 +1347,7 @@ function detectaAusencia(texto) {
 // nombre (o el único token, si el nombre es de una sola palabra) para evitar falsos positivos
 // con un apellido muy común mencionado por otro motivo.
 function nombreMencionadoEnTexto(nombrePersona, textoNorm) {
-  const tokens = nombrePersona.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+  const tokens = sinTildes(nombrePersona.toLowerCase()).split(/\s+/).filter(t => t.length > 2);
   if (!tokens.length) return false;
   const encontrados = tokens.filter(t => textoNorm.includes(t));
   return encontrados.length >= Math.min(2, tokens.length);
@@ -1365,7 +1365,7 @@ app.post("/api/colegios/:id/interpretar", asyncRoute(async (req, res) => {
       "select id, nombre from directorio_personas where colegio_id=$1 and tipo='funcionario' and activo=true",
       [req.params.id]
     )).rows;
-    const textoNorm = textoLimpio.toLowerCase();
+    const textoNorm = sinTildes(textoLimpio.toLowerCase());
     const personasDetectadas = funcionarios.filter(f => nombreMencionadoEnTexto(f.nombre, textoNorm));
     return res.json({ ok: true, ausentismo: true, personasDetectadas });
   }
@@ -1875,11 +1875,11 @@ app.post("/api/colegios/:id/directorio/buscar", asyncRoute(async (req, res) => {
   const termino = (q || "").trim();
   if (termino.length < 2) return res.json([]);
   const filtroTipo = ["funcionario", "estudiante"].includes(tipo) ? "and tipo=$3" : "";
-  const params = [req.params.id, `%${termino}%`];
+  const params = [req.params.id, termino];
   if (filtroTipo) params.push(tipo);
   const r = await pool.query(
     `select id, tipo, nombre, rut, detalle, correo, activo from directorio_personas
-     where colegio_id=$1 and (nombre ilike $2 or rut ilike $2) ${incluirInactivos ? "" : "and activo=true"} ${filtroTipo}
+     where colegio_id=$1 and (quitar_tildes(nombre) like '%'||quitar_tildes($2)||'%' or quitar_tildes(rut) like '%'||quitar_tildes($2)||'%') ${incluirInactivos ? "" : "and activo=true"} ${filtroTipo}
      order by nombre asc limit 30`,
     params
   );
@@ -1899,9 +1899,9 @@ app.post("/api/colegios/:id/directorio/buscar-entrevista", asyncRoute(async (req
   if (termino.length < 2) return res.json([]);
   const r = await pool.query(
     `select id, tipo, nombre, rut, detalle, correo from directorio_personas
-     where colegio_id=$1 and activo=true and (nombre ilike $2 or rut ilike $2)
+     where colegio_id=$1 and activo=true and (quitar_tildes(nombre) like '%'||quitar_tildes($2)||'%' or quitar_tildes(rut) like '%'||quitar_tildes($2)||'%')
      order by nombre asc limit 30`,
-    [req.params.id, `%${termino}%`]
+    [req.params.id, termino]
   );
   res.json(r.rows);
 }));

@@ -277,7 +277,7 @@
 <div id="pantalla-app" class="min-h-screen" hidden>
 
   <header class="sticky top-0 z-30 bg-slate-950/95 backdrop-blur border-b border-slate-800 px-4 py-3">
-    <div class="flex items-center justify-between gap-2 flex-wrap max-w-[1500px] mx-auto">
+    <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-2 max-w-[1500px] mx-auto">
       <div class="flex items-center gap-3 min-w-0">
         <img id="header-insignia" alt="Insignia del colegio" title="Insignia del colegio" class="w-14 h-14 rounded-xl object-contain bg-white p-1 flex-none" hidden>
         <div class="min-w-0">
@@ -285,7 +285,14 @@
           <p class="text-lg font-black text-white truncate">GADUAI · <span id="app-colegio-label"></span></p>
         </div>
       </div>
-      <div class="flex items-center gap-3 flex-wrap">
+      <button onclick="abrirAgenda('dia')" title="Ir a la Agenda de hoy" class="mx-auto flex items-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl px-3 py-1.5 flex-none">
+        <i class="fa-solid fa-calendar-day text-emerald-400"></i>
+        <span class="text-left leading-none">
+          <span id="header-reloj-hora" class="block text-sm font-black text-white">--:--</span>
+          <span id="header-reloj-fecha" class="block text-[9px] text-slate-500 uppercase tracking-wide">--</span>
+        </span>
+      </button>
+      <div class="flex items-center gap-3 flex-wrap md:justify-self-end">
         <span id="sync-indicator" class="text-[10px] text-emerald-400" title="Sincronizado con el servidor"><i class="fa-solid fa-cloud"></i></span>
         <div class="bg-white rounded-lg px-1.5 py-1 flex-none leading-none">
           <img src="/img/gaduai-logo-app.png" alt="GADUAI · Inteligencia Organizacional" title="GADUAI" class="w-[85px] sm:w-[110px] md:w-[140px] h-auto block">
@@ -1256,6 +1263,19 @@ async function entrarApp(){
   if(pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(cargarTimeline, 5000); // sincronización con otros dispositivos
   document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) cargarTimeline(); });
+  actualizarRelojHeader();
+  if(relojTimer) clearInterval(relojTimer);
+  relojTimer = setInterval(actualizarRelojHeader, 1000);
+}
+const HEADER_RELOJ_DIAS = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+const HEADER_RELOJ_MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+let relojTimer = null;
+function actualizarRelojHeader(){
+  const horaEl = document.getElementById("header-reloj-hora"), fechaEl = document.getElementById("header-reloj-fecha");
+  if(!horaEl) return;
+  const ahora = new Date();
+  horaEl.textContent = String(ahora.getHours()).padStart(2,"0") + ":" + String(ahora.getMinutes()).padStart(2,"0");
+  fechaEl.textContent = `${HEADER_RELOJ_DIAS[ahora.getDay()]} ${ahora.getDate()} ${HEADER_RELOJ_MESES[ahora.getMonth()]}`;
 }
 
 async function renderMenuPerfiles(){
@@ -1333,6 +1353,7 @@ async function activarPush(){
 
 function cerrarSesion(){
   if(pollTimer) clearInterval(pollTimer);
+  if(relojTimer) clearInterval(relojTimer);
   borrarSesion();
   mostrarPantalla("pantalla-login");
   document.getElementById("login-clave").value="";
@@ -1971,11 +1992,11 @@ function agendaLunesDe(d){ const c=new Date(d); c.setHours(12,0,0,0); const dow=
 function agendaHoyISO(){ const h=new Date(); h.setHours(0,0,0,0); return agendaFechaISO(h); }
 function agendaTopeISO(){ const t=new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate()+AGENDA_DIAS_MAX); return agendaFechaISO(t); }
 
-async function abrirAgenda(){
+async function abrirAgenda(vistaInicial){
   document.getElementById("modal-agenda").classList.remove("hidden");
-  agendaVista = "semana"; agendaOffset = 0;
+  agendaVista = vistaInicial === "dia" ? "dia" : "semana"; agendaOffset = 0;
   document.querySelectorAll(".agenda-tab").forEach(b=>{ b.classList.remove("bg-emerald-600","text-white"); b.classList.add("text-slate-500"); });
-  document.querySelector('.agenda-tab[data-vista="semana"]').classList.add("bg-emerald-600","text-white");
+  document.querySelector(`.agenda-tab[data-vista="${agendaVista}"]`).classList.add("bg-emerald-600","text-white");
   const base = location.origin + "/agenda/" + STATE.colegioId + "/" + encodeURIComponent(STATE.persona);
   document.getElementById("agenda-link").value = base;
   await agendaRecargar();

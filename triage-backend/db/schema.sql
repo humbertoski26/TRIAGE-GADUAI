@@ -1,5 +1,13 @@
 -- TRIAGE GADUAI · esquema de base de datos (Postgres)
 
+-- Minúsculas + sin tilde, para que los buscadores de funcionarios/estudiantes (nombre, apellido
+-- o rut) encuentren a alguien sin importar cómo se haya escrito la búsqueda. Sin extensión
+-- (unaccent no está garantizada en todo plan gestionado) — mismo criterio que sinTildes() en
+-- server.js, solo las 5 vocales acentuadas del español.
+create or replace function quitar_tildes(txt text) returns text as $$
+  select translate(lower(coalesce(txt, '')), 'áéíóú', 'aeiou')
+$$ language sql immutable;
+
 create table if not exists colegios (
   id text primary key,
   nombre text not null,
