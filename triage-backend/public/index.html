@@ -227,6 +227,8 @@
   .postit-barra:active{cursor:grabbing}
   .postit-colores{display:flex; gap:5px}
   .postit-color{width:14px; height:14px; border-radius:9999px; border:1px solid rgba(0,0,0,.35); padding:0; cursor:pointer}
+  .postit-triage{width:18px; height:18px; border-radius:5px; border:none; background:#0034DA; color:#fff; font-size:9px; display:flex; align-items:center; justify-content:center; padding:0; cursor:pointer; margin-left:2px}
+  .postit-triage:hover{background:#0028ad}
   .postit-cerrar{background:none; border:none; font-size:13px; font-weight:900; line-height:1; padding:2px 3px; cursor:pointer; color:rgba(0,0,0,.55)}
   .postit-cerrar:hover{color:#000}
   .postit-texto{flex:1; resize:none; border:none; background:transparent; padding:2px 8px 8px; font-size:12.5px; color:#1a1a1a; outline:none; font-family:inherit}
@@ -312,16 +314,21 @@
           <p class="text-lg font-black text-white truncate">GADUAI · <span id="app-colegio-label"></span></p>
         </div>
       </div>
-      <button onclick="abrirAgenda('dia')" title="Ir a la Agenda de hoy" class="mx-auto flex items-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl px-3 py-1.5 flex-none">
-        <i class="fa-solid fa-calendar-day text-emerald-400"></i>
-        <span class="text-left leading-none">
-          <span id="header-reloj-hora" class="block text-sm font-black text-white">--:--</span>
-          <span id="header-reloj-fecha" class="block text-[9px] text-slate-500 uppercase tracking-wide">--</span>
-        </span>
-      </button>
+      <div class="mx-auto flex items-center gap-2">
+        <button onclick="abrirAgenda('dia')" title="Ir a la Agenda de hoy" class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl px-3 py-1.5 flex-none">
+          <i class="fa-solid fa-calendar-day text-emerald-400"></i>
+          <span class="text-left leading-none">
+            <span id="header-reloj-hora" class="block text-sm font-black text-white">--:--</span>
+            <span id="header-reloj-fecha" class="block text-[9px] text-slate-500 uppercase tracking-wide">--</span>
+          </span>
+        </button>
+        <button onclick="crearPostit()" title="Agregar nota post-it" class="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl px-3 py-1.5 flex-none">
+          <i class="fa-solid fa-note-sticky text-amber-400"></i>
+          <span class="text-xs font-bold text-white">Nota</span>
+        </button>
+      </div>
       <div class="flex items-center gap-3 flex-wrap md:justify-self-end">
         <span id="sync-indicator" class="text-[10px] text-emerald-400" title="Sincronizado con el servidor"><i class="fa-solid fa-cloud"></i></span>
-        <button onclick="crearPostit()" title="Agregar nota post-it" class="text-lg text-amber-500 hover:text-amber-400 p-1"><i class="fa-solid fa-note-sticky"></i></button>
         <div class="bg-white rounded-lg px-1.5 py-1 flex-none leading-none">
           <img src="/img/gaduai-logo-app.png" alt="GADUAI · Inteligencia Organizacional" title="GADUAI" class="w-[85px] sm:w-[110px] md:w-[140px] h-auto block">
         </div>
@@ -1358,6 +1365,18 @@ function postitGuardarTexto(id, texto){
   n.texto = texto;
   postitsGuardar(notas);
 }
+// La idea acumulada en la nota se "desarrolla" con el mismo cerebro que ya clasifica la caja
+// inteligente (Fase 12): reutiliza eiAnalizar() tal cual, así la conversión a Triage queda tan
+// completa como escribir directo ahí (clasificación por color, o detecta ausentismo/reunión si
+// corresponde) — la nota en sí NO se borra sola, sigue existiendo hasta que se cierre con su
+// propia cruz, por si la persona cancela el formulario sin registrar nada.
+async function postitConvertirTriage(id){
+  const notas = postitsObtener();
+  const n = notas.find(n=>n.id===id);
+  if(!n || !n.texto.trim()){ toast("Escribe algo en la nota antes de convertirla en Triage"); return; }
+  document.getElementById("ei-texto").value = n.texto;
+  await eiAnalizar();
+}
 // Arrastre con Pointer Events (unifica mouse y touch, funciona igual en celular). Se agarra solo
 // desde la barra superior de la nota, nunca desde el textarea (para no pelear con el teclado).
 function postitIniciarArrastre(ev, id){
@@ -1393,7 +1412,7 @@ function pintarPostits(){
   cont.innerHTML = notas.map(n => `
     <div id="postit-${n.id}" class="postit" style="left:${n.x}px;top:${n.y}px;background:${n.color}">
       <div class="postit-barra" onpointerdown="postitIniciarArrastre(event,${n.id})">
-        <span class="postit-colores">${POSTIT_COLORES.map(c=>`<button type="button" class="postit-color" style="background:${c}" onclick="postitCambiarColor(${n.id},'${c}')" title="Cambiar color"></button>`).join("")}</span>
+        <span class="postit-colores">${POSTIT_COLORES.map(c=>`<button type="button" class="postit-color" style="background:${c}" onclick="postitCambiarColor(${n.id},'${c}')" title="Cambiar color"></button>`).join("")}<button type="button" class="postit-triage" onclick="postitConvertirTriage(${n.id})" title="Convertir en Triage GADUAI"><i class="fa-solid fa-list-check"></i></button></span>
         <button type="button" class="postit-cerrar" onclick="postitEliminar(${n.id})" title="Eliminar nota">✕</button>
       </div>
       <textarea class="postit-texto" placeholder="Escribe algo…" oninput="postitGuardarTexto(${n.id}, this.value)">${esc(n.texto)}</textarea>
