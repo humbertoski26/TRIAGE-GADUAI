@@ -3287,10 +3287,13 @@ function entrevistaHtmlDoc(e, insignia, logoGaduai){
     td,th{border:1px solid #000;padding:5px 8px;font-size:10pt;vertical-align:top}
     .lbl{font-weight:bold;background:#f2f2f2;width:22%}
     h1{font-size:14pt;text-align:center;text-decoration:underline;margin:10px 0 14px 0}
-    .firmas{width:100%;margin-top:40px}
-    .firmas td{border:none;text-align:center;font-size:10pt;padding-top:0}
-    .linea{border-top:1px solid #000;width:80%;margin:0 auto;padding-top:4px;font-weight:bold}
-    .rol{font-size:8pt;color:#555;font-weight:normal;margin-bottom:5px}
+    .firmas{width:100%;margin-top:20px}
+    .firmas td{border:none;text-align:center;font-size:10pt;padding-top:0;width:50%;vertical-align:bottom}
+    .firma-espacio{height:48px}
+    .linea{border-top:1px solid #000;width:80%;margin:0 auto}
+    .firma-nombre{width:95%;margin:3px auto 0;font-weight:bold}
+    .firma-rut{width:95%;margin:1px auto 0;font-size:9pt;white-space:nowrap}
+    .rol{font-size:8pt;color:#555;font-weight:normal;margin-top:2px}
     .nota{font-size:8pt;margin-top:18px;font-style:italic}
     .desarrollo{min-height:220px}
     .encabezado-doc{margin-bottom:14px}
@@ -3306,8 +3309,20 @@ function entrevistaHtmlDoc(e, insignia, logoGaduai){
     <table><tr><td class="lbl">Entrevistador/a</td><td>${esc(e.entrevistador)}</td></tr></table>
     <table><tr><td><b>Desarrollo de la entrevista</b><div class="desarrollo">${(e.desarrollo||'').replace(/\n/g,'<br>')}</div><br><b>Compromisos / Acuerdos</b><div>${(e.compromisos||'').replace(/\n/g,'<br>')}</div></td></tr></table>
     <table class="firmas"><tr>
-      <td><div class="linea">${esc(e.nombre_entrevistado)}</div><div class="rol">ENTREVISTADO/A</div>RUT: ${e.rut ? esc(e.rut) : '______________________'}</td>
-      <td><div class="linea">${esc(e.entrevistador)}</div><div class="rol">ENTREVISTADOR/A</div>RUT: ______________________</td>
+      <td>
+        <div class="firma-espacio"></div>
+        <div class="linea"></div>
+        <div class="firma-nombre">${esc(e.nombre_entrevistado)}</div>
+        <div class="firma-rut">RUT: ${e.rut ? esc(e.rut) : '______________'}</div>
+        <div class="rol">ENTREVISTADO/A</div>
+      </td>
+      <td>
+        <div class="firma-espacio"></div>
+        <div class="linea"></div>
+        <div class="firma-nombre">${esc(e.entrevistador)}</div>
+        <div class="firma-rut">RUT: ______________</div>
+        <div class="rol">ENTREVISTADOR/A</div>
+      </td>
     </tr></table>
     <p class="nota">*Tomo conocimiento del registro de la entrevista y los acuerdos entre las partes, firmando en conformidad con lo redactado y expuesto.</p>
   </body></html>`;
