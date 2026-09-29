@@ -1117,6 +1117,8 @@ let timelineCacheJson = "";
 let pollTimer = null;
 
 function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+// Solo data URIs como link de descarga de adjuntos — cualquier otra cosa (ej. javascript:) queda inerte.
+function urlAdjunto(u){ return /^data:/i.test(String(u||"")) ? String(u) : "#"; }
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.hidden=false; t.classList.remove("hidden"); clearTimeout(window._toastT); window._toastT=setTimeout(()=>t.classList.add("hidden"),2800); }
 function slug(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,""); }
 function pantallas(){ return ["pantalla-landing","pantalla-login","pantalla-app","pantalla-agenda-publica"]; }
@@ -1867,6 +1869,7 @@ function toggleTimelineSeccion(){
 }
 
 async function cargarTimeline(){
+  if(!STATE.clave) return;
   try{
     const nuevos = await api(`/api/colegios/${STATE.colegioId}/timeline`);
     document.getElementById("sync-indicator").innerHTML = '<i class="fa-solid fa-cloud"></i>';
@@ -1882,6 +1885,16 @@ async function cargarTimeline(){
     actualizarBadgeAlertas();
     actualizarPulsoBoton();
   }catch(e){
+    // Clave cambiada o cuenta eliminada: deja de reintentar cada 5 s con credenciales que ya no
+    // sirven y vuelve al login.
+    if(e.status === 401){
+      if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+      STATE.clave = "";
+      borrarSesion();
+      toast("Tu clave cambió o la sesión ya no es válida. Vuelve a ingresar.");
+      mostrarPantalla("pantalla-login");
+      return;
+    }
     document.getElementById("sync-indicator").innerHTML = '<i class="fa-solid fa-cloud-slash"></i>';
     document.getElementById("sync-indicator").className = "text-[10px] text-rose-400";
   }
@@ -2214,7 +2227,7 @@ function agendaIrAlItem(itemId, tipo, ev){
 function agendaVencimientoChip(v){
   const cfg = TRIAGE[v.triage] || {color:"#64748b"};
   const rolTxt = v.rol==="diste" ? "Diste" : "Recibiste";
-  return `<div onclick="agendaIrAlItem(${v.itemId},'${v.tipo}',event)" class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 cursor-pointer">
+  return `<div onclick="agendaIrAlItem(${Number(v.itemId)},'${v.tipo==="hito"?"hito":"tarea"}',event)" class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 cursor-pointer">
     <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${cfg.color}"></span>
     <span class="text-[10px] font-bold text-white truncate flex-1">${esc(v.titulo)}</span>
     <span class="text-[8px] font-bold uppercase ${v.rol==='diste'?'text-sky-300':'text-amber-300'}">${rolTxt}</span>
@@ -2454,10 +2467,10 @@ async function abrirFichaPersona(id){
     const cont = document.getElementById("ficha-historial");
     cont.innerHTML = ficha.historial.length ? ficha.historial.map(h => `
       <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
-        <p class="text-[10px] uppercase tracking-wide text-indigo-400 font-bold">${HIST_TIPOS[h.tipo]||h.tipo}</p>
+        <p class="text-[10px] uppercase tracking-wide text-indigo-400 font-bold">${esc(HIST_TIPOS[h.tipo]||h.tipo)}</p>
         <p class="text-xs font-bold text-white mt-0.5">${esc(h.titulo)}</p>
         ${h.descripcion ? `<p class="text-xs text-slate-400 mt-1">${esc(h.descripcion)}</p>` : ""}
-        ${h.archivo_nombre ? `<a href="${h.archivo_data}" download="${esc(h.archivo_nombre)}" class="text-[10px] text-cyan-400 mt-1 inline-block"><i class="fa-solid fa-paperclip mr-1"></i>${esc(h.archivo_nombre)}</a>` : ""}
+        ${h.archivo_nombre ? `<a href="${esc(urlAdjunto(h.archivo_data))}" download="${esc(h.archivo_nombre)}" class="text-[10px] text-cyan-400 mt-1 inline-block"><i class="fa-solid fa-paperclip mr-1"></i>${esc(h.archivo_nombre)}</a>` : ""}
         <p class="text-[9px] text-slate-500 mt-1">${esc(h.autor)} (${esc(h.perfil)}) · ${new Date(h.creado_en).toLocaleString("es-CL")}</p>
       </div>`).join("") : '<p class="text-[11px] text-slate-500 text-center py-4">Sin historial todavía.</p>';
   }catch(e){ toast("No se pudo abrir la ficha"); }
@@ -2605,8 +2618,8 @@ function pintarTimeline(){
       </div>
       ${h.desc?`<p class="text-xs text-slate-400 mt-1">${esc(h.desc)}</p>`:""}
       ${h.reunionHora?`<p class="text-[11px] font-bold text-lime-300 mt-1"><i class="fa-solid fa-calendar-check mr-1"></i>Reunión agendada: ${String(h.fecha).slice(0,10)} a las ${esc(h.reunionHora)}${h.reunionLugar?` · <i class="fa-solid fa-location-dot"></i> ${esc(h.reunionLugar)}`:''}</p>`:""}
-      <p class="text-[11px] mt-2" style="color:${cfg.color}">${h.triage} · creado ${esc(h.creado||'—')} · vence ${String(h.fecha).slice(0,10)}${h.fechaFinal?` (hasta ${String(h.fechaFinal).slice(0,10)})`:''} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
-      ${h.archivoNombre ? `<a href="${h.archivoData}" download="${esc(h.archivoNombre)}" class="text-[10px] text-indigo-300 underline mt-1 inline-block"><i class="fa-solid fa-paperclip"></i> ${esc(h.archivoNombre)}</a>` : ""}
+      <p class="text-[11px] mt-2" style="color:${cfg.color}">${esc(h.triage)} · creado ${esc(h.creado||'—')} · vence ${String(h.fecha).slice(0,10)}${h.fechaFinal?` (hasta ${String(h.fechaFinal).slice(0,10)})`:''} · ${h.tipo==='hito'?'creado por':'registró'} ${esc(h.persona)}${h.responsable && h.responsable!==h.persona ? ` · asignado a ${esc(h.responsable)}`:''}</p>
+      ${h.archivoNombre ? `<a href="${esc(urlAdjunto(h.archivoData))}" download="${esc(h.archivoNombre)}" class="text-[10px] text-indigo-300 underline mt-1 inline-block"><i class="fa-solid fa-paperclip"></i> ${esc(h.archivoNombre)}</a>` : ""}
       ${h.tipo==='tarea' ? `<div class="flex items-center gap-2 mt-3 flex-wrap">${circuloIconTrail(h)}</div>` : `
       <div class="flex items-center gap-3 mt-3 text-sm">
         <span class="react-btn text-slate-500" style="color:${cfg.color}" title="Prioridad">❗</span>
@@ -2670,7 +2683,7 @@ function pintarCirculo(itemId){
   const esResponsable = STATE.persona === h.responsable;
   const esRemitente = STATE.persona === h.persona;
 
-  document.getElementById("circulo-triage-label").innerHTML = `<span style="color:${cfg.color}">${h.triage}</span> · ${esc(STATE.colegio.nombre)}`;
+  document.getElementById("circulo-triage-label").innerHTML = `<span style="color:${cfg.color}">${esc(h.triage)}</span> · ${esc(STATE.colegio.nombre)}`;
   document.getElementById("circulo-titulo").textContent = h.titulo;
   document.getElementById("circulo-desc").textContent = h.desc || "";
   document.getElementById("circulo-trail").innerHTML = circuloIconTrail(h);
@@ -2721,7 +2734,7 @@ function pintarCirculo(itemId){
   document.getElementById("circulo-accion").innerHTML = accionHtml;
 
   const hist = h.circuloHistorial||[];
-  document.getElementById("circulo-historial").innerHTML = hist.length ? hist.map(ev=>`<div class="text-[10px] text-slate-400 border-l-2 border-slate-800 pl-2 py-1"><b class="text-slate-300">${esc(ev.paso)}</b> · ${esc(ev.autor)} · ${esc(new Date(ev.fecha).toLocaleString('es-CL'))}${ev.mensaje?`<br><span class="text-slate-500">"${esc(ev.mensaje)}"</span>`:''}${ev.archivoData?`<br><a href="${ev.archivoData}" download="${esc(ev.archivoNombre)}" class="text-sky-400 hover:underline"><i class="fa-solid fa-paperclip"></i> ${esc(ev.archivoNombre)} · descargar</a>`:''}</div>`).join("") : '<p class="text-[10px] text-slate-600">Sin historial todavía.</p>';
+  document.getElementById("circulo-historial").innerHTML = hist.length ? hist.map(ev=>`<div class="text-[10px] text-slate-400 border-l-2 border-slate-800 pl-2 py-1"><b class="text-slate-300">${esc(ev.paso)}</b> · ${esc(ev.autor)} · ${esc(new Date(ev.fecha).toLocaleString('es-CL'))}${ev.mensaje?`<br><span class="text-slate-500">"${esc(ev.mensaje)}"</span>`:''}${ev.archivoData?`<br><a href="${esc(urlAdjunto(ev.archivoData))}" download="${esc(ev.archivoNombre)}" class="text-sky-400 hover:underline"><i class="fa-solid fa-paperclip"></i> ${esc(ev.archivoNombre)} · descargar</a>`:''}</div>`).join("") : '<p class="text-[10px] text-slate-600">Sin historial todavía.</p>';
 
   document.getElementById("modal-circulo").classList.remove("hidden");
 }
@@ -3121,6 +3134,7 @@ function abrirAlertar(id){
 async function enviarAlerta(){
   if(!alertarItemActual) return;
   const item = timelineCache.find(x=>x.id==alertarItemActual);
+  if(!item || !item.responsable){ toast("Este ítem no tiene responsable a quien alertar"); return; }
   try{
     await api(`/api/colegios/${STATE.colegioId}/timeline/${alertarItemActual}/alertar`, {method:"POST", body: JSON.stringify(actorBody({destinatario:item.responsable||'—', mensaje:document.getElementById("alertar-msg").value.trim()}))});
     cerrarModalId("modal-alertar");
@@ -3279,7 +3293,7 @@ function entFiltrarNombre(){
     try{
       const resultados = await api(`/api/colegios/${STATE.colegioId}/directorio/buscar-entrevista`, {method:"POST", body: JSON.stringify(actorBody({q}))});
       cont.innerHTML = resultados.length ? resultados.map(p => `
-        <div onclick='entElegirPersona(${JSON.stringify(p)})' class="bg-slate-800 border border-slate-700 rounded-lg p-2 cursor-pointer hover:border-indigo-400">
+        <div onclick="entElegirPersona(${esc(JSON.stringify(p))})" class="bg-slate-800 border border-slate-700 rounded-lg p-2 cursor-pointer hover:border-indigo-400">
           <p class="text-[11px] font-bold text-white">${esc(p.nombre)}</p>
           <p class="text-[9px] text-slate-500">${p.tipo==="estudiante"?"Estudiante":"Funcionario/a"}${p.detalle?` · ${esc(p.detalle)}`:""}${p.rut?` · ${esc(p.rut)}`:""}</p>
         </div>`).join("") : "";
@@ -3317,7 +3331,7 @@ async function renderHistorialEntrevistas(){
           <p class="text-[11px] font-bold text-white truncate">${esc(e.nombre_entrevistado)}</p>
           <p class="text-[9px] text-slate-500 truncate">${e.fecha||'—'} · ${esc(e.entrevistador)} · ${esc(e.perfil_creador)}</p>
         </div>
-        <button onclick='descargarEntrevista(${JSON.stringify(e).replace(/'/g,"&#39;")})' class="text-cyan-300 hover:text-cyan-200 text-xs px-2 flex-none"><i class="fa-solid fa-download"></i></button>
+        <button onclick="descargarEntrevista(${esc(JSON.stringify(e))})" class="text-cyan-300 hover:text-cyan-200 text-xs px-2 flex-none"><i class="fa-solid fa-download"></i></button>
       </div>`;
     lista.innerHTML = TIPOS_ENTREVISTADO.filter(t => porTipo[t.id]?.length).map(t => {
       const porAnio = {};
@@ -3573,7 +3587,7 @@ function ausFiltrarBuscar(){
     try{
       const resultados = await api(`/api/colegios/${STATE.colegioId}/directorio/buscar`, {method:"POST", body: JSON.stringify(actorBody({q, tipo:"funcionario"}))});
       cont.innerHTML = resultados.length ? resultados.map(p => `
-        <div onclick='ausAgregar(${p.id}, ${JSON.stringify(p.nombre)})' class="bg-slate-900 border border-slate-800 rounded-lg p-2 cursor-pointer hover:border-amber-500">
+        <div onclick="ausAgregar(${Number(p.id)}, ${esc(JSON.stringify(p.nombre))})" class="bg-slate-900 border border-slate-800 rounded-lg p-2 cursor-pointer hover:border-amber-500">
           <p class="text-[11px] font-bold text-white">${esc(p.nombre)}</p>
           <p class="text-[9px] text-slate-500">${p.detalle?esc(p.detalle):""}${p.rut?` · ${esc(p.rut)}`:""}</p>
         </div>`).join("") : '<p class="text-[10px] text-slate-500 text-center py-2">Sin resultados.</p>';
@@ -3607,7 +3621,7 @@ async function ausSugerir(bloqueId){
   try{
     const candidatos = await api(`/api/colegios/${STATE.colegioId}/ausentismo/bloque/${bloqueId}/sugerencias`, {method:"POST", body: JSON.stringify(actorBody())});
     cont.innerHTML = candidatos.length ? candidatos.map(c => `
-      <button onclick='ausAsignarReemplazo(${bloqueId}, ${c.id}, ${JSON.stringify(c.nombre)})' class="block w-full text-left text-[10px] text-emerald-300 hover:text-emerald-200 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 mb-0.5">${esc(c.nombre)}</button>
+      <button onclick="ausAsignarReemplazo(${Number(bloqueId)}, ${Number(c.id)}, ${esc(JSON.stringify(c.nombre))})" class="block w-full text-left text-[10px] text-emerald-300 hover:text-emerald-200 bg-slate-900 border border-slate-800 rounded px-1.5 py-1 mb-0.5">${esc(c.nombre)}</button>
     `).join("") : '<p class="text-[9px] text-slate-500">Nadie con hora libre esa hora.</p>';
   }catch(e){ cont.innerHTML = '<p class="text-[9px] text-rose-400">No se pudo buscar sugerencias.</p>'; }
 }

@@ -125,6 +125,19 @@ const app = express();
 // CORS, el navegador aplica su política de mismo-origen por defecto, que es lo que queremos.
 app.use(express.json({ limit: "8mb" })); // documentos adjuntos van en base64 dentro del JSON
 
+// Cabeceras de seguridad básicas. CSP completa queda pendiente (el frontend usa scripts inline y
+// Tailwind por CDN); por ahora: sin iframes de terceros (clickjacking), sin MIME sniffing, HSTS,
+// y micrófono solo para el propio sitio (lo usa el dictado de la Entrada inteligente).
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Strict-Transport-Security", "max-age=15552000");
+  res.setHeader("Permissions-Policy", "microphone=(self), camera=(), geolocation=()");
+  next();
+});
+
 // Límite simple de intentos de login por IP — corta fuerza bruta contra /login sin depender
 // de un paquete nuevo. En memoria del proceso (el servicio corre en una sola instancia, ver
 // numInstances=1 en Render); se resetea solo cada 15 min por IP.
@@ -143,6 +156,47 @@ function loginRateLimit(req, res, next) {
   }
   next();
 }
+
+// Todas las rutas (no solo /login) aceptan correo+clave, así que el tope de intentos fallidos
+// va por cuenta dentro de verificarActor — no depende de la IP, que un atacante puede falsear
+// vía X-Forwarded-For. Cuenta claves DISTINTAS fallidas: un dispositivo que quedó con una clave
+// vieja y reintenta la misma cada 5 s (sincronización del Timeline) no bloquea la cuenta; un
+// ataque de fuerza bruta, que prueba claves diferentes, sí.
+const FALLOS_VENTANA_MS = 15 * 60 * 1000;
+const FALLOS_TOPE = 10;
+const fallosPorCuenta = new Map(); // "colegio|correo" -> {claves: Set<hash>, desde}
+function cuentaBloqueada(cuenta) {
+  const e = fallosPorCuenta.get(cuenta);
+  return !!e && Date.now() - e.desde <= FALLOS_VENTANA_MS && e.claves.size >= FALLOS_TOPE;
+}
+function registrarFallo(cuenta, claveProbada) {
+  const ahora = Date.now();
+  let e = fallosPorCuenta.get(cuenta);
+  if (!e || ahora - e.desde > FALLOS_VENTANA_MS) e = { claves: new Set(), desde: ahora };
+  if (e.claves.size < FALLOS_TOPE) e.claves.add(crypto.createHash("sha256").update(claveProbada).digest("hex"));
+  fallosPorCuenta.set(cuenta, e);
+}
+setInterval(() => {
+  const limite = Date.now() - FALLOS_VENTANA_MS;
+  for (const [k, e] of fallosPorCuenta) if (e.desde < limite) fallosPorCuenta.delete(k);
+  for (const [k, e] of intentosLogin) if (e.desde < limite) intentosLogin.delete(k);
+}, FALLOS_VENTANA_MS).unref();
+
+// Adjuntos: el frontend los manda como data URI (FileReader.readAsDataURL) y se usan tal cual
+// como href de descarga — cualquier otra cosa (javascript:, comillas para romper el atributo)
+// se rechaza. Se valida el prefijo y que el resto sea base64 puro.
+const ADJUNTO_PREFIJO_RE = /^data:([\w.+-]+\/[\w.+-]+)?(;[\w.+=-]+)*;base64,/i;
+const BASE64_RE = /^[A-Za-z0-9+/=\r\n]*$/;
+function adjuntoValido(data, { soloImagen = false } = {}) {
+  if (data === null || data === undefined || data === "") return true;
+  if (typeof data !== "string") return false;
+  const m = data.match(ADJUNTO_PREFIJO_RE);
+  if (!m) return false;
+  if (soloImagen && !/^image\//i.test(m[1] || "")) return false;
+  return BASE64_RE.test(data.slice(m[0].length));
+}
+const TIPOS_ITEM = ["tarea", "hito"];
+const COLORES_TRIAGE = ["Rojo", "Naranjo", "Azul", "Gris"];
 
 // Para rutas de solo-lectura que antes recibían credenciales por query string (quedaban en
 // logs/historial del navegador) — ahora viajan como cabeceras, que el navegador no guarda en
@@ -208,23 +262,33 @@ function generarSsoToken(correo, nombre, perfil) {
 }
 
 async function verificarActor(colegioId, correo, clave) {
-  if (!correo || !clave) return null;
+  if (!correo || !clave || typeof correo !== "string" || typeof clave !== "string") return null;
+  const claveCuenta = `${colegioId}|${correo.toLowerCase()}`;
+  if (cuentaBloqueada(claveCuenta)) {
+    const err = new Error("demasiados_intentos");
+    err.status = 429;
+    throw err;
+  }
   const r = await pool.query(
     "select nombre, correo, perfil, tema, push_habilitado, clave_hash from usuarios where colegio_id=$1 and lower(correo)=lower($2)",
     [colegioId, correo]
   );
   const fila = r.rows[0];
-  if (!fila || !fila.clave_hash) return null; // sin hash todavía = migración no llegó a esta fila, o cuenta inexistente
-  const ok = await bcrypt.compare(clave, fila.clave_hash);
-  if (!ok) return null;
+  const ok = !!(fila && fila.clave_hash) && await bcrypt.compare(clave, fila.clave_hash);
+  // Un acierto no borra los fallos acumulados: si lo hiciera, la sincronización cada 5 s de la
+  // propia víctima reiniciaría el contador y el atacante tendría intentos ilimitados.
+  if (!ok) { registrarFallo(claveCuenta, clave); return null; }
   delete fila.clave_hash; // nunca debe viajar de vuelta en una respuesta
   return fila;
 }
 
+// El detalle del error queda solo en los logs del servidor — al navegador no le llega el texto
+// interno (consultas SQL, nombres de tablas, etc.).
 function asyncRoute(fn) {
   return (req, res) => fn(req, res).catch(err => {
+    if (err.status === 429) return res.status(429).json({ error: "demasiados_intentos" });
     console.error(err);
-    res.status(500).json({ error: "server_error", message: err.message });
+    res.status(500).json({ error: "server_error" });
   });
 }
 
@@ -467,6 +531,7 @@ app.get("/api/colegios/:id/insignia", asyncRoute(async (req, res) => {
 
 app.post("/api/colegios/:id/insignia", requireAdminKey, asyncRoute(async (req, res) => {
   const { dataUri } = req.body || {};
+  if (!adjuntoValido((dataUri || "").trim(), { soloImagen: true })) return res.status(400).json({ error: "imagen_invalida" });
   const r = await pool.query(
     "update colegios set insignia_data=$2 where id=$1 returning id",
     [req.params.id, (dataUri || "").trim() || null]
@@ -484,6 +549,7 @@ app.post("/api/colegios/:id/insignia-propia", asyncRoute(async (req, res) => {
   if (!actor || ![PERFIL_MASTER, PERFIL_DIRECTOR_COLEGIO].includes(actor.perfil)) {
     return res.status(403).json({ error: "solo_master_o_director" });
   }
+  if (!adjuntoValido((dataUri || "").trim(), { soloImagen: true })) return res.status(400).json({ error: "imagen_invalida" });
   const r = await pool.query(
     "update colegios set insignia_data=$2 where id=$1 returning id",
     [req.params.id, (dataUri || "").trim() || null]
@@ -702,6 +768,9 @@ app.post("/api/colegios/:id/timeline", asyncRoute(async (req, res) => {
   const actor = await verificarActor(req.params.id, b.actorCorreo, b.actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   if (!b.titulo || !b.titulo.trim()) return res.status(400).json({ error: "titulo_requerido" });
+  if (b.tipo && !TIPOS_ITEM.includes(b.tipo)) return res.status(400).json({ error: "tipo_invalido" });
+  if (b.triage && !COLORES_TRIAGE.includes(b.triage)) return res.status(400).json({ error: "triage_invalido" });
+  if (!adjuntoValido(b.archivoData)) return res.status(400).json({ error: "adjunto_invalido" });
   const titulo = b.titulo.trim();
   const colegioId = req.params.id;
   const destinatarios = await resolverDestinatarios(colegioId, b);
@@ -831,10 +900,14 @@ app.post("/api/colegios/:id/entrevistas", asyncRoute(async (req, res) => {
   // de lo que mande el cliente, para no depender de que el frontend lo haya copiado bien); sin
   // match, se respeta un RUT escrito a mano si lo hay, y si tampoco eso, queda null y el
   // documento deja el espacio en blanco para escribirlo a mano.
-  let personaId = null, rut = (b.rut || "").trim() || null;
+  let personaId = null, rut = (b.rut || "").trim() || null, correoEntrevistado = b.correo || null;
   if (b.personaId) {
-    const persona = await pool.query("select id, rut from directorio_personas where id=$1 and colegio_id=$2", [b.personaId, req.params.id]);
-    if (persona.rows.length) { personaId = persona.rows[0].id; rut = persona.rows[0].rut || null; }
+    const persona = await pool.query("select id, rut, correo from directorio_personas where id=$1 and colegio_id=$2", [b.personaId, req.params.id]);
+    if (persona.rows.length) {
+      personaId = persona.rows[0].id;
+      rut = persona.rows[0].rut || null;
+      correoEntrevistado = correoEntrevistado || persona.rows[0].correo || null;
+    }
   }
   // Carpeta del historial (Fase 19b): elegida explícitamente en el formulario (con sugerencia
   // automática si el nombre vino del directorio) — nunca se adivina en el servidor.
@@ -844,7 +917,7 @@ app.post("/api/colegios/:id/entrevistas", asyncRoute(async (req, res) => {
     `insert into entrevistas (colegio_id, nombre_entrevistado, correo, cargo, fono, fecha, hora, curso, motivo, entrevistador, desarrollo, compromisos, creado_por, perfil_creador, persona_id, rut, tipo_entrevistado)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) returning *`,
     [
-      req.params.id, b.nombreEntrevistado.trim(), b.correo || null, b.cargo || null, b.fono || null,
+      req.params.id, b.nombreEntrevistado.trim(), correoEntrevistado, b.cargo || null, b.fono || null,
       b.fecha || null, b.hora || null, b.curso || null, b.motivo || null,
       b.entrevistador || actor.nombre, b.desarrollo || null, b.compromisos || null,
       actor.nombre, actor.perfil, personaId, rut, tipoEntrevistado,
@@ -872,6 +945,10 @@ app.post("/api/colegios/:id/timeline/:itemId/reaccionar", asyncRoute(async (req,
   if (actor.perfil === PERFIL_MASTER && !enHiloPropio(r.rows[0], actor.perfil, actor.nombre)) {
     return res.status(403).json({ error: "solo_lectura" });
   }
+  // Solo quien ve el ítem en su Timeline puede reaccionar o marcarlo cumplido (misma regla de
+  // visibilidad que GET /timeline), no cualquier cuenta del colegio.
+  if (!enHiloPropio(r.rows[0], actor.perfil, actor.nombre)) return res.status(403).json({ error: "no_participa" });
+  if (!["like", "dislike", "ok", "heart", "done"].includes(tipo)) return res.status(400).json({ error: "tipo_invalido" });
   const item = r.rows[0];
   const react = item.react || { like: 0, dislike: 0, ok: 0, heart: 0, done: false };
   const eraCumplida = !!react.done; // se guarda antes de mutar in-place, para distinguir cierre de reapertura
@@ -914,6 +991,7 @@ app.post("/api/colegios/:id/timeline/:itemId/circulo", asyncRoute(async (req, re
   const { accion, mensaje, archivoNombre, archivoData, actorCorreo, actorClave } = req.body || {};
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  if (!adjuntoValido(archivoData)) return res.status(400).json({ error: "adjunto_invalido" });
   const r = await pool.query("select * from items where id=$1 and colegio_id=$2", [req.params.itemId, req.params.id]);
   if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
   const item = r.rows[0];
@@ -1051,6 +1129,8 @@ app.post("/api/colegios/:id/timeline/:itemId/chat-leido", asyncRoute(async (req,
   const { actorCorreo, actorClave } = req.body || {};
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  const it = await pool.query("select id from items where id=$1 and colegio_id=$2", [req.params.itemId, req.params.id]);
+  if (!it.rows.length) return res.status(404).json({ error: "no_encontrado" });
   await pool.query(
     "insert into chat_leido (item_id, persona, leido_en) values ($1,$2,now()) on conflict (item_id, persona) do update set leido_en=now()",
     [req.params.itemId, actor.nombre]
@@ -1059,11 +1139,21 @@ app.post("/api/colegios/:id/timeline/:itemId/chat-leido", asyncRoute(async (req,
 }));
 
 // ---------- alertas ----------
+// El ítem debe ser de este colegio y visible para quien alerta (misma regla que GET /timeline),
+// y la alerta solo puede ir a alguien que participa en ese ítem — antes se podía adjuntar un
+// mensaje a cualquier item_id (ids correlativos, incluso de otro colegio) y a cualquier nombre.
 app.post("/api/colegios/:id/timeline/:itemId/alertar", asyncRoute(async (req, res) => {
   const { destinatario, mensaje, actorCorreo, actorClave } = req.body || {};
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
-  await crearAlerta(req.params.id, req.params.itemId, destinatario || "—", mensaje || null, { autor: actor.nombre });
+  const r = await pool.query("select * from items where id=$1 and colegio_id=$2", [req.params.itemId, req.params.id]);
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  const item = r.rows[0];
+  const loVe = enHiloPropio(item, actor.perfil, actor.nombre) || (actor.perfil === PERFIL_MASTER && item.triage === "Rojo");
+  if (!loVe) return res.status(403).json({ error: "no_autorizado" });
+  const participantes = [item.persona, item.responsable, ...(item.copiados || [])].filter(Boolean);
+  if (!participantes.includes(destinatario)) return res.status(400).json({ error: "destinatario_invalido" });
+  await crearAlerta(req.params.id, item.id, destinatario, mensaje || null, { autor: actor.nombre });
   res.json({ ok: true });
 }));
 
@@ -1183,6 +1273,9 @@ app.post("/api/sistema/avisos", requireAdminKey, asyncRoute(async (req, res) => 
 // Subir/eliminar es solo del máster (mismo criterio que administrar usuarios); cualquier
 // perfil puede listarlos para saber qué tiene cargado el colegio.
 app.get("/api/colegios/:id/documentos", asyncRoute(async (req, res) => {
+  const { correo, clave } = actorDeHeaders(req);
+  const actor = await verificarActor(req.params.id, correo, clave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   const r = await pool.query(
     "select id, tipo, nombre, archivo_nombre, subido_por, creado_en from documentos where colegio_id=$1 order by creado_en desc",
     [req.params.id]
@@ -1195,6 +1288,7 @@ app.post("/api/colegios/:id/documentos", asyncRoute(async (req, res) => {
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor || actor.perfil !== PERFIL_MASTER) return res.status(403).json({ error: "solo_master" });
   if (!tipo || !nombre) return res.status(400).json({ error: "campos_requeridos" });
+  if (!adjuntoValido(archivoData)) return res.status(400).json({ error: "adjunto_invalido" });
   const r = await pool.query(
     "insert into documentos (colegio_id, tipo, nombre, archivo_nombre, archivo_data, subido_por) values ($1,$2,$3,$4,$5,$6) returning id, tipo, nombre, archivo_nombre, subido_por, creado_en",
     [req.params.id, tipo, nombre.trim(), archivoNombre || null, archivoData || null, actor.nombre]
@@ -1682,7 +1776,7 @@ app.get("/api/sistema/exportar/:id", requireMigracionKey, asyncRoute(async (req,
   const colegio = (await pool.query("select * from colegios where id=$1", [c])).rows[0];
   if (!colegio) return res.status(404).json({ error: "no_encontrado" });
   const [usuarios, items, circuloHistorial, chatMensajes, alertas, pushSubs, entrevistas, documentos, chatIa, monitorTareas, directorioPersonas, historialPersona, agendaBloques, gruposTriage] = await Promise.all([
-    pool.query("select * from usuarios where colegio_id=$1", [c]),
+    pool.query("select id, colegio_id, nombre, correo, perfil, creado_en, tema, clave_hash from usuarios where colegio_id=$1", [c]),
     pool.query("select * from items where colegio_id=$1", [c]),
     pool.query("select ch.* from circulo_historial ch join items i on i.id=ch.item_id where i.colegio_id=$1", [c]),
     pool.query("select cm.* from chat_mensajes cm join items i on i.id=cm.item_id where i.colegio_id=$1", [c]),
@@ -1734,10 +1828,13 @@ app.post("/api/sistema/importar", requireMigracionKey, asyncRoute(async (req, re
       [co.id, co.nombre, co.comuna, co.relacionai_url, co.insignia_data, co.creado_en]
     );
     for (const u of d.usuarios || []) {
+      // Exportaciones antiguas pueden traer la clave legible sin hash: se hashea acá y nunca se
+      // guarda en texto plano.
+      const claveHash = u.clave_hash || (u.clave ? await bcrypt.hash(u.clave, 10) : null);
       await cliente.query(
         `insert into usuarios (colegio_id,nombre,correo,clave,perfil,creado_en,tema,clave_hash)
          values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [u.colegio_id, u.nombre, u.correo, u.clave, u.perfil, u.creado_en, u.tema, u.clave_hash]
+        [u.colegio_id, u.nombre, u.correo, null, u.perfil, u.creado_en, u.tema, claveHash]
       );
     }
     const mapaItems = {};
@@ -1897,8 +1994,11 @@ app.post("/api/colegios/:id/directorio/buscar-entrevista", asyncRoute(async (req
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
   const termino = (q || "").trim();
   if (termino.length < 2) return res.json([]);
+  // Sin RUT ni correo: cualquier perfil (incluido Docente) puede usar este autocompletar, y el
+  // directorio incluye datos de estudiantes menores de edad. Al guardar la entrevista, el
+  // servidor completa RUT y correo desde el directorio por personaId (ver POST /entrevistas).
   const r = await pool.query(
-    `select id, tipo, nombre, rut, detalle, correo from directorio_personas
+    `select id, tipo, nombre, detalle from directorio_personas
      where colegio_id=$1 and activo=true and (quitar_tildes(nombre) like '%'||quitar_tildes($2)||'%' or quitar_tildes(rut) like '%'||quitar_tildes($2)||'%')
      order by nombre asc limit 30`,
     [req.params.id, termino]
@@ -2088,6 +2188,7 @@ app.post("/api/colegios/:id/directorio/:personaId/historial", asyncRoute(async (
   const actor = await actorConAccesoBuscador(req.params.id, actorCorreo, actorClave);
   if (!actor) return res.status(403).json({ error: "sin_permiso" });
   if (!tipo || !titulo || !titulo.trim()) return res.status(400).json({ error: "campos_requeridos" });
+  if (!adjuntoValido(archivoData)) return res.status(400).json({ error: "adjunto_invalido" });
   const persona = await pool.query(
     "select id from directorio_personas where id=$1 and colegio_id=$2",
     [req.params.personaId, req.params.id]
@@ -2550,9 +2651,13 @@ async function migrarClavesAHash() {
   const r = await pool.query("select id, clave from usuarios where clave_hash is null and clave is not null");
   for (const fila of r.rows) {
     const hash = await bcrypt.hash(fila.clave, 10);
-    await pool.query("update usuarios set clave_hash=$1 where id=$2", [hash, fila.id]);
+    await pool.query("update usuarios set clave_hash=$1, clave=null where id=$2", [hash, fila.id]);
   }
   if (r.rows.length) console.log(`Seguridad: migradas ${r.rows.length} cuenta(s) de clave en texto plano a bcrypt.`);
+  // La migración original dejaba la clave legible en `clave` junto al hash — se borra en toda
+  // fila que ya tenga hash.
+  const limpiadas = await pool.query("update usuarios set clave=null where clave_hash is not null and clave is not null");
+  if (limpiadas.rowCount) console.log(`Seguridad: borradas ${limpiadas.rowCount} clave(s) en texto plano ya migradas a bcrypt.`);
 }
 
 async function start() {
