@@ -2126,7 +2126,21 @@ app.post("/api/colegios/:id/directorio/:personaId/ver", asyncRoute(async (req, r
     "select id, tipo, titulo, descripcion, autor, perfil, archivo_nombre, archivo_data, creado_en from historial_persona where persona_id=$1 order by creado_en desc",
     [req.params.personaId]
   );
-  res.json({ ...persona.rows[0], historial: historial.rows });
+  // Entrevistas: en la ficha, UTP, Inspectoría General y el sostenedor solo ven que existió, la
+  // fecha y quién la hizo — sin el tema ni adjuntos. El detalle completo (y el documento para
+  // descargar) es solo del Director/a de colegio y de quien realizó la entrevista.
+  const esDirector = actor.perfil === PERFIL_DIRECTOR_COLEGIO;
+  const historialVisible = historial.rows.map(h => {
+    if (h.tipo !== "entrevista" || esDirector || h.autor === actor.nombre) return h;
+    return { ...h, descripcion: null, archivo_nombre: null, archivo_data: null, reservado: true };
+  });
+  const entrevistas = esDirector
+    ? await pool.query("select * from entrevistas where colegio_id=$1 and persona_id=$2 order by creado_en desc", [req.params.id, req.params.personaId])
+    : await pool.query(
+        "select * from entrevistas where colegio_id=$1 and persona_id=$2 and (creado_por=$3 or entrevistador=$3) order by creado_en desc",
+        [req.params.id, req.params.personaId, actor.nombre]
+      );
+  res.json({ ...persona.rows[0], historial: historialVisible, entrevistas: entrevistas.rows });
 }));
 
 // Editar datos de una persona — mismos 4 perfiles del Buscador (no solo los 2 de carga

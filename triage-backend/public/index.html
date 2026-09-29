@@ -2474,9 +2474,21 @@ async function abrirFichaPersona(id){
         <p class="text-[10px] uppercase tracking-wide text-indigo-400 font-bold">${esc(HIST_TIPOS[h.tipo]||h.tipo)}</p>
         <p class="text-xs font-bold text-white mt-0.5">${esc(h.titulo)}</p>
         ${h.descripcion ? `<p class="text-xs text-slate-400 mt-1">${esc(h.descripcion)}</p>` : ""}
+        ${h.reservado ? `<p class="text-[10px] text-slate-500 italic mt-1"><i class="fa-solid fa-lock mr-1"></i>Detalle reservado a Dirección y a quien realizó la entrevista.</p>` : ""}
         ${h.archivo_nombre ? `<a href="${esc(urlAdjunto(h.archivo_data))}" download="${esc(h.archivo_nombre)}" class="text-[10px] text-cyan-400 mt-1 inline-block"><i class="fa-solid fa-paperclip mr-1"></i>${esc(h.archivo_nombre)}</a>` : ""}
-        <p class="text-[9px] text-slate-500 mt-1">${esc(h.autor)} (${esc(h.perfil)}) · ${new Date(h.creado_en).toLocaleString("es-CL")}</p>
+        <p class="text-[9px] text-slate-500 mt-1">${h.tipo==="entrevista" ? "Realizada por " : ""}${esc(h.autor)} (${esc(h.perfil)}) · ${new Date(h.creado_en).toLocaleString("es-CL")}</p>
       </div>`).join("") : '<p class="text-[11px] text-slate-500 text-center py-4">Sin historial todavía.</p>';
+    // Documentos de entrevista descargables: el servidor solo los entrega al Director/a de
+    // colegio (todos) y a quien realizó cada entrevista (las suyas).
+    if((ficha.entrevistas||[]).length){
+      cont.innerHTML = `<div class="bg-slate-950 border border-cyan-900 rounded-xl p-3">
+        <p class="text-[10px] uppercase tracking-wide text-cyan-400 font-bold mb-1.5">Entrevistas · documentos</p>
+        ${ficha.entrevistas.map(e => `<div class="flex items-center justify-between gap-2 py-1">
+          <span class="text-[11px] text-white truncate">${esc(String(e.fecha||'—').slice(0,10))} · ${esc(e.entrevistador)}</span>
+          <button onclick="descargarEntrevista(${esc(JSON.stringify(e))})" class="text-cyan-300 hover:text-cyan-200 text-xs px-2 flex-none" title="Descargar entrevista"><i class="fa-solid fa-download"></i></button>
+        </div>`).join("")}
+      </div>` + cont.innerHTML;
+    }
   }catch(e){ toast("No se pudo abrir la ficha"); }
 }
 async function agregarHistorialPersona(){
