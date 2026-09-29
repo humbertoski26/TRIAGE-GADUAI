@@ -11,10 +11,14 @@
 <meta name="apple-mobile-web-app-title" content="GADUAI">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="icon" href="/icons/icon-192.png">
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<!-- Librerías externas con versión fija y huella de integridad (SRI): si el archivo del CDN
+     cambia, el navegador se niega a ejecutarlo. Tailwind se aloja acá mismo porque su CDN no
+     permite verificar la huella. xlsx viene del CDN oficial de SheetJS: la versión de npm
+     (0.18.5) tiene vulnerabilidades conocidas corregidas en 0.20.x. -->
+<script src="/vendor/tailwind-play-3.4.17.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha384-iw3OoTErCYJJB9mCa8LNS2hbsQ7M3C0EpIsO/H5+EGAkPGc6rk+V8i04oW/K5xq0" crossorigin="anonymous" referrerpolicy="no-referrer">
+<script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js" integrity="sha384-TtrQp5nveof/QP1+f/OLiEHL3GuOIRyl3IfsGxu5X45VO2vHeT4HRNmQuTR3Ea3w" crossorigin="anonymous"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
 <script>
   // El manifest lleva el ?colegio= actual, para que "Instalar app" abra directo ese colegio la
   // próxima vez, sin pasar por la portada. Bug real: si el <link rel="manifest"> ya viene en el
@@ -383,6 +387,7 @@
           <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Perfiles conectados</p>
           <div id="menu-perfiles" class="space-y-1 mb-3 max-h-32 overflow-y-auto"></div>
           <button id="btn-tema" onclick="cambiarTema()" class="w-full text-[11px] text-sky-300 border border-sky-500/30 rounded-lg py-2"><i class="fa-solid fa-sun mr-1"></i> Modo claro</button>
+          <button onclick="abrirCambiarClave()" class="w-full mt-2 text-[11px] text-slate-300 border border-slate-600/40 rounded-lg py-2"><i class="fa-solid fa-key mr-1"></i> Cambiar mi clave</button>
           <button id="btn-configuracion" onclick="abrirUsuarios()" hidden class="w-full mt-2 text-[11px] text-slate-300 border border-slate-600/40 rounded-lg py-2"><i class="fa-solid fa-gear mr-1"></i> Configuración</button>
           <button id="btn-activar-push" onclick="activarPush()" title="Notificaciones activadas por defecto — toca para desactivarlas" class="w-full mt-2 text-[11px] text-amber-300 border border-amber-500/30 rounded-lg py-2"><i class="fa-solid fa-bell mr-1"></i> Notificaciones activadas</button>
         </div>
@@ -956,6 +961,21 @@
     <textarea id="alertar-msg" rows="3" placeholder="Mensaje de la alerta (opcional)..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-4"></textarea>
     <div id="alertar-historial" class="space-y-1.5 mb-4"></div>
     <button onclick="enviarAlerta()" class="w-full brand-gradient text-white text-xs font-bold py-2.5 rounded-xl">🔔 Enviar alerta</button>
+  </div>
+</div>
+
+<!-- ============ MODAL: CAMBIAR MI CLAVE ============ -->
+<div id="modal-cambiar-clave" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 fade-in">
+    <div class="flex justify-between items-start mb-3">
+      <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-key text-slate-300"></i> Cambiar mi clave</h3>
+      <button onclick="cerrarModalId('modal-cambiar-clave')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <p class="text-[11px] text-slate-500 mb-3">Mínimo 8 caracteres. Al cambiarla se cierra tu sesión en los demás dispositivos.</p>
+    <input id="cc-actual" type="password" autocomplete="current-password" placeholder="Clave actual" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+    <input id="cc-nueva" type="password" autocomplete="new-password" placeholder="Clave nueva" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-2">
+    <input id="cc-repetir" type="password" autocomplete="new-password" placeholder="Repite la clave nueva" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white mb-4">
+    <button onclick="guardarNuevaClave()" class="w-full brand-gradient text-white text-xs font-bold py-2.5 rounded-xl"><i class="fa-solid fa-check mr-1"></i> Guardar clave nueva</button>
   </div>
 </div>
 
@@ -1822,19 +1842,49 @@ async function renderListaUsuarios(){
       ${u.perfil===PERFIL_MASTER ? '' : `<button onclick="eliminarUsuario(${u.id})" class="text-rose-400 hover:text-rose-300 text-xs px-2"><i class="fa-solid fa-trash"></i></button>`}
     </div>`).join("");
 }
+function abrirCambiarClave(){
+  ["cc-actual","cc-nueva","cc-repetir"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("modal-cambiar-clave").classList.remove("hidden");
+}
+async function guardarNuevaClave(){
+  const claveActual = document.getElementById("cc-actual").value;
+  const claveNueva = document.getElementById("cc-nueva").value;
+  const repetir = document.getElementById("cc-repetir").value;
+  if(!claveActual || !claveNueva){ toast("Completa tu clave actual y la nueva"); return; }
+  if(claveNueva.length < 8){ toast("La clave nueva debe tener al menos 8 caracteres"); return; }
+  if(claveNueva !== repetir){ toast("Las claves nuevas no coinciden"); return; }
+  try{
+    const r = await api(`/api/colegios/${STATE.colegioId}/usuarios/cambiar-clave`, {method:"POST", body: JSON.stringify(actorBody({claveActual, claveNueva}))});
+    STATE.clave = r.sesionToken;
+    guardarSesion();
+    cerrarModalId("modal-cambiar-clave");
+    toast("Clave actualizada. Se cerró tu sesión en los demás dispositivos.");
+  }catch(e){
+    const err = e.data && e.data.error;
+    toast(err==="clave_actual_incorrecta" ? "La clave actual no es correcta"
+      : err==="clave_igual" ? "La clave nueva debe ser distinta a la actual"
+      : e.status===429 ? "Demasiados intentos fallidos. Espera 15 minutos."
+      : "No se pudo cambiar la clave");
+  }
+}
 async function agregarUsuario(){
   const nombre = document.getElementById("u-nombre").value.trim();
   const correo = document.getElementById("u-correo").value.trim();
   const clave = document.getElementById("u-clave").value.trim();
   const perfil = document.getElementById("u-perfil").value;
   if(!nombre||!correo||!clave){ toast("Complete nombre, correo y contraseña"); return; }
+  if(clave.length < 8){ toast("La contraseña debe tener al menos 8 caracteres"); return; }
   try{
     await api(`/api/colegios/${STATE.colegioId}/usuarios`, {method:"POST", body: JSON.stringify(actorBody({nombre, correo, clave, perfil}))});
     await renderListaUsuarios(); await renderMenuPerfiles();
     document.getElementById("u-nombre").value=""; document.getElementById("u-correo").value=""; document.getElementById("u-clave").value="";
     toast(`Usuario creado: ${nombre} (${perfil})`);
   }catch(e){
-    toast(e.data && e.data.error==="correo_existente" ? "Ya existe un usuario con ese correo" : "No se pudo crear el usuario");
+    const err = e.data && e.data.error;
+    toast(err==="correo_existente" ? "Ya existe un usuario con ese correo"
+      : err==="nombre_existente" ? "Ya existe un usuario con ese nombre: agrega un segundo apellido o una inicial para distinguirlos"
+      : err==="clave_corta" ? "La contraseña debe tener al menos 8 caracteres"
+      : "No se pudo crear el usuario");
   }
 }
 async function eliminarUsuario(id){
@@ -3233,7 +3283,7 @@ async function ortografiaAsegurarCargada(){
   if(ortografiaSpeller) return ortografiaSpeller;
   if(!ortografiaCargando){
     ortografiaCargando = (async()=>{
-      const nspellMod = await import("https://cdn.jsdelivr.net/npm/nspell/+esm");
+      const nspellMod = await import("https://cdn.jsdelivr.net/npm/nspell@2.1.5/+esm");
       const [aff, dic] = await Promise.all([
         fetch("https://cdn.jsdelivr.net/npm/dictionary-es@4.0.0/index.aff").then(r=>r.text()),
         fetch("https://cdn.jsdelivr.net/npm/dictionary-es@4.0.0/index.dic").then(r=>r.text()),

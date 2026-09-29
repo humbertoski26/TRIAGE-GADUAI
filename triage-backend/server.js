@@ -675,11 +675,18 @@ app.post("/api/colegios/:id/usuarios", asyncRoute(async (req, res) => {
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor || actor.perfil !== PERFIL_MASTER) return res.status(403).json({ error: "solo_master" });
   if (!nombre || !correo || !clave || !perfil) return res.status(400).json({ error: "campos_requeridos" });
+  if (!PERFILES.includes(perfil)) return res.status(400).json({ error: "perfil_invalido" });
+  if (String(clave).length < CLAVE_MIN) return res.status(400).json({ error: "clave_corta" });
+  // Los permisos (tareas, círculo, chat, alertas, notificaciones) se asignan por nombre: dos
+  // cuentas con el mismo nombre verían las cosas de la otra. Por eso el nombre es único.
+  const nombreLimpio = String(nombre).trim().replace(/\s+/g, " ");
+  const repetido = await pool.query("select 1 from usuarios where colegio_id=$1 and lower(nombre)=lower($2)", [req.params.id, nombreLimpio]);
+  if (repetido.rows.length) return res.status(409).json({ error: "nombre_existente" });
   try {
     const claveHash = await bcrypt.hash(clave, 10);
     const r = await pool.query(
       "insert into usuarios (colegio_id, nombre, correo, clave_hash, perfil) values ($1,$2,$3,$4,$5) returning id, nombre, correo, perfil",
-      [req.params.id, nombre.trim(), correo.trim(), claveHash, perfil]
+      [req.params.id, nombreLimpio, correo.trim(), claveHash, perfil]
     );
     res.json(r.rows[0]);
   } catch (e) {
@@ -696,6 +703,26 @@ app.delete("/api/colegios/:id/usuarios/:usuarioId", asyncRoute(async (req, res) 
     req.params.usuarioId, req.params.id, PERFIL_MASTER
   ]);
   res.json({ ok: true });
+}));
+
+// Cada persona cambia su propia clave. Exige la clave actual aunque la sesión use token (así un
+// token robado no basta para quedarse con la cuenta). Cierra todas las demás sesiones de esa
+// cuenta y entrega un token nuevo para este dispositivo.
+const CLAVE_MIN = 8;
+app.post("/api/colegios/:id/usuarios/cambiar-clave", asyncRoute(async (req, res) => {
+  const { actorCorreo, actorClave, claveActual, claveNueva } = req.body || {};
+  const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
+  if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
+  if (typeof claveNueva !== "string" || claveNueva.length < CLAVE_MIN) return res.status(400).json({ error: "clave_corta" });
+  if (typeof claveActual !== "string" || claveActual.startsWith(SESION_PREFIJO)) return res.status(400).json({ error: "clave_actual_requerida" });
+  const confirmado = await verificarActor(req.params.id, actorCorreo, claveActual);
+  if (!confirmado) return res.status(403).json({ error: "clave_actual_incorrecta" });
+  if (claveActual === claveNueva) return res.status(400).json({ error: "clave_igual" });
+  const claveHash = await bcrypt.hash(claveNueva, 10);
+  await pool.query("update usuarios set clave_hash=$1, clave=null where id=$2", [claveHash, confirmado.id]);
+  await pool.query("delete from sesiones where usuario_id=$1", [confirmado.id]);
+  const sesionToken = await crearSesion(req.params.id, confirmado.id);
+  res.json({ ok: true, sesionToken });
 }));
 
 // Cada quien cambia su propia preferencia de tema — no requiere ser máster, solo credenciales
@@ -2791,11 +2818,26 @@ async function migrarClavesAHash() {
   if (limpiadas.rowCount) console.log(`Seguridad: borradas ${limpiadas.rowCount} clave(s) en texto plano ya migradas a bcrypt.`);
 }
 
+// Nombres únicos por colegio (sin distinguir mayúsculas). Si ya hubiera nombres repetidos, no se
+// fuerza el índice (el servidor no arrancaría): se avisa en el log para corregirlos a mano, y la
+// creación de usuarios nuevos igual rechaza repetidos (ver POST /usuarios).
+async function asegurarNombresUnicos() {
+  const dup = await pool.query(
+    "select colegio_id, count(*)::int as n from (select colegio_id, lower(nombre) from usuarios group by colegio_id, lower(nombre) having count(*) > 1) d group by colegio_id"
+  );
+  if (dup.rows.length) {
+    for (const d of dup.rows) console.warn(`Seguridad: el colegio ${d.colegio_id} tiene ${d.n} nombre(s) de usuario repetido(s); corrígelos para activar el índice de nombres únicos.`);
+    return;
+  }
+  await pool.query("create unique index if not exists usuarios_colegio_nombre_unico on usuarios(colegio_id, lower(nombre))");
+}
+
 async function start() {
   const fs = require("fs");
   const schema = fs.readFileSync(path.join(__dirname, "db", "schema.sql"), "utf8");
   await pool.query(schema);
   await migrarClavesAHash();
+  await asegurarNombresUnicos();
   app.listen(PORT, () => console.log(`TRIAGE GADUAI backend escuchando en el puerto ${PORT}`));
 }
 start().catch(err => {
