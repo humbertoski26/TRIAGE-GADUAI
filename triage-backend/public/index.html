@@ -1875,14 +1875,22 @@ async function agregarUsuario(){
   if(!nombre||!correo||!clave){ toast("Complete nombre, correo y contraseña"); return; }
   if(clave.length < 8){ toast("La contraseña debe tener al menos 8 caracteres"); return; }
   try{
-    await api(`/api/colegios/${STATE.colegioId}/usuarios`, {method:"POST", body: JSON.stringify(actorBody({nombre, correo, clave, perfil}))});
+    try{
+      await api(`/api/colegios/${STATE.colegioId}/usuarios`, {method:"POST", body: JSON.stringify(actorBody({nombre, correo, clave, perfil}))});
+    }catch(e){
+      // Mismo nombre con otro perfil: solo se permite si es la misma persona con otro rol.
+      if(!(e.data && e.data.error==="nombre_existente_otro_perfil")) throw e;
+      const otros = (e.data.perfiles||[]).join(", ");
+      if(!confirm(`Ya existe una cuenta llamada "${nombre}" con perfil ${otros}.\n\n¿Es la MISMA persona con otro rol? Ambas cuentas verán las mismas tareas y avisos.\n\nSi es otra persona, cancela y agrega un segundo apellido o una inicial para distinguirla.`)) return;
+      await api(`/api/colegios/${STATE.colegioId}/usuarios`, {method:"POST", body: JSON.stringify(actorBody({nombre, correo, clave, perfil, mismaPersona:true}))});
+    }
     await renderListaUsuarios(); await renderMenuPerfiles();
     document.getElementById("u-nombre").value=""; document.getElementById("u-correo").value=""; document.getElementById("u-clave").value="";
     toast(`Usuario creado: ${nombre} (${perfil})`);
   }catch(e){
     const err = e.data && e.data.error;
     toast(err==="correo_existente" ? "Ya existe un usuario con ese correo"
-      : err==="nombre_existente" ? "Ya existe un usuario con ese nombre: agrega un segundo apellido o una inicial para distinguirlos"
+      : err==="nombre_existente" ? "Ya existe una cuenta con ese nombre y ese mismo perfil"
       : err==="clave_corta" ? "La contraseña debe tener al menos 8 caracteres"
       : "No se pudo crear el usuario");
   }

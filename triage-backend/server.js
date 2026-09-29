@@ -671,17 +671,22 @@ app.get("/api/colegios/:id/usuarios", asyncRoute(async (req, res) => {
 }));
 
 app.post("/api/colegios/:id/usuarios", asyncRoute(async (req, res) => {
-  const { nombre, correo, clave, perfil, actorCorreo, actorClave } = req.body || {};
+  const { nombre, correo, clave, perfil, actorCorreo, actorClave, mismaPersona } = req.body || {};
   const actor = await verificarActor(req.params.id, actorCorreo, actorClave);
   if (!actor || actor.perfil !== PERFIL_MASTER) return res.status(403).json({ error: "solo_master" });
   if (!nombre || !correo || !clave || !perfil) return res.status(400).json({ error: "campos_requeridos" });
   if (!PERFILES.includes(perfil)) return res.status(400).json({ error: "perfil_invalido" });
   if (String(clave).length < CLAVE_MIN) return res.status(400).json({ error: "clave_corta" });
   // Los permisos (tareas, círculo, chat, alertas, notificaciones) se asignan por nombre: dos
-  // cuentas con el mismo nombre verían las cosas de la otra. Por eso el nombre es único.
+  // cuentas con el mismo nombre ven lo mismo. Eso solo es correcto si son la misma persona con
+  // otro rol (ej. sostenedora que además es directora): se permite con otro perfil y solo si se
+  // confirma explícitamente; con el mismo perfil, nunca.
   const nombreLimpio = String(nombre).trim().replace(/\s+/g, " ");
-  const repetido = await pool.query("select 1 from usuarios where colegio_id=$1 and lower(nombre)=lower($2)", [req.params.id, nombreLimpio]);
-  if (repetido.rows.length) return res.status(409).json({ error: "nombre_existente" });
+  const repetido = await pool.query("select perfil from usuarios where colegio_id=$1 and lower(nombre)=lower($2)", [req.params.id, nombreLimpio]);
+  if (repetido.rows.some(r => r.perfil === perfil)) return res.status(409).json({ error: "nombre_existente" });
+  if (repetido.rows.length && mismaPersona !== true) {
+    return res.status(409).json({ error: "nombre_existente_otro_perfil", perfiles: repetido.rows.map(r => r.perfil) });
+  }
   try {
     const claveHash = await bcrypt.hash(clave, 10);
     const r = await pool.query(
@@ -2818,21 +2823,22 @@ async function migrarClavesAHash() {
   if (limpiadas.rowCount) console.log(`Seguridad: borradas ${limpiadas.rowCount} clave(s) en texto plano ya migradas a bcrypt.`);
 }
 
-// Nombres únicos por colegio (sin distinguir mayúsculas). Si ya hubiera nombres repetidos, no se
-// fuerza el índice (el servidor no arrancaría): se avisa en el log para corregirlos a mano, y la
-// creación de usuarios nuevos igual rechaza repetidos (ver POST /usuarios).
+// Nombre único por colegio y perfil (sin distinguir mayúsculas): la misma persona puede tener dos
+// cuentas con roles distintos, pero nunca dos con el mismo nombre y perfil. Si ya hubiera
+// repetidos, no se fuerza el índice (el servidor no arrancaría): se avisa en el log.
 async function asegurarNombresUnicos() {
   // Se muestra el nombre y el perfil de cada cuenta repetida (nunca el correo) para poder
   // identificar cuál corregir desde Configuración.
   const dup = await pool.query(
     `select colegio_id, array_agg(nombre || ' (' || perfil || ')' order by id) as cuentas
-     from usuarios group by colegio_id, lower(nombre) having count(*) > 1`
+     from usuarios group by colegio_id, lower(nombre), perfil having count(*) > 1`
   );
   if (dup.rows.length) {
     for (const d of dup.rows) console.warn(`Seguridad: nombre de usuario repetido en ${d.colegio_id} — cuentas: ${d.cuentas.join(" | ")}. Corrígelo para activar el índice de nombres únicos.`);
     return;
   }
-  await pool.query("create unique index if not exists usuarios_colegio_nombre_unico on usuarios(colegio_id, lower(nombre))");
+  await pool.query("drop index if exists usuarios_colegio_nombre_unico");
+  await pool.query("create unique index if not exists usuarios_colegio_nombre_perfil_unico on usuarios(colegio_id, lower(nombre), perfil)");
 }
 
 async function start() {
