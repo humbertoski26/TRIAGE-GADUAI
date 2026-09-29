@@ -2822,11 +2822,14 @@ async function migrarClavesAHash() {
 // fuerza el índice (el servidor no arrancaría): se avisa en el log para corregirlos a mano, y la
 // creación de usuarios nuevos igual rechaza repetidos (ver POST /usuarios).
 async function asegurarNombresUnicos() {
+  // Se muestra el nombre y el perfil de cada cuenta repetida (nunca el correo) para poder
+  // identificar cuál corregir desde Configuración.
   const dup = await pool.query(
-    "select colegio_id, count(*)::int as n from (select colegio_id, lower(nombre) from usuarios group by colegio_id, lower(nombre) having count(*) > 1) d group by colegio_id"
+    `select colegio_id, array_agg(nombre || ' (' || perfil || ')' order by id) as cuentas
+     from usuarios group by colegio_id, lower(nombre) having count(*) > 1`
   );
   if (dup.rows.length) {
-    for (const d of dup.rows) console.warn(`Seguridad: el colegio ${d.colegio_id} tiene ${d.n} nombre(s) de usuario repetido(s); corrígelos para activar el índice de nombres únicos.`);
+    for (const d of dup.rows) console.warn(`Seguridad: nombre de usuario repetido en ${d.colegio_id} — cuentas: ${d.cuentas.join(" | ")}. Corrígelo para activar el índice de nombres únicos.`);
     return;
   }
   await pool.query("create unique index if not exists usuarios_colegio_nombre_unico on usuarios(colegio_id, lower(nombre))");
