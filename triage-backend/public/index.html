@@ -1184,7 +1184,8 @@ async function init(){
       const colegio = await api("/api/colegios/" + sesion.colegioId);
       const r = await api(`/api/colegios/${sesion.colegioId}/login`, {method:"POST", body: JSON.stringify({correo:sesion.correo, clave:sesion.clave})});
       STATE.colegio = colegio; STATE.colegioId = colegio.id;
-      STATE.correo = sesion.correo; STATE.clave = sesion.clave;
+      STATE.correo = sesion.correo; STATE.clave = r.sesionToken || sesion.clave;
+      guardarSesion(); // si este dispositivo tenía la clave guardada, queda reemplazada por el token
       STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken; STATE.tema = r.usuario.tema; STATE.pushHabilitado = r.usuario.push_habilitado !== false;
       await entrarApp();
       return;
@@ -1210,11 +1211,12 @@ async function ingresar(){
   if(!correo || !clave){ toast("Ingrese correo y clave"); return; }
   try{
     const r = await api(`/api/colegios/${STATE.colegioId}/login`, {method:"POST", body: JSON.stringify({correo, clave})});
-    STATE.correo = correo; STATE.clave = clave;
+    // Desde acá STATE.clave guarda el token de sesión que entrega el servidor, no la clave real.
+    STATE.correo = correo; STATE.clave = r.sesionToken || clave;
     STATE.perfil = r.usuario.perfil; STATE.persona = r.usuario.nombre; STATE.isMaster = r.isMaster; STATE.relacionaiSsoToken = r.relacionaiSsoToken; STATE.tema = r.usuario.tema; STATE.pushHabilitado = r.usuario.push_habilitado !== false;
     guardarSesion();
     await entrarApp();
-  }catch(e){ toast("Correo o clave incorrectos para este colegio"); }
+  }catch(e){ toast(e.status===429 ? "Demasiados intentos fallidos. Espera 15 minutos e intenta de nuevo." : "Correo o clave incorrectos para este colegio"); }
 }
 
 /* ---------- modo claro/oscuro (Fase 6) — guardado por cuenta, no por dispositivo ---------- */
@@ -1497,6 +1499,8 @@ async function activarPush(){
 function cerrarSesion(){
   if(pollTimer) clearInterval(pollTimer);
   if(relojTimer) clearInterval(relojTimer);
+  if(STATE.clave) api(`/api/colegios/${STATE.colegioId}/logout`, {method:"POST", body: JSON.stringify(actorBody())}).catch(()=>{});
+  STATE.clave = "";
   borrarSesion();
   mostrarPantalla("pantalla-login");
   document.getElementById("login-clave").value="";
@@ -3320,26 +3324,32 @@ async function renderHistorialEntrevistas(){
   try{
     const entrevistas = await api(`/api/colegios/${STATE.colegioId}/entrevistas`);
     if(!entrevistas.length){ lista.innerHTML = '<p class="text-[10px] text-slate-600">Aún no hay entrevistas registradas.</p>'; return; }
+    // Los relatos llegan desde Relacionai (carpeta propia) — no es un tipo que se elija en el formulario.
+    const CARPETAS = [...TIPOS_ENTREVISTADO, {id:"relato", label:"Relatos (Relacionai)"}];
+    const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
     const porTipo = {};
     for(const e of entrevistas){
-      const tipo = TIPOS_ENTREVISTADO.some(t=>t.id===e.tipo_entrevistado) ? e.tipo_entrevistado : "otro";
+      const tipo = CARPETAS.some(t=>t.id===e.tipo_entrevistado) ? e.tipo_entrevistado : "otro";
       (porTipo[tipo] = porTipo[tipo] || []).push(e);
     }
     const filaEntrevista = e => `
       <div class="flex items-center justify-between gap-2 bg-slate-900 border border-slate-800 rounded-lg p-2">
         <div class="min-w-0">
-          <p class="text-[11px] font-bold text-white truncate">${esc(e.nombre_entrevistado)}</p>
-          <p class="text-[9px] text-slate-500 truncate">${e.fecha||'—'} · ${esc(e.entrevistador)} · ${esc(e.perfil_creador)}</p>
+          <p class="text-[11px] font-bold text-white truncate">${esc(e.nombre_entrevistado)}${e.tipo_entrevistado==="relato" ? ' — Relato' : ''}</p>
+          <p class="text-[9px] text-slate-500 truncate">${esc(String(e.fecha||'—').slice(0,10))} · ${e.tipo_entrevistado==="relato" ? esc(e.motivo||'') + ' · recibido por ' + esc(e.entrevistador) : esc(e.entrevistador) + ' · ' + esc(e.perfil_creador)}</p>
         </div>
         <button onclick="descargarEntrevista(${esc(JSON.stringify(e))})" class="text-cyan-300 hover:text-cyan-200 text-xs px-2 flex-none"><i class="fa-solid fa-download"></i></button>
       </div>`;
-    lista.innerHTML = TIPOS_ENTREVISTADO.filter(t => porTipo[t.id]?.length).map(t => {
+    lista.innerHTML = CARPETAS.filter(t => porTipo[t.id]?.length).map(t => {
       const porAnio = {};
       for(const e of porTipo[t.id]){
-        const anio = (e.fecha || e.creado_en || "").slice(0,4) || "Sin fecha";
-        (porAnio[anio] = porAnio[anio] || []).push(e);
+        const f = String(e.fecha || e.creado_en || "");
+        const anio = f.slice(0,4) || "Sin fecha";
+        const mes = f.slice(5,7) || "00";
+        ((porAnio[anio] = porAnio[anio] || {})[mes] = porAnio[anio][mes] || []).push(e);
       }
       const anios = Object.keys(porAnio).sort((a,b)=>b.localeCompare(a));
+      const totalAnio = anio => Object.values(porAnio[anio]).reduce((n,l)=>n+l.length,0);
       return `<details class="bg-slate-950 border border-slate-800 rounded-lg mb-1.5">
         <summary class="text-[11px] font-bold text-white px-2.5 py-2 cursor-pointer flex justify-between items-center">
           <span><i class="fa-solid fa-folder text-amber-300 mr-1.5"></i>${esc(t.label)}</span>
@@ -3348,8 +3358,12 @@ async function renderHistorialEntrevistas(){
         <div class="px-2 pb-2 space-y-1.5">
           ${anios.map(anio => `
             <details class="ml-1" open>
-              <summary class="text-[10px] text-slate-400 cursor-pointer py-1">${esc(anio)} (${porAnio[anio].length})</summary>
-              <div class="space-y-1 mt-1">${porAnio[anio].map(filaEntrevista).join("")}</div>
+              <summary class="text-[10px] text-slate-400 cursor-pointer py-1">${esc(anio)} (${totalAnio(anio)})</summary>
+              ${Object.keys(porAnio[anio]).sort((a,b)=>b.localeCompare(a)).map(mes => `
+                <details class="ml-2" open>
+                  <summary class="text-[10px] text-slate-500 cursor-pointer py-0.5">${esc(MESES[Number(mes)-1] || "Sin mes")} (${porAnio[anio][mes].length})</summary>
+                  <div class="space-y-1 mt-1">${porAnio[anio][mes].map(filaEntrevista).join("")}</div>
+                </details>`).join("")}
             </details>`).join("")}
         </div>
       </details>`;
@@ -3409,7 +3423,34 @@ function encabezadoDocumentoHtml(insigniaColegio, logoGaduai, fechaTexto){
 // Réplica del formato formal del prototipo GADUAI (tablas con bordes, celdas rotuladas,
 // firmas con RUT y nota legal al pie) — antes esta función solo armaba párrafos sueltos,
 // sin insignia ni el diseño de ficha oficial.
+// Relato recibido desde Relacionai: lo escribió la propia persona por el link del caso, así que no
+// lleva desarrollo/compromisos ni firmas — solo quién relata, el caso y el texto tal cual.
+function relatoHtmlDoc(e, insignia, logoGaduai){
+  const fecha = String(e.fecha||"").slice(0,10);
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    @page{size:8.5in 11in;margin:1in}
+    body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#111}
+    table{width:100%;border-collapse:collapse;margin-bottom:6px}
+    td,th{border:1px solid #000;padding:5px 8px;font-size:10pt;vertical-align:top}
+    .lbl{font-weight:bold;background:#f2f2f2;width:22%}
+    h1{font-size:14pt;text-align:center;text-decoration:underline;margin:10px 0 14px 0}
+    .nota{font-size:8pt;margin-top:18px;font-style:italic}
+    .encabezado-doc{margin-bottom:14px}
+    .encabezado-doc td{border:none;padding:0}
+  </style></head><body>
+    ${encabezadoDocumentoHtml(insignia, logoGaduai, fecha?`Fecha: ${esc(fecha)}`:"")}
+    <h1>REGISTRO DE RELATO</h1>
+    <table><tr><td class="lbl">Nombre de quien relata</td><td>${esc(e.nombre_entrevistado)}</td></tr></table>
+    <table><tr><td class="lbl">Colegio</td><td>${esc(STATE.colegio.nombre)}</td><td class="lbl" style="width:15%">Correo</td><td>${esc(e.correo||'')}</td></tr></table>
+    <table><tr><td class="lbl">Fecha</td><td>${esc(fecha)}</td><td class="lbl" style="width:15%">Hora</td><td>${esc(e.hora||'')}</td></tr></table>
+    <table><tr><td class="lbl">Caso</td><td>${esc(e.motivo||'')}</td></tr></table>
+    <table><tr><td class="lbl">Recibido por</td><td>${esc(e.entrevistador)}</td></tr></table>
+    <table><tr><td><b>Relato</b><div>${esc(e.desarrollo||'').replace(/\n/g,'<br>')}</div></td></tr></table>
+    <p class="nota">*Relato enviado por la persona a través del link del caso en Relacionai y copiado automáticamente a GADUAI.</p>
+  </body></html>`;
+}
 function entrevistaHtmlDoc(e, insignia, logoGaduai){
+  if(e.tipo_entrevistado === "relato") return relatoHtmlDoc(e, insignia, logoGaduai);
   const oficio = ((e.desarrollo||"").length + (e.compromisos||"").length) > 1600;
   const pageSize = oficio ? "8.5in 13in" : "8.5in 11in";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
@@ -3439,7 +3480,7 @@ function entrevistaHtmlDoc(e, insignia, logoGaduai){
     <table><tr><td class="lbl">Fecha</td><td>${e.fecha||''}</td><td class="lbl" style="width:15%">Hora</td><td>${e.hora||''}</td><td class="lbl" style="width:15%">Curso</td><td>${esc(e.curso||'')}</td></tr></table>
     <table><tr><td class="lbl">Motivo</td><td>${esc(e.motivo||'')}</td></tr></table>
     <table><tr><td class="lbl">Entrevistador/a</td><td>${esc(e.entrevistador)}</td></tr></table>
-    <table><tr><td><b>Desarrollo de la entrevista</b><div class="desarrollo">${(e.desarrollo||'').replace(/\n/g,'<br>')}</div><br><b>Compromisos / Acuerdos</b><div>${(e.compromisos||'').replace(/\n/g,'<br>')}</div></td></tr></table>
+    <table><tr><td><b>Desarrollo de la entrevista</b><div class="desarrollo">${esc(e.desarrollo||'').replace(/\n/g,'<br>')}</div><br><b>Compromisos / Acuerdos</b><div>${esc(e.compromisos||'').replace(/\n/g,'<br>')}</div></td></tr></table>
     <table class="firmas"><tr>
       <td>
         <div class="firma-espacio"></div>

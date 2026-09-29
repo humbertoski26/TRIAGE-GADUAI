@@ -420,3 +420,22 @@ create table if not exists pulso_eventos_rango (
   eventos_max integer not null default 4,
   primary key (colegio_id, perfil)
 );
+
+-- Relatos que llegan desde Relacionai se guardan como una entrevista más (tipo_entrevistado =
+-- 'relato'), en la carpeta "Relatos" del historial de quien creó el caso. relacionai_ref
+-- ("<rótulo>#<id del relato>") evita duplicar un relato si Relacionai lo reenvía.
+alter table entrevistas add column if not exists relacionai_ref text;
+create unique index if not exists entrevistas_relacionai_ref_idx
+  on entrevistas(colegio_id, relacionai_ref) where relacionai_ref is not null;
+
+-- Sesiones: el navegador guarda un token aleatorio en vez de la clave. Solo se guarda el hash
+-- del token; vence a los 30 días sin uso y se borra al cerrar sesión o al cambiar la clave.
+create table if not exists sesiones (
+  token_hash text primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  usuario_id bigint not null references usuarios(id) on delete cascade,
+  creado_en timestamptz not null default now(),
+  ultimo_uso timestamptz not null default now(),
+  expira_en timestamptz not null
+);
+create index if not exists sesiones_usuario_idx on sesiones(usuario_id);

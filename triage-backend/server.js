@@ -146,7 +146,7 @@ function loginRateLimit(req, res, next) {
   const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "desconocida";
   const ahora = Date.now();
   const ventanaMs = 15 * 60 * 1000;
-  const tope = 20;
+  const tope = 100; // por IP; el tope real contra fuerza bruta es por cuenta (ver verificarActor)
   let entrada = intentosLogin.get(ip);
   if (!entrada || ahora - entrada.desde > ventanaMs) entrada = { n: 0, desde: ahora };
   entrada.n++;
@@ -180,6 +180,7 @@ setInterval(() => {
   const limite = Date.now() - FALLOS_VENTANA_MS;
   for (const [k, e] of fallosPorCuenta) if (e.desde < limite) fallosPorCuenta.delete(k);
   for (const [k, e] of intentosLogin) if (e.desde < limite) intentosLogin.delete(k);
+  pool.query("delete from sesiones where expira_en < now()").catch(() => {});
 }, FALLOS_VENTANA_MS).unref();
 
 // Adjuntos: el frontend los manda como data URI (FileReader.readAsDataURL) y se usan tal cual
@@ -261,6 +262,40 @@ function generarSsoToken(correo, nombre, perfil) {
   return `${b64}.${sig}`;
 }
 
+// Sesiones: tras el login el navegador guarda un token aleatorio ("gst_...") en vez de la clave,
+// y lo manda en el mismo lugar donde antes iba la clave (actorClave / X-Actor-Clave) — así todas
+// las rutas existentes siguen funcionando sin cambios. En la base solo queda el hash del token.
+const SESION_PREFIJO = "gst_";
+const SESION_DIAS = 30;
+function hashToken(token) { return crypto.createHash("sha256").update(token).digest("hex"); }
+async function crearSesion(colegioId, usuarioId) {
+  const token = SESION_PREFIJO + crypto.randomBytes(32).toString("base64url");
+  await pool.query(
+    "insert into sesiones (token_hash, colegio_id, usuario_id, expira_en) values ($1,$2,$3, now() + make_interval(days => $4::int))",
+    [hashToken(token), colegioId, usuarioId, SESION_DIAS]
+  );
+  return token;
+}
+async function actorDeSesion(colegioId, correo, token) {
+  const r = await pool.query(
+    `select u.id, u.nombre, u.correo, u.perfil, u.tema, u.push_habilitado, s.ultimo_uso
+     from sesiones s join usuarios u on u.id = s.usuario_id
+     where s.token_hash=$1 and s.colegio_id=$2 and lower(u.correo)=lower($3) and s.expira_en > now()`,
+    [hashToken(token), colegioId, correo]
+  );
+  const fila = r.rows[0];
+  if (!fila) return null;
+  // Vencimiento deslizante: cada uso (a lo más una vez por hora) extiende la sesión 30 días más.
+  if (Date.now() - new Date(fila.ultimo_uso).getTime() > 60 * 60 * 1000) {
+    pool.query(
+      "update sesiones set ultimo_uso=now(), expira_en=now() + make_interval(days => $2::int) where token_hash=$1",
+      [hashToken(token), SESION_DIAS]
+    ).catch(() => {});
+  }
+  delete fila.ultimo_uso;
+  return fila;
+}
+
 async function verificarActor(colegioId, correo, clave) {
   if (!correo || !clave || typeof correo !== "string" || typeof clave !== "string") return null;
   const claveCuenta = `${colegioId}|${correo.toLowerCase()}`;
@@ -269,8 +304,13 @@ async function verificarActor(colegioId, correo, clave) {
     err.status = 429;
     throw err;
   }
+  if (clave.startsWith(SESION_PREFIJO)) {
+    const actor = await actorDeSesion(colegioId, correo, clave);
+    if (!actor) registrarFallo(claveCuenta, clave);
+    return actor;
+  }
   const r = await pool.query(
-    "select nombre, correo, perfil, tema, push_habilitado, clave_hash from usuarios where colegio_id=$1 and lower(correo)=lower($2)",
+    "select id, nombre, correo, perfil, tema, push_habilitado, clave_hash from usuarios where colegio_id=$1 and lower(correo)=lower($2)",
     [colegioId, correo]
   );
   const fila = r.rows[0];
@@ -353,6 +393,10 @@ app.post("/api/colegios/:id/reset-master", requireAdminKey, asyncRoute(async (re
     await pool.query(
       "update usuarios set correo=$3, clave_hash=$4 where colegio_id=$1 and perfil=$2",
       [req.params.id, PERFIL_MASTER, correo, claveHash]
+    );
+    await pool.query(
+      "delete from sesiones where usuario_id in (select id from usuarios where colegio_id=$1 and perfil=$2)",
+      [req.params.id, PERFIL_MASTER]
     );
   } else {
     correo = (correoNuevo && correoNuevo.trim()) || `director@${req.params.id}.cl`;
@@ -593,10 +637,21 @@ app.post("/api/colegios/:id/login", loginRateLimit, asyncRoute(async (req, res) 
   const { correo, clave } = req.body || {};
   const usuario = await verificarActor(req.params.id, correo, clave);
   if (!usuario) return res.status(401).json({ error: "credenciales_invalidas" });
+  const sesionToken = clave.startsWith(SESION_PREFIJO) ? clave : await crearSesion(req.params.id, usuario.id);
+  delete usuario.id;
   const relacionaiSsoToken = (SSO_SHARED_SECRET && PERFILES_SSO_RELACIONAI.includes(usuario.perfil))
     ? generarSsoToken(usuario.correo, usuario.nombre, usuario.perfil)
     : null;
-  res.json({ usuario, isMaster: usuario.perfil === PERFIL_MASTER, relacionaiSsoToken });
+  res.json({ usuario, isMaster: usuario.perfil === PERFIL_MASTER, relacionaiSsoToken, sesionToken });
+}));
+
+// Cerrar sesión borra el token en el servidor: aunque alguien lo hubiera copiado, deja de servir.
+app.post("/api/colegios/:id/logout", asyncRoute(async (req, res) => {
+  const { actorClave } = req.body || {};
+  if (typeof actorClave === "string" && actorClave.startsWith(SESION_PREFIJO)) {
+    await pool.query("delete from sesiones where token_hash=$1 and colegio_id=$2", [hashToken(actorClave), req.params.id]);
+  }
+  res.json({ ok: true });
 }));
 
 // ---------- usuarios (solo máster administra) ----------
@@ -878,14 +933,18 @@ app.post("/api/colegios/:id/grupos/:grupoId/eliminar", asyncRoute(async (req, re
 // Auditoría de seguridad: las fichas de Entrevista (nombre, correo, fono, motivo, desarrollo,
 // compromisos) se podían leer sin credenciales. Cualquier perfil logueado las sigue viendo
 // (así se diseñó en la Fase 1), pero ahora exige una cuenta real del colegio.
+// Privadas: cada persona ve solo las entrevistas (y relatos de Relacionai) que ella misma hizo o
+// registró; el Director/a de colegio ve todas las del establecimiento.
 app.get("/api/colegios/:id/entrevistas", asyncRoute(async (req, res) => {
   const { correo, clave } = actorDeHeaders(req);
   const actor = await verificarActor(req.params.id, correo, clave);
   if (!actor) return res.status(401).json({ error: "credenciales_invalidas" });
-  const r = await pool.query(
-    "select * from entrevistas where colegio_id=$1 order by creado_en desc",
-    [req.params.id]
-  );
+  const r = actor.perfil === PERFIL_DIRECTOR_COLEGIO
+    ? await pool.query("select * from entrevistas where colegio_id=$1 order by creado_en desc", [req.params.id])
+    : await pool.query(
+        "select * from entrevistas where colegio_id=$1 and (creado_por=$2 or entrevistador=$2) order by creado_en desc",
+        [req.params.id, actor.nombre]
+      );
   res.json(r.rows);
 }));
 
@@ -1267,6 +1326,42 @@ app.post("/api/sistema/avisos", requireAdminKey, asyncRoute(async (req, res) => 
     }
   }
   res.json({ ok: true });
+}));
+
+// ---------- relatos de Relacionai (llamado por Relacionai, no por una persona) ----------
+// Cada relato recibido en Relacionai se copia acá como una entrevista de tipo 'relato', en el
+// historial de quien creó el caso (creadoPor, nombre exacto de su cuenta GADUAI vía SSO); el
+// Director/a de colegio lo ve igual que todas las entrevistas. Acepta un lote (para traer los
+// relatos que ya existían) y es idempotente por relacionai_ref. La copia en GADUAI se conserva
+// aunque Relacionai purgue el caso después (decisión de Humberto: GADUAI es el registro formal).
+app.post("/api/sistema/relatos", requireAdminKey, asyncRoute(async (req, res) => {
+  const { colegioId, relatos } = req.body || {};
+  const colegio = colegioId || DEFAULT_COLEGIO_ID;
+  if (!colegio) return res.status(400).json({ error: "colegio_requerido" });
+  if (!Array.isArray(relatos)) return res.status(400).json({ error: "relatos_requerido" });
+  let insertados = 0, omitidos = 0;
+  for (const rel of relatos.slice(0, 500)) {
+    const ref = String(rel.ref || "").slice(0, 200);
+    const nombre = String(rel.nombrePersona || "").trim().slice(0, 200) || "Persona sin nombre";
+    const creadoPor = String(rel.creadoPor || "").trim().slice(0, 200) || "Relacionai";
+    if (!ref || !rel.contenido) { omitidos++; continue; }
+    const subido = new Date(rel.subidoEn || Date.now());
+    const valido = !Number.isNaN(subido.getTime());
+    const fecha = valido ? subido.toLocaleDateString("en-CA", { timeZone: "America/Santiago" }) : null;
+    const hora = valido ? subido.toLocaleTimeString("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit" }) : null;
+    const u = await pool.query("select perfil from usuarios where colegio_id=$1 and nombre=$2", [colegio, creadoPor]);
+    const r = await pool.query(
+      `insert into entrevistas (colegio_id, nombre_entrevistado, correo, fecha, hora, motivo, entrevistador, desarrollo,
+                                creado_por, perfil_creador, tipo_entrevistado, relacionai_ref)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$7,$9,'relato',$10)
+       on conflict (colegio_id, relacionai_ref) where relacionai_ref is not null do nothing
+       returning id`,
+      [colegio, nombre, rel.correoPersona || null, fecha, hora, `Caso ${String(rel.caso || "").slice(0, 120)}`,
+       creadoPor, String(rel.contenido), (u.rows[0] && u.rows[0].perfil) || "Relacionai", ref]
+    );
+    if (r.rows.length) insertados++; else omitidos++;
+  }
+  res.json({ ok: true, insertados, omitidos });
 }));
 
 // ---------- documentos del colegio (alimentan el cerebro de IA GADUAI) ----------
@@ -2576,19 +2671,41 @@ app.post("/api/colegios/:id/agenda/bloquear", asyncRoute(async (req, res) => {
 
 // Rutas públicas del link para compartir (sin login, igual que GET /api/colegios/:id ya es
 // público) — quien recibe el link ve la disponibilidad de esa persona y reserva un bloque.
+// Sin login: solo dice qué bloques están ocupados — nunca el título de la reunión, con quién es
+// ni el link de Meet (antes se veían, y el título puede ser el de una tarea delicada).
+async function personaTieneCuenta(colegioId, persona) {
+  const r = await pool.query("select 1 from usuarios where colegio_id=$1 and nombre=$2", [colegioId, persona]);
+  return r.rows.length > 0;
+}
 app.get("/api/colegios/:id/agenda-publica/:persona", asyncRoute(async (req, res) => {
+  if (!(await personaTieneCuenta(req.params.id, req.params.persona))) return res.status(404).json({ error: "no_encontrado" });
   const hoy = agendaAhoraChile().fecha;
   const limite = agendaSumarDias(hoy, AGENDA_DIAS_MAX);
-  const bloques = await agendaBloquesDe(req.params.id, req.params.persona, hoy, limite);
+  const bloques = (await agendaBloquesDe(req.params.id, req.params.persona, hoy, limite))
+    .map(b => ({ fecha: b.fecha, hora: b.hora, estado: b.estado }));
   res.json({ horas: AGENDA_HORAS, diasMax: AGENDA_DIAS_MAX, bloques });
 }));
 
+// Tope de reservas públicas: por persona agendada (no depende de la IP, que se puede falsear) —
+// evita que alguien llene la agenda de otro o use el formulario para mandar correos en masa.
+const RESERVAS_PUBLICAS_POR_DIA = 8;
+
 app.post("/api/colegios/:id/agenda-publica/:persona/reservar", asyncRoute(async (req, res) => {
-  const { nombre, correo, fecha, hora, motivo } = req.body || {};
+  const { fecha, hora } = req.body || {};
+  const nombre = String((req.body || {}).nombre || "").trim().slice(0, 80);
+  const correo = String((req.body || {}).correo || "").trim().slice(0, 120);
+  const motivo = String((req.body || {}).motivo || "").trim().slice(0, 300);
   if (!nombre || !correo || !fecha || !hora) return res.status(400).json({ error: "campos_requeridos" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return res.status(400).json({ error: "correo_invalido" });
   if (!AGENDA_HORAS.includes(hora)) return res.status(400).json({ error: "hora_invalida" });
-  if (!agendaDentroDeTope(fecha)) return res.status(400).json({ error: "fuera_de_rango" });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha)) || !agendaDentroDeTope(fecha)) return res.status(400).json({ error: "fuera_de_rango" });
   const persona = req.params.persona;
+  if (!(await personaTieneCuenta(req.params.id, persona))) return res.status(404).json({ error: "no_encontrado" });
+  const hoyReservas = await pool.query(
+    "select count(*)::int as n from agenda_bloques where colegio_id=$1 and persona=$2 and origen='link_publico' and creado_en > now() - interval '1 day'",
+    [req.params.id, persona]
+  );
+  if (hoyReservas.rows[0].n >= RESERVAS_PUBLICAS_POR_DIA) return res.status(429).json({ error: "demasiadas_reservas" });
   try {
     await pool.query(
       `insert into agenda_bloques (colegio_id, persona, fecha, hora, estado, titulo, reservado_por, origen)
