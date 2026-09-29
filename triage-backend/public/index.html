@@ -1132,6 +1132,7 @@ const TRIAGE = {
 
 let STATE = { colegioId:null, colegio:null, perfil:null, persona:null, correo:null, clave:null, isMaster:false, pushHabilitado:true, filtroTipo:"todos", filtroColor:"todos", filtroVencimiento:"todas", pulsoEventosRango:{min:1,max:4}, pulsoCongelado:{} };
 let archivoPendiente = null;
+let archivoListo = null; // promesa de la foto/archivo que se está preparando
 let timelineCache = [];
 let timelineCacheJson = "";
 let pollTimer = null;
@@ -1668,6 +1669,31 @@ function leerArchivoComoDataUrl(file){
     reader.readAsDataURL(file);
   });
 }
+// Las fotos se achican a 1600 px por lado y se guardan como JPEG antes de subirlas: una foto de
+// celular pasa de ~3 MB a ~300 KB sin diferencia visible en pantalla ni al imprimir. PDF, Word y
+// cualquier otro archivo se suben tal cual. Si la foto no se puede procesar (ej. HEIC en Chrome)
+// o el resultado no es más liviano, se sube el original.
+const ADJUNTO_LADO_MAX = 1600;
+const ADJUNTO_MAX_DATAURL = 5.5 * 1024 * 1024; // ~4 MB reales (base64 pesa un tercio más)
+async function prepararAdjunto(file){
+  const original = await leerArchivoComoDataUrl(file);
+  if(!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type || "")) return { nombre: file.name, data: original };
+  try{
+    const img = await new Promise((ok, mal)=>{ const i = new Image(); i.onload = ()=>ok(i); i.onerror = mal; i.src = original; });
+    const escala = Math.min(1, ADJUNTO_LADO_MAX / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * escala)), h = Math.max(1, Math.round(img.naturalHeight * escala));
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h); // PNG con transparencia: fondo blanco en JPEG
+    ctx.drawImage(img, 0, 0, w, h);
+    const jpeg = canvas.toDataURL("image/jpeg", 0.82);
+    if(jpeg.length >= original.length) return { nombre: file.name, data: original };
+    return { nombre: file.name.replace(/\.[^.]+$/, "") + ".jpg", data: jpeg };
+  }catch(e){
+    return { nombre: file.name, data: original };
+  }
+}
 async function agregarDocumento(){
   const tipo = document.getElementById("d-tipo").value;
   const nombreInput = document.getElementById("d-nombre").value.trim();
@@ -1676,9 +1702,11 @@ async function agregarDocumento(){
   if(!nombre){ toast("Ingrese un nombre para el documento"); return; }
   let archivoNombre = null, archivoData = null;
   if(file){
-    if(file.size > 8*1024*1024){ toast("El archivo debe pesar menos de 8MB"); return; }
-    archivoNombre = file.name;
-    archivoData = await leerArchivoComoDataUrl(file);
+    if(file.size > 8*1024*1024 && !/^image\//i.test(file.type||"")){ toast("El archivo debe pesar menos de 8MB"); return; }
+    const adj = await prepararAdjunto(file);
+    if(adj.data.length > 8*1024*1024*1.34){ toast("El archivo debe pesar menos de 8MB"); return; }
+    archivoNombre = adj.nombre;
+    archivoData = adj.data;
   }
   try{
     await api(`/api/colegios/${STATE.colegioId}/documentos`, {method:"POST", body: JSON.stringify(actorBody({tipo, nombre, archivoNombre, archivoData}))});
@@ -2558,8 +2586,10 @@ async function agregarHistorialPersona(){
   if(!titulo) return toast("Escribe un título");
   let archivoNombre = null, archivoData = null;
   if(archivoInput.files[0]){
-    archivoNombre = archivoInput.files[0].name;
-    archivoData = await leerArchivoComoDataUrl(archivoInput.files[0]);
+    const adj = await prepararAdjunto(archivoInput.files[0]);
+    if(adj.data.length > ADJUNTO_MAX_DATAURL){ toast("El archivo debe pesar menos de 4MB"); return; }
+    archivoNombre = adj.nombre;
+    archivoData = adj.data;
   }
   try{
     await api(`/api/colegios/${STATE.colegioId}/directorio/${fichaPersonaActual}/historial`, {
@@ -2721,14 +2751,16 @@ function pintarTimeline(){
 
 /* ---------- círculo de la promesa (tareas) ---------- */
 let circuloArchivoPendiente = null;
+let circuloArchivoListo = null; // promesa de la foto/archivo que se está preparando
 let relacionaiSugerenciaItemId = null;
 document.addEventListener("change", e=>{
   if(e.target.id && e.target.id.startsWith("circulo-file")){
     const file = e.target.files[0];
-    if(!file){ circuloArchivoPendiente=null; return; }
-    const reader = new FileReader();
-    reader.onload = ()=>{ circuloArchivoPendiente = {nombre:file.name, data:reader.result}; };
-    reader.readAsDataURL(file);
+    if(!file){ circuloArchivoPendiente=null; circuloArchivoListo=null; return; }
+    circuloArchivoListo = prepararAdjunto(file).then(adj => {
+      if(adj.data.length > ADJUNTO_MAX_DATAURL){ toast("El archivo debe pesar menos de 4MB"); e.target.value=""; circuloArchivoPendiente=null; return; }
+      circuloArchivoPendiente = adj;
+    });
   }
 });
 function circuloCampos(idSufijo, placeholder){
@@ -2751,7 +2783,7 @@ function abrirCirculo(itemId){
 }
 function pintarCirculo(itemId){
   const h = timelineCache.find(x=>x.id==itemId); if(!h) return;
-  circuloArchivoPendiente = null;
+  circuloArchivoPendiente = null; circuloArchivoListo = null;
   const cfg = TRIAGE[h.triage];
   const estado = h.circuloEstado || "nuevo";
   const esResponsable = STATE.persona === h.responsable;
@@ -2813,6 +2845,7 @@ function pintarCirculo(itemId){
   document.getElementById("modal-circulo").classList.remove("hidden");
 }
 async function circuloAccion(itemId, accion, msgId){
+  if(circuloArchivoListo) await circuloArchivoListo; // no enviar antes de que el adjunto esté listo
   const mensaje = document.getElementById(msgId)?.value || "";
   const body = actorBody({
     accion, mensaje,
@@ -2821,7 +2854,7 @@ async function circuloAccion(itemId, accion, msgId){
   });
   try{
     await api(`/api/colegios/${STATE.colegioId}/timeline/${itemId}/circulo`, {method:"POST", body: JSON.stringify(body)});
-    circuloArchivoPendiente = null;
+    circuloArchivoPendiente = null; circuloArchivoListo = null;
     await cargarTimeline();
     abrirCirculo(itemId);
   }catch(e){ toast("No se pudo registrar la acción"); }
@@ -2859,7 +2892,7 @@ async function abrirModal(propuesta, textoOriginal){
   document.getElementById("f-titulo").value = propuesta ? propuesta.titulo : "";
   document.getElementById("f-desc").value = textoOriginal || "";
   document.getElementById("f-archivo").value="";
-  archivoPendiente = null;
+  archivoPendiente = null; archivoListo = null;
   document.getElementById("f-agendar-reunion").checked = !!(propuesta && propuesta.agendarReunion);
   document.getElementById("f-reunion-lugar").value="";
   actualizarBloqueLugarReunion();
@@ -3065,14 +3098,15 @@ function setQuad(q){
 document.addEventListener("change", e=>{
   if(e.target.id==="f-archivo"){
     const file = e.target.files[0];
-    if(!file){ archivoPendiente=null; return; }
-    if(file.size > 4*1024*1024){ toast("El documento debe pesar menos de 4MB"); e.target.value=""; archivoPendiente=null; return; }
-    const reader = new FileReader();
-    reader.onload = ()=>{ archivoPendiente = {nombre:file.name, data:reader.result}; };
-    reader.readAsDataURL(file);
+    if(!file){ archivoPendiente=null; archivoListo=null; return; }
+    archivoListo = prepararAdjunto(file).then(adj => {
+      if(adj.data.length > ADJUNTO_MAX_DATAURL){ toast("El documento debe pesar menos de 4MB"); e.target.value=""; archivoPendiente=null; return; }
+      archivoPendiente = adj;
+    });
   }
 });
 async function registrar(){
+  if(archivoListo) await archivoListo; // no enviar antes de que el adjunto esté listo
   const titulo = document.getElementById("f-titulo").value.trim();
   if(!titulo){ toast("Ingrese la situación / acción / hallazgo"); return; }
   const destino = {};

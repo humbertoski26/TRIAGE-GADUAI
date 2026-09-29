@@ -1272,6 +1272,63 @@ const ETAPAS_VENCIMIENTO = [
   { dias: 1, etapa: "1dia", texto: "Queda 1 día para vencer", plazo: "1 día" },
   { dias: 0, etapa: "hoy", texto: "Vence hoy", plazo: "hoy" },
 ];
+// ---------- espacio ocupado por colegio ----------
+// Tamaño real guardado en la base (pg_column_size: lo que ocupa cada fila en disco, ya
+// comprimida) por colegio y por tabla, y cuánto de eso son adjuntos. Se registra en el log al
+// arrancar y en el cron diario (así queda un historial de crecimiento), y se puede consultar
+// con X-Admin-Key en GET /api/sistema/espacio. No incluye nombres ni contenido, solo tamaños.
+const ESPACIO_TABLAS = [
+  ["items", "from items t where t.colegio_id=$1"],
+  ["circulo_historial", "from circulo_historial t join items i on i.id=t.item_id where i.colegio_id=$1"],
+  ["chat_mensajes", "from chat_mensajes t join items i on i.id=t.item_id where i.colegio_id=$1"],
+  ["alertas", "from alertas t join items i on i.id=t.item_id where i.colegio_id=$1"],
+  ["entrevistas", "from entrevistas t where t.colegio_id=$1"],
+  ["documentos", "from documentos t where t.colegio_id=$1"],
+  ["chat_ia", "from chat_ia t where t.colegio_id=$1"],
+  ["directorio_personas", "from directorio_personas t where t.colegio_id=$1"],
+  ["historial_persona", "from historial_persona t join directorio_personas d on d.id=t.persona_id where d.colegio_id=$1"],
+  ["agenda_bloques", "from agenda_bloques t where t.colegio_id=$1"],
+];
+const ESPACIO_ADJUNTOS = [
+  "select coalesce(sum(pg_column_size(t.archivo_data)),0)::bigint b from items t where t.colegio_id=$1",
+  "select coalesce(sum(pg_column_size(t.archivo_data)),0)::bigint b from circulo_historial t join items i on i.id=t.item_id where i.colegio_id=$1",
+  "select coalesce(sum(pg_column_size(t.archivo_data)),0)::bigint b from historial_persona t join directorio_personas d on d.id=t.persona_id where d.colegio_id=$1",
+  "select coalesce(sum(pg_column_size(t.archivo_data)),0)::bigint b from documentos t where t.colegio_id=$1",
+];
+const mb = (bytes) => Math.round(Number(bytes) / 1024 / 1024 * 10) / 10;
+async function reporteEspacio() {
+  const colegios = (await pool.query("select id from colegios order by id")).rows;
+  const porColegio = [];
+  for (const { id } of colegios) {
+    let total = 0;
+    const filas = {};
+    for (const [tabla, desde] of ESPACIO_TABLAS) {
+      const r = (await pool.query(`select count(*)::int n, coalesce(sum(pg_column_size(t.*)),0)::bigint b ${desde}`, [id])).rows[0];
+      filas[tabla] = r.n;
+      total += Number(r.b);
+    }
+    let adjuntos = 0;
+    for (const q of ESPACIO_ADJUNTOS) adjuntos += Number((await pool.query(q, [id])).rows[0].b);
+    porColegio.push({ colegioId: id, totalMB: mb(total), adjuntosMB: mb(adjuntos), filas });
+  }
+  const base = (await pool.query("select pg_database_size(current_database())::bigint b")).rows[0].b;
+  return { baseCompletaMB: mb(base), colegios: porColegio };
+}
+async function registrarEspacioEnLog() {
+  try {
+    const r = await reporteEspacio();
+    for (const c of r.colegios) {
+      console.log(`Espacio: colegio ${c.colegioId} ≈ ${c.totalMB} MB (adjuntos ${c.adjuntosMB} MB) · tareas/hitos ${c.filas.items} · entrevistas ${c.filas.entrevistas} · documentos ${c.filas.documentos} · chat IA ${c.filas.chat_ia} · personas ${c.filas.directorio_personas}`);
+    }
+    console.log(`Espacio: base de datos completa ${r.baseCompletaMB} MB`);
+  } catch (err) {
+    console.error("No se pudo calcular el espacio por colegio:", err.message);
+  }
+}
+app.get("/api/sistema/espacio", requireAdminKey, asyncRoute(async (req, res) => {
+  res.json(await reporteEspacio());
+}));
+
 app.post("/tasks/vencimientos", requireTasksSecret, asyncRoute(async (req, res) => {
   let revisados = 0, avisos = 0, correos = 0;
   for (const { dias, etapa, texto, plazo } of ETAPAS_VENCIMIENTO) {
@@ -1299,6 +1356,7 @@ app.post("/tasks/vencimientos", requireTasksSecret, asyncRoute(async (req, res) 
     }
   }
   res.json({ revisados, avisos, correos });
+  registrarEspacioEnLog(); // una vez al día queda registrado cuánto ocupa cada colegio
 }));
 
 // ---------- avisos de sistema (llamados por Relacionai, no por una persona) ----------
@@ -2847,6 +2905,7 @@ async function start() {
   await pool.query(schema);
   await migrarClavesAHash();
   await asegurarNombresUnicos();
+  registrarEspacioEnLog(); // sin await: no retrasa el arranque
   app.listen(PORT, () => console.log(`TRIAGE GADUAI backend escuchando en el puerto ${PORT}`));
 }
 start().catch(err => {
