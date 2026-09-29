@@ -1268,8 +1268,21 @@ function actualizarLinkRelacionai(){
     const base = STATE.colegio.relacionai_url.replace(/\/$/, "");
     const tema = encodeURIComponent(STATE.tema || "oscuro");
     btnRelacionai.href = `${base}/sso?token=${encodeURIComponent(STATE.relacionaiSsoToken)}&tema=${tema}`;
+    btnRelacionai.onclick = irARelacionai;
     btnRelacionai.hidden = false;
   } else { btnRelacionai.hidden = true; }
+}
+
+// El token del login vence a los 2 minutos: al hacer clic se pide uno nuevo, así el botón
+// entra sin clave aunque la persona lleve horas con GADUAI abierto.
+async function irARelacionai(ev){
+  ev.preventDefault();
+  const base = STATE.colegio.relacionai_url.replace(/\/$/, "");
+  const tema = encodeURIComponent(STATE.tema || "oscuro");
+  try{
+    const { token } = await api(`/api/colegios/${STATE.colegioId}/sso/relacionai-token`, {method:"POST", body: JSON.stringify(actorBody({}))});
+    window.location.href = `${base}/sso?token=${encodeURIComponent(token)}&tema=${tema}`;
+  }catch(e){ toast("No se pudo abrir Relacionai. Intenta de nuevo."); }
 }
 
 // Insignia del colegio en el header, junto al logo de GADUAI — a diferencia de obtenerInsignia()
@@ -2864,11 +2877,16 @@ async function relacionaiSugerenciaElegir(decision){
   if(!itemId) return;
   try{
     if(decision === "derivado"){
-      const h = timelineCache.find(x=>x.id==itemId);
-      const { token } = await api(`/api/colegios/${STATE.colegioId}/sso/relacionai-token`, {method:"POST", body: JSON.stringify(actorBody({}))});
-      const base = STATE.colegio.relacionai_url.replace(/\/$/, "");
-      const tema = encodeURIComponent(STATE.tema || "oscuro");
-      window.open(`${base}/sso?token=${encodeURIComponent(token)}&tema=${tema}`, "_blank");
+      // La pestaña se abre antes de pedir el token: abierta después de un await, el
+      // navegador la bloquea como ventana emergente.
+      const pestana = window.open("", "_blank");
+      try{
+        const { token } = await api(`/api/colegios/${STATE.colegioId}/sso/relacionai-token`, {method:"POST", body: JSON.stringify(actorBody({}))});
+        const base = STATE.colegio.relacionai_url.replace(/\/$/, "");
+        const tema = encodeURIComponent(STATE.tema || "oscuro");
+        const url = `${base}/sso?token=${encodeURIComponent(token)}&tema=${tema}`;
+        if(pestana) pestana.location.href = url; else window.open(url, "_blank");
+      }catch(e){ if(pestana) pestana.close(); throw e; }
     }
     await api(`/api/colegios/${STATE.colegioId}/timeline/${itemId}/relacionai-sugerencia`, {method:"POST", body: JSON.stringify(actorBody({decision}))});
   }catch(e){ toast("No se pudo registrar tu elección"); }

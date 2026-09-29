@@ -255,8 +255,11 @@ const PERFILES_SSO_RELACIONAI = [
   "Dupla psicosocial",
   "Inspector General"
 ];
-function generarSsoToken(correo, nombre, perfil) {
-  const payload = { correo, nombre, perfil, exp: Date.now() + 2 * 60 * 1000 };
+// El token lleva el colegio: cada Relacionai sabe a qué colegio de GADUAI pertenece
+// (GADUAI_COLEGIO_ID) y rechaza tokens de otro colegio — necesario porque en el despliegue
+// compartido todos los colegios firman con el mismo SSO_SHARED_SECRET.
+function generarSsoToken(correo, nombre, perfil, colegioId) {
+  const payload = { correo, nombre, perfil, colegioId, exp: Date.now() + 2 * 60 * 1000 };
   const b64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const sig = crypto.createHmac("sha256", SSO_SHARED_SECRET).update(b64).digest("hex");
   return `${b64}.${sig}`;
@@ -640,7 +643,7 @@ app.post("/api/colegios/:id/login", loginRateLimit, asyncRoute(async (req, res) 
   const sesionToken = clave.startsWith(SESION_PREFIJO) ? clave : await crearSesion(req.params.id, usuario.id);
   delete usuario.id;
   const relacionaiSsoToken = (SSO_SHARED_SECRET && PERFILES_SSO_RELACIONAI.includes(usuario.perfil))
-    ? generarSsoToken(usuario.correo, usuario.nombre, usuario.perfil)
+    ? generarSsoToken(usuario.correo, usuario.nombre, usuario.perfil, req.params.id)
     : null;
   res.json({ usuario, isMaster: usuario.perfil === PERFIL_MASTER, relacionaiSsoToken, sesionToken });
 }));
@@ -1179,7 +1182,7 @@ app.post("/api/colegios/:id/sso/relacionai-token", asyncRoute(async (req, res) =
   if (!SSO_SHARED_SECRET || !PERFILES_SSO_RELACIONAI.includes(actor.perfil)) {
     return res.status(403).json({ error: "sin_acceso_relacionai" });
   }
-  res.json({ token: generarSsoToken(actor.correo, actor.nombre, actor.perfil) });
+  res.json({ token: generarSsoToken(actor.correo, actor.nombre, actor.perfil, req.params.id) });
 }));
 
 // ---------- chat por ítem ----------
@@ -1359,12 +1362,21 @@ app.post("/tasks/vencimientos", requireTasksSecret, asyncRoute(async (req, res) 
   registrarEspacioEnLog(); // una vez al día queda registrado cuánto ocupa cada colegio
 }));
 
+// Colegio al que va un aviso o relato de Relacionai: el que manda Relacionai (obligatorio en el
+// despliegue compartido) o, en un despliegue dedicado, su DEFAULT_COLEGIO_ID. Debe existir.
+async function colegioDeSistema(colegioId) {
+  const id = String(colegioId || DEFAULT_COLEGIO_ID || "").trim();
+  if (!id) return null;
+  const r = await pool.query("select id from colegios where id=$1", [id]);
+  return r.rows.length ? id : null;
+}
+
 // ---------- avisos de sistema (llamados por Relacionai, no por una persona) ----------
 // Protegida con X-Admin-Key (mismo secreto que ya usan las rutas de administración de
 // colegios) porque quien llama es otro backend de confianza, no un usuario logueado.
 app.post("/api/sistema/avisos", requireAdminKey, asyncRoute(async (req, res) => {
   const { tipo, colegioId, caso, cantidad, fechaLimite, persona, dias } = req.body || {};
-  const colegio = colegioId || DEFAULT_COLEGIO_ID;
+  const colegio = await colegioDeSistema(colegioId);
   if (!colegio) return res.status(400).json({ error: "colegio_requerido" });
   const textoDias = dias === 2 ? "Quedan 2 días para vencer" : dias === 1 ? "Queda 1 día para vencer" : dias === 0 ? "Vence hoy" : "Vence pronto";
   let titulo, triage, fecha, perfilObjetivo = PERFIL_CONVIVENCIA;
@@ -1426,7 +1438,7 @@ app.post("/api/sistema/avisos", requireAdminKey, asyncRoute(async (req, res) => 
 // aunque Relacionai purgue el caso después (decisión de Humberto: GADUAI es el registro formal).
 app.post("/api/sistema/relatos", requireAdminKey, asyncRoute(async (req, res) => {
   const { colegioId, relatos } = req.body || {};
-  const colegio = colegioId || DEFAULT_COLEGIO_ID;
+  const colegio = await colegioDeSistema(colegioId);
   if (!colegio) return res.status(400).json({ error: "colegio_requerido" });
   if (!Array.isArray(relatos)) return res.status(400).json({ error: "relatos_requerido" });
   let insertados = 0, omitidos = 0;
