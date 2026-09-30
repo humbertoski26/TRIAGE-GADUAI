@@ -272,7 +272,8 @@
     </div>
 
     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center">
-      <p id="landing-mensaje" class="text-sm text-slate-300">El acceso a GADUAI es por invitación de tu colegio: usa el link que te compartió tu administrador GADUAI para entrar directo a tu establecimiento.</p>
+      <p id="landing-mensaje" class="text-sm text-slate-300">El acceso a GADUAI es solo para el personal de los colegios que lo usan. Entra con el código de tu colegio.</p>
+      <button onclick="cambiarDeColegio()" class="mt-4 gaduai-gradient text-white text-sm font-bold px-5 py-3 rounded-xl"><i class="fa-solid fa-key mr-1"></i> Entrar con el código de mi colegio</button>
       <p class="text-[11px] text-slate-500 mt-3">¿No tienes ese link, o tu colegio todavía no está activado? Escribe a <a href="mailto:soporte@gaduai.cl" class="text-cyan-400">soporte@gaduai.cl</a>.</p>
     </div>
   </div>
@@ -301,7 +302,7 @@
       <input id="login-clave" type="password" placeholder="••••••" class="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl p-3 mb-5 outline-none focus:ring-2 gaduai-focus" onkeydown="if(event.key==='Enter')ingresar()">
 
       <button onclick="ingresar()" class="w-full gaduai-gradient text-white text-sm font-bold py-3 rounded-xl"><i class="fa-solid fa-right-to-bracket mr-1"></i> Ingresar al Sistema GADUAI</button>
-      <button onclick="mostrarLanding()" class="w-full text-center text-[11px] text-slate-500 mt-4 hover:text-slate-300">Cambiar de colegio / portada</button>
+      <button onclick="cambiarDeColegio()" class="w-full text-center text-[11px] text-slate-500 mt-4 hover:text-slate-300"><i class="fa-solid fa-right-left mr-1"></i> Cambiar de colegio</button>
     </div>
   </div>
 </div>
@@ -1175,6 +1176,12 @@ function borrarSesion(){ localStorage.removeItem("triageGaduai.sesion"); }
 
 /* ---------- navegación ---------- */
 function mostrarLanding(){ mostrarPantalla("pantalla-landing"); }
+// Cada colegio puede vivir en un servidor distinto (Nuevo Rumbo tiene el suyo; los demás, el
+// compartido), así que cambiar de colegio no se resuelve dentro de esta app: se pasa por la caja
+// de código de gaduai.cl, que conoce el link de cada colegio. "#otro" hace que pida el código en
+// vez de volver al último colegio recordado.
+const CAMBIAR_COLEGIO_URL = "https://www.gaduai.cl/entrar.html#otro";
+function cambiarDeColegio(){ location.href = CAMBIAR_COLEGIO_URL; }
 function entrarColegioEnUI(colegio){
   STATE.colegio = colegio; STATE.colegioId = colegio.id;
   document.getElementById("login-colegio-label").textContent = colegio.nombre + (colegio.comuna?` · ${colegio.comuna}`:"");
@@ -1220,7 +1227,7 @@ async function init(){
       mostrarPantalla("pantalla-login");
       return;
     }catch(e){
-      document.getElementById("landing-mensaje").textContent = "No encontramos tu colegio con ese link. Pide a tu administrador GADUAI que revise el link desde el panel.";
+      document.getElementById("landing-mensaje").textContent = "No encontramos tu colegio con ese link. Entra con el código de tu colegio o pídelo a su dirección.";
     }
   }
   mostrarLanding();
