@@ -148,6 +148,7 @@
      realmente significa este botón (cubrir un bloque urgente), en vez de inventar un color
      nuevo fuera de la paleta institucional. */
   .gaduai-btn-amber{background:#d97706}
+  .gaduai-btn-teal{background:#0f766e}
   .gaduai-btn-amber:hover{background:#b45f04}
   /* ---------- Fase 9/18: PULSO GADUAI — monitor de signos vitales del colegio ----------
      Botón más grande que sus vecinos (Entrevista/Relacionai/IA GADUAI/Buscador) a propósito
@@ -402,6 +403,7 @@
           <button onclick="abrirIA()" title="IA GADUAI" class="gaduai-gradient text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-brain"></i> IA GADUAI</button>
           <button id="btn-buscador" hidden onclick="abrirBuscador()" title="Buscador" class="gaduai-btn-violet text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-magnifying-glass"></i> Buscador</button>
           <button onclick="abrirAgenda()" title="Agenda / Calendario" class="gaduai-btn-lime text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-calendar-days"></i> Agenda</button>
+          <button id="btn-planificaciones" hidden onclick="abrirPlanificaciones()" title="Planificaciones" class="gaduai-btn-teal text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px] relative"><i class="fa-solid fa-folder-open"></i> Planificaciones <span id="plan-badge" hidden class="absolute -top-2 -right-2 bg-rose-600 text-white text-[10px] font-black rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center"></span></button>
           <button id="btn-ausentismo" hidden onclick="abrirAusentismo()" title="Ausentismo" class="gaduai-btn-amber text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-user-clock"></i> Ausentismo</button>
         </div>
 
@@ -818,6 +820,50 @@
 </div>
 
 <!-- ============ MODAL: AUSENTISMO (Fase 19) ============ -->
+<div id="modal-planificaciones" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-6xl bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+      <div>
+        <p class="text-[10px] uppercase tracking-widest text-teal-300 font-bold"><i class="fa-solid fa-folder-open"></i> Planificaciones</p>
+        <div class="flex items-center gap-3">
+          <button onclick="planNavegar(-1)" class="text-slate-500 hover:text-white" title="Mes anterior"><i class="fa-solid fa-chevron-left"></i></button>
+          <h3 id="plan-titulo" class="text-xl font-black text-white">—</h3>
+          <button onclick="planNavegar(1)" class="text-slate-500 hover:text-white" title="Mes siguiente"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+        <p id="plan-subtitulo" class="text-[11px] text-slate-400 mt-1"></p>
+      </div>
+      <div class="flex gap-2 items-center">
+        <button onclick="planEnviarTodos()" id="plan-btn-enviar" class="text-[11px] font-bold px-3 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-200"><i class="fa-solid fa-paper-plane"></i> Reenviar links a pendientes</button>
+        <button onclick="planToggleConfig()" class="text-[11px] font-bold px-3 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-200"><i class="fa-solid fa-gear"></i> Configurar</button>
+        <button onclick="cerrarModalId('modal-planificaciones');cargarPlanBadge()" class="text-slate-400 hover:text-white ml-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
+    </div>
+
+    <div id="plan-config" hidden class="bg-slate-950 border border-teal-500/30 rounded-2xl p-4 mb-4">
+      <p class="text-xs font-bold text-white mb-3"><i class="fa-solid fa-gear text-teal-300"></i> Calendario de entregas</p>
+      <div class="grid sm:grid-cols-3 gap-3">
+        <label class="text-[11px] text-slate-400">Día del mes en que salen los links
+          <input id="plan-cfg-envio" type="number" min="1" max="28" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
+        <label class="text-[11px] text-slate-400">Día límite de entrega
+          <input id="plan-cfg-limite" type="number" min="1" max="31" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
+        <label class="text-[11px] text-slate-400 flex items-end gap-2 pb-2"><input id="plan-cfg-auto" type="checkbox" class="w-4 h-4"> Enviar los links y el recordatorio automáticamente</label>
+      </div>
+      <p class="text-[10.5px] text-slate-500 mt-2">El recordatorio sale el día anterior al plazo, solo a quien no ha entregado. Las asignaturas y cursos de cada docente salen de Configuración → Horarios docentes, y su correo, de Directorio: colaboradores.</p>
+      <button onclick="planGuardarConfig()" class="mt-3 gaduai-btn-teal text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-regular fa-floppy-disk"></i> Guardar</button>
+    </div>
+
+    <div id="plan-avisos"></div>
+    <div id="plan-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+
+    <div class="flex gap-2 mb-4" id="plan-tabs">
+      <button data-t="bandeja" onclick="planTab('bandeja')" class="plan-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-inbox"></i> Bandeja</button>
+      <button data-t="envios" onclick="planTab('envios')" class="plan-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-paper-plane"></i> Envíos</button>
+      <button data-t="historial" onclick="planTab('historial')" class="plan-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-clock-rotate-left"></i> Historial</button>
+    </div>
+    <div id="plan-vista"></div>
+  </div>
+</div>
+
 <div id="modal-ausentismo" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
   <div class="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
     <div class="flex justify-between items-start mb-3">
@@ -1071,6 +1117,18 @@
 </div>
 
 <!-- ============ PANTALLA 4: AGENDA PÚBLICA (link para reservar, sin login) ============ -->
+<div id="pantalla-plan-docente" class="min-h-screen" hidden style="background:#F6F7FB;color:#171A2E;">
+  <div style="height:4px;background:linear-gradient(90deg,#0C0B70,#0034DA,#20C9B5)"></div>
+  <div class="max-w-2xl mx-auto px-4 py-10">
+    <div class="text-center mb-6">
+      <img src="/img/gaduai-logo-app.png" alt="GADUAI" class="h-12 w-auto mx-auto mb-2">
+      <p id="pd-colegio" class="text-sm" style="color:#5B5D72"></p>
+    </div>
+    <div id="pd-contenido"><p class="text-center text-sm" style="color:#5B5D72">Cargando…</p></div>
+    <p class="text-center text-xs mt-6" style="color:#94a3b8">Este link es personal. Formatos: Word o PDF, hasta 10 MB.<br>¿Algún problema? Responde al correo de la Unidad Técnica.</p>
+  </div>
+</div>
+
 <div id="pantalla-agenda-publica" class="min-h-screen flex items-start justify-center p-4 py-10" hidden>
   <div class="w-full max-w-2xl fade-in">
     <div class="flex flex-col items-center text-center mb-6">
@@ -1143,7 +1201,7 @@ function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"
 function urlAdjunto(u){ return /^data:/i.test(String(u||"")) ? String(u) : "#"; }
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.hidden=false; t.classList.remove("hidden"); clearTimeout(window._toastT); window._toastT=setTimeout(()=>t.classList.add("hidden"),2800); }
 function slug(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,""); }
-function pantallas(){ return ["pantalla-landing","pantalla-login","pantalla-app","pantalla-agenda-publica"]; }
+function pantallas(){ return ["pantalla-landing","pantalla-login","pantalla-app","pantalla-agenda-publica","pantalla-plan-docente"]; }
 function mostrarPantalla(id){ pantallas().forEach(p=>document.getElementById(p).hidden = p!==id); }
 
 async function api(path, opts={}){
@@ -1197,6 +1255,9 @@ async function init(){
   // pantalla aparte que solo muestra la disponibilidad de esa persona para reservar.
   const rutaAgenda = location.pathname.match(/^\/agenda\/([^\/]+)\/([^\/]+)\/?$/);
   if(rutaAgenda){ await initAgendaPublica(decodeURIComponent(rutaAgenda[1]), decodeURIComponent(rutaAgenda[2])); return; }
+  // Link personal de una docente para entregar sus planificaciones (/planificacion/<token>).
+  const rutaPlan = location.pathname.match(/^\/planificacion\/([A-Za-z0-9_-]+)\/?$/);
+  if(rutaPlan){ await initPlanDocente(rutaPlan[1]); return; }
   let colegioParam = new URLSearchParams(location.search).get("colegio");
   if(!colegioParam){
     // Sin el parámetro en la URL (ícono instalado desde un link viejo, bookmark al dominio
@@ -1344,6 +1405,8 @@ async function entrarApp(){
   document.getElementById("btn-configuracion").hidden = !(STATE.isMaster || STATE.perfil === "Director/a de colegio");
   document.getElementById("btn-buscador").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
   document.getElementById("btn-ausentismo").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
+  document.getElementById("btn-planificaciones").hidden = !PERFILES_PLANIFICACION.includes(STATE.perfil);
+  cargarPlanBadge();
   actualizarLinkRelacionai();
   eiSetup();
   cargarInsigniaHeader();
@@ -3289,7 +3352,9 @@ async function abrirAlertas(){
       <p class="text-[10px] text-amber-300 font-bold">🔔 ${esc(a.autor)} te alertó · ${a.fecha}</p>
       <p class="text-xs font-bold text-white mt-1">${esc(a.item.titulo)}</p>
       ${a.mensaje?`<p class="text-[11px] text-slate-400 mt-1">${esc(a.mensaje)}</p>`:''}
-      ${a.item.tipo==='hito'
+      ${a.item.persona===PLAN_PERSONA_AVISOS
+        ? `<button onclick="cerrarModalId('modal-alertas');abrirPlanificaciones()" class="text-[10px] text-teal-300 mt-2"><i class="fa-solid fa-folder-open mr-1"></i>Abrir Planificaciones</button>`
+        : a.item.tipo==='hito'
         ? `<button onclick="cerrarModalId('modal-alertas');abrirChat(${a.item.id})" class="text-[10px] text-sky-300 mt-2"><i class="fa-solid fa-comments mr-1"></i>Responder en el chat</button>`
         : `<button onclick="cerrarModalId('modal-alertas');abrirCirculo(${a.item.id})" class="text-[10px] text-sky-300 mt-2"><i class="fa-solid fa-arrows-spin mr-1"></i>Responder en la tarea</button>`}
     </div>`).join("") || '<p class="text-[11px] text-slate-500 text-center py-8">No tienes alertas.</p>';
@@ -3672,6 +3737,386 @@ async function guardarEntrevista(){
 /* ---------- Ausentismo (Fase 19) ---------- */
 let AUS_STATE = { fecha: null, ausencias: [], puedeEditar: false, indicadores: {} };
 let ausBuscarTimer = null;
+/* ---------- Planificaciones (perfil UTP) ----------
+   La UTP recibe cada mes una planificación por asignatura y curso de cada docente. Las docentes
+   suben sus archivos desde un link personal que llega por correo (pantalla-plan-docente). */
+const PERFILES_PLANIFICACION = ["UTP"];
+const PLAN_PERSONA_AVISOS = "Planificaciones (automático)";
+const PLAN_MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const PLAN_TIPOS = ["pdf","doc","docx"]; // las planificaciones se entregan en Word o PDF
+let planEstado = { anio:null, mes:null, data:null, tab:"bandeja", abierto:null };
+
+function planFechaLarga(iso){
+  const [y,m,d] = String(iso).slice(0,10).split("-").map(Number);
+  const dia = new Date(Date.UTC(y,m-1,d)).toLocaleDateString("es-CL",{weekday:"long",timeZone:"UTC"});
+  return `${dia} ${d} de ${PLAN_MESES[m-1]}`;
+}
+function planFechaCorta(ts){ return ts ? new Date(ts).toLocaleDateString("es-CL",{day:"numeric",month:"short"}) : ""; }
+// Estado visible de cada planificación: el "sin entregar" depende de si ya pasó el plazo.
+function planChip(it, data){
+  const vencido = data.periodo && data.hoy > data.periodo.fecha_limite;
+  if(it.estado==="revisada") return ["bg-emerald-500/20 text-emerald-300","✓ V°B°"];
+  if(it.estado==="entregada") return it.atrasada ? ["bg-amber-500/20 text-amber-300","Entregada atrasada"] : ["bg-sky-500/20 text-sky-300","Entregada · por revisar"];
+  return vencido ? ["bg-rose-500/20 text-rose-300","Sin entregar"] : ["bg-slate-500/20 text-slate-300","Pendiente"];
+}
+
+async function cargarPlanBadge(){
+  const badge = document.getElementById("plan-badge");
+  if(!PERFILES_PLANIFICACION.includes(STATE.perfil)){ badge.hidden = true; return; }
+  try{
+    const d = await api(`/api/colegios/${STATE.colegioId}/planificaciones`);
+    const n = d.docentes.reduce((s,doc)=>s+doc.items.filter(i=>i.estado==="entregada").length,0);
+    badge.textContent = n; badge.hidden = !n;
+  }catch(e){ badge.hidden = true; }
+}
+
+async function abrirPlanificaciones(){
+  planEstado.anio = null; planEstado.mes = null; planEstado.abierto = null;
+  document.getElementById("modal-planificaciones").classList.remove("hidden");
+  await planCargar();
+}
+function planNavegar(delta){
+  let m = planEstado.mes + delta, y = planEstado.anio;
+  if(m < 1){ m = 12; y--; } if(m > 12){ m = 1; y++; }
+  planEstado.mes = m; planEstado.anio = y; planEstado.abierto = null;
+  planCargar();
+}
+async function planCargar(){
+  const q = planEstado.anio ? `?anio=${planEstado.anio}&mes=${planEstado.mes}` : "";
+  try{
+    const d = await api(`/api/colegios/${STATE.colegioId}/planificaciones${q}`);
+    planEstado.data = d; planEstado.anio = d.anio; planEstado.mes = d.mes;
+    planPintar();
+  }catch(e){ toast(e.message==="solo_utp" ? "Este módulo es solo para el perfil UTP" : "No se pudo cargar Planificaciones"); }
+}
+function planToggleConfig(){
+  const c = document.getElementById("plan-config"), d = planEstado.data;
+  c.hidden = !c.hidden;
+  if(!c.hidden && d){
+    document.getElementById("plan-cfg-envio").value = d.config.dia_envio;
+    document.getElementById("plan-cfg-limite").value = d.config.dia_limite;
+    document.getElementById("plan-cfg-auto").checked = !!d.config.envio_automatico;
+  }
+}
+async function planGuardarConfig(){
+  const diaEnvio = parseInt(document.getElementById("plan-cfg-envio").value,10);
+  const diaLimite = parseInt(document.getElementById("plan-cfg-limite").value,10);
+  if(!(diaEnvio>=1 && diaEnvio<=28) || !(diaLimite>=1 && diaLimite<=31) || diaEnvio>diaLimite){
+    toast("Revisa los días: los links deben salir antes o el mismo día del plazo"); return;
+  }
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/planificaciones/config`, {method:"POST", body: JSON.stringify(actorBody({diaEnvio, diaLimite, envioAutomatico: document.getElementById("plan-cfg-auto").checked}))});
+    document.getElementById("plan-config").hidden = true;
+    toast("Calendario guardado");
+    await planCargar();
+  }catch(e){ toast("No se pudo guardar"); }
+}
+async function planEnviar(extra, confirmacion){
+  if(confirmacion && !confirm(confirmacion)) return;
+  try{
+    const r = await api(`/api/colegios/${STATE.colegioId}/planificaciones/enviar`, {method:"POST", body: JSON.stringify(actorBody({anio:planEstado.anio, mes:planEstado.mes, ...extra}))});
+    toast(r.enviados ? `Link enviado a ${r.enviados} docente${r.enviados===1?"":"s"}` + (r.sinCorreo?` · ${r.sinCorreo} sin correo`:"") : (r.sinCorreo ? "Esa docente no tiene correo en el directorio" : "No había docentes con planificaciones pendientes"));
+    await planCargar();
+  }catch(e){ toast("No se pudieron enviar los links"); }
+}
+function planEnviarTodos(){
+  const d = planEstado.data;
+  if(!d.periodo){ planPrimerEnvio(); return; }
+  planEnviar({}, "Se reenviará el link a todas las docentes que aún tienen planificaciones pendientes este mes. ¿Continuar?");
+}
+function planPrimerEnvio(){
+  const fecha = document.getElementById("plan-primer-fecha");
+  planEnviar({fechaLimite: fecha ? fecha.value : undefined}, `Se enviará el link de ${PLAN_MESES[planEstado.mes-1]} a cada docente con horario cargado. ¿Continuar?`);
+}
+function planTab(t){ planEstado.tab = t; planPintar(); }
+
+function planPintar(){
+  const d = planEstado.data;
+  document.getElementById("plan-titulo").textContent = `${PLAN_MESES[d.mes-1][0].toUpperCase()+PLAN_MESES[d.mes-1].slice(1)} ${d.anio}`;
+  document.getElementById("plan-subtitulo").innerHTML = d.periodo
+    ? `Plazo de entrega: <b class="text-white">hasta el ${esc(planFechaLarga(d.periodo.fecha_limite))}</b>`
+      + (d.periodo.links_enviados_en ? ` · links enviados el ${esc(planFechaCorta(d.periodo.links_enviados_en))}` : "")
+      + (d.periodo.recordatorio_enviado_en ? ` · recordatorio enviado el ${esc(planFechaCorta(d.periodo.recordatorio_enviado_en))}` : "")
+    : `Aún no se han enviado los links de este mes`;
+  document.getElementById("plan-btn-enviar").hidden = !d.periodo;
+  document.querySelectorAll(".plan-tab").forEach(b=>{
+    const on = b.dataset.t===planEstado.tab;
+    b.classList.toggle("bg-teal-600", on); b.classList.toggle("text-white", on); b.classList.toggle("border-teal-600", on);
+    b.classList.toggle("text-slate-300", !on);
+  });
+  const avisos = [];
+  if(!d.config.activo) avisos.push(`<b>Primer uso:</b> revisa el calendario en <b>Configurar</b> (por defecto, links el día ${d.config.dia_envio} y plazo el día ${d.config.dia_limite}). El envío automático parte cuando guardes la configuración o envíes los primeros links.`);
+  if(d.sinCorreo.length) avisos.push(`<b>${d.sinCorreo.length} docente${d.sinCorreo.length===1?"":"s"} sin correo</b> en el directorio, no ${d.sinCorreo.length===1?"puede":"pueden"} recibir su link: ${d.sinCorreo.map(esc).join(", ")}. Agrégalo en Configuración → Directorio: colaboradores.`);
+  document.getElementById("plan-avisos").innerHTML = avisos.map(a=>`<div class="text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2 mb-2"><i class="fa-solid fa-circle-info mr-1"></i>${a}</div>`).join("");
+
+  const items = d.docentes.flatMap(doc=>doc.items);
+  const vencido = d.periodo && d.hoy > d.periodo.fecha_limite;
+  const kpi = (n, t, color) => `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-4"><p class="text-3xl font-black ${color}">${n}</p><p class="text-[11px] text-slate-400">${t}</p></div>`;
+  const pend = items.filter(i=>i.estado==="pendiente").length;
+  document.getElementById("plan-kpis").innerHTML = d.periodo
+    ? kpi(items.length,"Esperadas","text-white")
+      + kpi(items.filter(i=>i.estado!=="pendiente").length, `Entregadas${(n=>n?` (${n} atrasada${n===1?"":"s"})`:"")(items.filter(i=>i.atrasada).length)}`, "text-sky-300")
+      + kpi(items.filter(i=>i.estado==="entregada").length, "Por revisar", "text-teal-300")
+      + kpi(pend, vencido ? "Sin entregar · vencido" : "Pendientes", vencido && pend ? "text-rose-300" : "text-slate-300")
+    : "";
+
+  const v = document.getElementById("plan-vista");
+  if(!d.periodo){ v.innerHTML = planVistaSinPeriodo(d); return; }
+  if(planEstado.tab==="envios") v.innerHTML = planVistaEnvios(d);
+  else if(planEstado.tab==="historial") v.innerHTML = planVistaHistorial(d);
+  else { v.innerHTML = planVistaBandeja(d); if(planEstado.abierto) planAbrir(planEstado.abierto); }
+}
+
+function planVistaSinPeriodo(d){
+  const futuro = `${d.anio}-${String(d.mes).padStart(2,"0")}` > d.hoy.slice(0,7);
+  return `<div class="bg-slate-950 border border-dashed border-slate-700 rounded-2xl p-8 text-center">
+    <i class="fa-solid fa-paper-plane text-3xl text-teal-300"></i>
+    <p class="text-sm font-bold text-white mt-3">Aún no se han enviado los links de ${PLAN_MESES[d.mes-1]}</p>
+    <p class="text-[11px] text-slate-400 mt-1">${d.config.activo && d.config.envio_automatico && futuro ? `Saldrán solos el día ${d.config.dia_envio}. También puedes enviarlos ahora.` : "Puedes enviarlos ahora."}
+      Recibirán su link <b>${d.previstos.docentes}</b> docente${d.previstos.docentes===1?"":"s"}, con <b>${d.previstos.planificaciones}</b> planificaciones en total (una por asignatura y curso de su horario).</p>
+    ${d.previstos.docentes ? `<div class="flex flex-wrap items-end justify-center gap-3 mt-5">
+      <label class="text-[11px] text-slate-400 text-left">Plazo de entrega
+        <input id="plan-primer-fecha" type="date" value="${d.fechaLimiteSugerida}" class="block mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
+      <button onclick="planPrimerEnvio()" class="gaduai-btn-teal text-white text-xs font-bold px-5 py-2.5 rounded-xl"><i class="fa-solid fa-paper-plane"></i> Enviar links de ${PLAN_MESES[d.mes-1]}</button>
+    </div>` : `<p class="text-[11px] text-amber-200 mt-4">No hay docentes con horario cargado. Súbelo en Configuración → Horarios docentes (lo hace Dirección).</p>`}
+  </div>`;
+}
+
+// Agrupa por asignatura: con 2 o más docentes de la misma asignatura se muestra como departamento.
+function planGrupos(d){
+  const grupos = new Map();
+  d.docentes.forEach(doc=>doc.items.forEach(it=>{
+    const k = it.asignatura.toLowerCase();
+    if(!grupos.has(k)) grupos.set(k, {asignatura: it.asignatura, docentes: new Map()});
+    const g = grupos.get(k);
+    if(!g.docentes.has(doc.id)) g.docentes.set(doc.id, {...doc, items: []});
+    g.docentes.get(doc.id).items.push(it);
+  }));
+  return [...grupos.values()].map(g=>({...g, docentes:[...g.docentes.values()]}))
+    .sort((a,b)=> (b.docentes.length>1)-(a.docentes.length>1) || a.asignatura.localeCompare(b.asignatura));
+}
+function planVistaBandeja(d){
+  const grupos = planGrupos(d);
+  if(!grupos.length) return `<p class="text-[11px] text-slate-500 text-center py-8">No hay planificaciones en este mes.</p>`;
+  const arbol = grupos.map((g,gi)=>{
+    const depto = g.docentes.length > 1;
+    const total = g.docentes.reduce((s,x)=>s+x.items.length,0);
+    const entregadas = g.docentes.reduce((s,x)=>s+x.items.filter(i=>i.estado!=="pendiente").length,0);
+    return `<details class="bg-slate-950 border border-slate-800 rounded-2xl p-4" open>
+      <summary class="flex items-center gap-2 cursor-pointer list-none">
+        <i class="fa-solid ${depto?"fa-people-group text-teal-300":"fa-book text-sky-300"}"></i>
+        <span class="font-bold text-white text-sm">${depto?"Departamento de ":""}${esc(g.asignatura)}</span>
+        <span class="ml-auto text-[11px] text-slate-400">${entregadas}/${total} entregadas</span>
+      </summary>
+      ${depto?`<p class="text-[10px] text-slate-500 mt-1 ml-6">${g.docentes.length} docentes</p>`:""}
+      ${g.docentes.map(doc=>`
+        <div class="${depto?"ml-3 border-l border-slate-800 pl-3":""} mt-2">
+          <p class="text-[11px] font-bold text-slate-300 mb-1"><i class="fa-solid fa-user text-slate-500"></i> ${esc(doc.nombre)}</p>
+          ${doc.items.map(it=>{ const c = planChip(it,d); return `
+            <button onclick="planAbrir(${it.id})" class="w-full text-left flex items-center justify-between gap-2 px-3 py-2 rounded-xl border ${planEstado.abierto===it.id?"border-teal-500":"border-slate-800"} hover:bg-slate-800/60 mb-1.5">
+              <span class="text-xs"><b class="text-white">${esc(it.asignatura)}</b> <span class="text-slate-400">· ${esc(it.curso)}</span></span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${c[0]}">${c[1]}</span>
+            </button>`; }).join("")}
+        </div>`).join("")}
+    </details>`;
+  }).join("");
+  return `<div class="grid md:grid-cols-5 gap-4">
+    <div class="md:col-span-2 space-y-3">${arbol}</div>
+    <div class="md:col-span-3" id="plan-detalle">
+      <div class="bg-slate-950 border border-dashed border-slate-700 rounded-2xl p-8 text-center text-slate-500 text-sm h-full flex flex-col items-center justify-center">
+        <i class="fa-regular fa-hand-pointer text-2xl mb-2"></i>Elige una planificación para verla.
+      </div>
+    </div>
+  </div>`;
+}
+function planAbrir(id){
+  const d = planEstado.data;
+  let doc, it;
+  d.docentes.forEach(x=>x.items.forEach(i=>{ if(i.id===id){ doc=x; it=i; } }));
+  if(!it) return;
+  planEstado.abierto = id;
+  const box = document.getElementById("plan-detalle");
+  if(!box) return;
+  const c = planChip(it,d);
+  const cab = `<div class="flex flex-wrap items-start justify-between gap-2">
+      <div><h4 class="text-lg font-black text-white">${esc(it.asignatura)} · ${esc(it.curso)}</h4><p class="text-sm text-slate-400">${esc(doc.nombre)}</p></div>
+      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${c[0]}">${c[1]}</span></div>`;
+  if(it.estado==="pendiente"){
+    box.innerHTML = `<div class="bg-slate-950 border ${d.hoy>d.periodo.fecha_limite?"border-rose-900/60":"border-slate-800"} rounded-2xl p-5">${cab}
+      <p class="text-sm text-slate-300 mt-4">${doc.link_enviado_en?`Link enviado el ${esc(planFechaCorta(doc.link_enviado_en))}`:"Aún no se le envía el link"}${doc.recordatorio_enviado_en?` · recordatorio el ${esc(planFechaCorta(doc.recordatorio_enviado_en))}`:""}.</p>
+      ${doc.correo ? `<button onclick="planEnviar({personaId:${doc.persona_id}})" class="mt-4 gaduai-btn-teal text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-solid fa-paper-plane"></i> ${doc.link_enviado_en?"Reenviar link":"Enviar link"} a ${esc(doc.nombre.split(" ")[0])}</button>`
+        : `<p class="text-[11px] text-amber-200 mt-3">Sin correo en el directorio: agrégalo para poder enviarle su link.</p>`}
+    </div>`;
+  } else {
+    const kb = it.archivo_bytes ? (it.archivo_bytes>1048576 ? (it.archivo_bytes/1048576).toFixed(1)+" MB" : Math.ceil(it.archivo_bytes/1024)+" KB") : "";
+    const ext = (it.archivo_nombre||"").split(".").pop().toLowerCase();
+    const icono = ext==="pdf"?"fa-file-pdf text-rose-400":(ext.startsWith("doc")||ext==="odt")?"fa-file-word text-sky-400":ext.startsWith("xls")?"fa-file-excel text-emerald-400":"fa-file-powerpoint text-amber-400";
+    box.innerHTML = `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-5">${cab}
+      <div class="mt-4 flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl p-3">
+        <i class="fa-solid ${icono} text-2xl"></i>
+        <div class="flex-1 min-w-0"><p class="text-sm font-bold text-white truncate">${esc(it.archivo_nombre)}</p>
+          <p class="text-[11px] text-slate-500">Entregada el ${esc(planFechaCorta(it.entregada_en))} · ${it.atrasada?"atrasada":"a tiempo"}${kb?" · "+kb:""}</p></div>
+        <button onclick="planVerArchivo(${it.id})" class="text-xs font-bold px-3 py-2 rounded-xl border border-slate-700 hover:bg-slate-800"><i class="fa-solid fa-eye"></i> Abrir</button>
+      </div>
+      <div class="mt-4 text-[11px] text-slate-400 bg-indigo-500/10 border border-indigo-500/30 rounded-xl px-3 py-2"><i class="fa-solid fa-brain text-indigo-300 mr-1"></i> La revisión con IA, la retroalimentación y el V°B° llegan en la próxima etapa.</div>
+    </div>`;
+  }
+  document.querySelectorAll("#plan-vista button[onclick^='planAbrir']").forEach(b=>{
+    const on = b.getAttribute("onclick")===`planAbrir(${id})`;
+    b.classList.toggle("border-teal-500", on); b.classList.toggle("border-slate-800", !on);
+  });
+}
+async function planVerArchivo(id){
+  try{
+    const r = await api(`/api/colegios/${STATE.colegioId}/planificaciones/${id}/archivo`);
+    const [cab, b64] = r.data.split(",");
+    const tipo = (cab.match(/^data:([^;]+)/)||[])[1] || "application/octet-stream";
+    const bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([bytes], {type: tipo}));
+    if(tipo==="application/pdf"){ window.open(url, "_blank"); }
+    else { const a = document.createElement("a"); a.href = url; a.download = r.nombre; document.body.appendChild(a); a.click(); a.remove(); }
+    setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  }catch(e){ toast("No se pudo abrir el archivo"); }
+}
+function planVistaEnvios(d){
+  return `<div class="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
+    <table class="w-full text-xs">
+      <tr class="text-[10px] uppercase tracking-wide text-slate-500 text-left"><th class="p-3">Docente</th><th class="p-3">Entregadas</th><th class="p-3">Link</th><th class="p-3">Recordatorio</th><th class="p-3"></th></tr>
+      ${d.docentes.map(doc=>{
+        const ent = doc.items.filter(i=>i.estado!=="pendiente").length;
+        return `<tr class="border-t border-slate-800">
+          <td class="p-3"><b class="text-white">${esc(doc.nombre)}</b><div class="text-[10px] text-slate-500">${doc.correo?esc(doc.correo):'<span class="text-amber-300">sin correo</span>'}</div></td>
+          <td class="p-3 ${ent===doc.items.length?"text-emerald-300":"text-slate-300"}">${ent} de ${doc.items.length}</td>
+          <td class="p-3 text-slate-400">${doc.link_enviado_en?esc(planFechaCorta(doc.link_enviado_en)):"—"}</td>
+          <td class="p-3 text-slate-400">${doc.recordatorio_enviado_en?esc(planFechaCorta(doc.recordatorio_enviado_en)):"—"}</td>
+          <td class="p-3 text-right">${doc.correo?`<button onclick="planEnviar({personaId:${doc.persona_id}})" class="text-[10px] font-bold px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-200">${doc.link_enviado_en?"Reenviar":"Enviar"} link</button>`:""}</td>
+        </tr>`;}).join("")}
+    </table>
+  </div>`;
+}
+function planVistaHistorial(d){
+  return `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-2">${d.historial.map(h=>`
+    <div class="text-xs border-b border-slate-800 pb-2"><b class="text-white">${esc(h.accion)}</b> <span class="text-slate-500">· ${esc(new Date(h.creado_en).toLocaleString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}))} · ${esc(h.autor)}</span>
+      ${h.detalle?`<div class="text-slate-400">${esc(h.detalle)}</div>`:""}</div>`).join("") || '<p class="text-[11px] text-slate-500 text-center py-6">Aún no hay movimientos.</p>'}</div>`;
+}
+
+/* ---------- página de la docente (link personal, sin cuenta) ---------- */
+let planDocente = { token:null, data:null, elegidos:{}, enviando:null, mensaje:null };
+function planTamano(b){ return b>1048576 ? (b/1048576).toFixed(1)+" MB" : Math.max(1,Math.ceil(b/1024))+" KB"; }
+async function initPlanDocente(token){
+  planDocente.token = token;
+  mostrarPantalla("pantalla-plan-docente");
+  document.documentElement.dataset.theme = "claro";
+  await planDocenteCargar();
+}
+async function planDocenteCargar(){
+  const box = document.getElementById("pd-contenido");
+  try{
+    const r = await fetch(`${API}/api/plan-docente/${encodeURIComponent(planDocente.token)}`);
+    if(!r.ok) throw new Error("link");
+    planDocente.data = await r.json();
+  }catch(e){
+    box.innerHTML = `<div class="bg-white rounded-2xl border border-slate-200 p-6 text-center"><p class="font-bold" style="color:#0C0B70">Este link no es válido</p><p class="text-sm mt-1" style="color:#5B5D72">Pide a la Unidad Técnica que te lo vuelva a enviar.</p></div>`;
+    return;
+  }
+  planDocentePintar();
+}
+function planDocentePintar(){
+  const d = planDocente.data;
+  document.getElementById("pd-colegio").textContent = `${d.colegio} · Unidad Técnico-Pedagógica`;
+  const entregadas = d.items.filter(i=>i.estado!=="pendiente").length;
+  const dias = Math.round((Date.parse(d.fechaLimite) - Date.parse(d.hoy)) / 86400000);
+  const aviso = entregadas === d.items.length
+    ? `<div class="mt-3 text-xs rounded-xl px-3 py-2" style="background:#DCFCE7;color:#15803d"><i class="fa-solid fa-circle-check"></i> ¡Listo! Entregaste todas tus planificaciones de ${esc(d.mesNombre)}. Gracias.</div>`
+    : dias < 0 ? `<div class="mt-3 text-xs rounded-xl px-3 py-2" style="background:#FEE2E2;color:#b91c1c"><i class="fa-regular fa-clock"></i> El plazo venció. Aún puedes subirlas: quedarán marcadas como atrasadas.</div>`
+    : `<div class="mt-3 text-xs rounded-xl px-3 py-2" style="background:#FEF3C7;color:#92400e"><i class="fa-regular fa-clock"></i> ${dias===0?"El plazo vence hoy":dias===1?"Te queda 1 día":`Te quedan ${dias} días`}. Llevas ${entregadas} de ${d.items.length} entregadas.</div>`;
+  document.getElementById("pd-contenido").innerHTML = `
+    <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm mb-4">
+      <p class="text-xs uppercase tracking-widest font-bold" style="color:#0034DA">Planificación de ${esc(d.mesNombre)} ${d.anio}</p>
+      <h1 class="text-2xl font-black mt-1" style="color:#0C0B70">Hola, ${esc(d.docente)}</h1>
+      <p class="text-sm mt-1" style="color:#5B5D72">Sube una planificación por cada asignatura y curso. Plazo: <b>hasta el ${esc(planFechaLarga(d.fechaLimite))}</b>.</p>
+      ${aviso}
+    </div>
+    ${planDocente.mensaje ? `<div class="mb-4 text-sm rounded-2xl px-4 py-3" style="background:#DCFCE7;color:#15803d"><i class="fa-solid fa-circle-check"></i> ${planDocente.mensaje}</div>` : ""}
+    <div class="space-y-3">${d.items.map(it=>planDocenteTarjeta(it)).join("")}</div>
+    ${d.historial && d.historial.length ? `
+    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm mt-6">
+      <p class="font-bold mb-3" style="color:#0C0B70"><i class="fa-solid fa-clock-rotate-left"></i> Historial de tus entregas</p>
+      ${d.historial.map(h=>`<div class="flex items-start gap-3 py-2 border-t border-slate-100 text-sm">
+        <i class="fa-solid ${/\.pdf$/i.test(h.archivo_nombre)?"fa-file-pdf text-rose-500":"fa-file-word text-sky-600"} mt-1"></i>
+        <div class="flex-1 min-w-0"><p class="font-semibold" style="color:#171A2E">${esc(h.asignatura)} · ${esc(h.curso)} <span class="font-normal" style="color:#5B5D72">(${PLAN_MESES[h.mes-1]} ${h.anio})</span></p>
+          <p class="text-xs truncate" style="color:#5B5D72">${esc(h.archivo_nombre)}${h.archivo_bytes?` · ${planTamano(h.archivo_bytes)}`:""}</p></div>
+        <div class="text-right text-xs" style="color:#5B5D72">${esc(new Date(h.entregada_en).toLocaleDateString("es-CL",{day:"numeric",month:"short"}))}<br>${esc(new Date(h.entregada_en).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hour12:false}))} hrs${h.atrasada?'<br><span style="color:#b45309">atrasada</span>':""}</div>
+      </div>`).join("")}
+    </div>` : ""}`;
+}
+function planDocenteTarjeta(it){
+  const entregada = it.estado!=="pendiente";
+  const elegido = planDocente.elegidos[it.id];
+  const enviando = planDocente.enviando===it.id;
+  const chip = it.estado==="revisada" ? `<span class="text-[11px] font-bold px-2 py-1 rounded-full" style="background:#DCFCE7;color:#15803d">✓ Revisada</span>`
+    : entregada ? `<span class="text-[11px] font-bold px-2 py-1 rounded-full" style="background:#DCFCE7;color:#15803d">✓ Entregada el ${esc(planFechaCorta(it.entregada_en))}${it.atrasada?" (atrasada)":""}</span>`
+    : `<span class="text-[11px] font-bold px-2 py-1 rounded-full" style="background:#FEF3C7;color:#b45309">Pendiente</span>`;
+  const input = `<input type="file" class="hidden" accept=".pdf,.doc,.docx" onchange="planDocenteElegir(${it.id}, this.files[0])">`;
+  let cuerpo;
+  if(it.estado==="revisada"){
+    cuerpo = `<p class="mt-3 text-sm" style="color:#5B5D72"><i class="fa-solid fa-file"></i> ${esc(it.archivo_nombre)}</p>`;
+  } else if(elegido){
+    // Archivo elegido, aún sin enviar: se muestra para confirmar y recién se sube con "Enviar".
+    cuerpo = `<div class="mt-3 rounded-xl p-3" style="background:#EAF0FF">
+        <div class="flex items-center gap-2 text-sm" style="color:#0C0B70"><i class="fa-solid ${/\.pdf$/i.test(elegido.name)?"fa-file-pdf text-rose-500":"fa-file-word text-sky-600"}"></i>
+          <span class="truncate font-semibold">${esc(elegido.name)}</span><span class="ml-auto text-xs" style="color:#5B5D72">${planTamano(elegido.size)}</span></div>
+        <div class="flex gap-2 mt-3">
+          <button ${enviando?"disabled":""} onclick="planDocenteEnviar(${it.id})" class="flex-1 text-white text-sm font-bold py-2.5 rounded-xl" style="background:#0034DA">${enviando?'<i class="fa-solid fa-spinner fa-spin"></i> Enviando…':`<i class="fa-solid fa-paper-plane"></i> Enviar${entregada?" (reemplaza la anterior)":""}`}</button>
+          ${enviando?"":`<button onclick="planDocenteQuitar(${it.id})" class="text-sm font-bold px-4 rounded-xl border border-slate-300" style="color:#5B5D72">Cancelar</button>`}
+        </div>
+      </div>`;
+  } else if(entregada){
+    cuerpo = `<label class="mt-3 flex items-center gap-2 text-sm rounded-xl px-3 py-2 cursor-pointer" style="background:#F6F7FB;color:#5B5D72"><i class="fa-solid fa-file"></i> <span class="truncate">${esc(it.archivo_nombre)}</span> <b class="ml-auto text-xs" style="color:#0034DA">Reemplazar</b>${input}</label>`;
+  } else {
+    cuerpo = `<label class="mt-3 block border-2 border-dashed border-slate-300 p-5 text-center hover:border-blue-500 rounded-xl cursor-pointer">
+        <i class="fa-solid fa-cloud-arrow-up text-2xl" style="color:#0034DA"></i>
+        <p class="text-sm font-bold mt-1" style="color:#0C0B70">Elige tu planificación</p>
+        <p class="text-xs" style="color:#5B5D72">Word o PDF, hasta 10 MB</p>${input}</label>`;
+  }
+  return `<div class="bg-white rounded-2xl border ${entregada?"border-emerald-200":"border-slate-200"} p-5 shadow-sm">
+    <div class="flex items-center justify-between gap-2">
+      <div><p class="font-bold" style="color:#0C0B70">${esc(it.asignatura)}</p><p class="text-sm" style="color:#5B5D72">${esc(it.curso)}</p></div>${chip}
+    </div>${cuerpo}</div>`;
+}
+function planDocenteElegir(planId, archivo){
+  if(!archivo) return;
+  const ext = (archivo.name.split(".").pop()||"").toLowerCase();
+  if(!PLAN_TIPOS.includes(ext)){ alert("Formato no aceptado. Sube tu planificación en Word (.doc o .docx) o PDF."); return; }
+  if(archivo.size > 10*1024*1024){ alert("El archivo pesa más de 10 MB. Guárdalo como PDF o comprímelo y vuelve a intentarlo."); return; }
+  planDocente.elegidos[planId] = archivo; planDocente.mensaje = null;
+  planDocentePintar();
+}
+function planDocenteQuitar(planId){ delete planDocente.elegidos[planId]; planDocentePintar(); }
+async function planDocenteEnviar(planId){
+  const archivo = planDocente.elegidos[planId];
+  if(!archivo || planDocente.enviando) return;
+  planDocente.enviando = planId; planDocentePintar();
+  try{
+    const data = await new Promise((ok, mal)=>{ const fr = new FileReader(); fr.onload = ()=>ok(fr.result); fr.onerror = mal; fr.readAsDataURL(archivo); });
+    const r = await fetch(`${API}/api/plan-docente/${encodeURIComponent(planDocente.token)}/items/${planId}`, {
+      method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({nombre: archivo.name, data})
+    });
+    const res = await r.json().catch(()=>({}));
+    if(!r.ok){
+      throw new Error(res.error==="archivo_grande" ? "El archivo pesa más de 10 MB." : res.error==="formato_invalido" ? "Formato no aceptado: usa Word o PDF." : res.error==="ya_revisada" ? "Esta planificación ya fue revisada por la Unidad Técnica." : res.error==="demasiados_intentos" ? "Demasiados intentos seguidos. Espera unos minutos." : "No se pudo enviar. Inténtalo de nuevo.");
+    }
+    const it = planDocente.data.items.find(i=>i.id===planId);
+    const cuando = new Date(res.entregadaEn || Date.now());
+    planDocente.mensaje = `Enviada: <b>${esc(it.asignatura)} · ${esc(it.curso)}</b>, el ${esc(cuando.toLocaleDateString("es-CL",{day:"numeric",month:"long"}))} a las ${esc(cuando.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hour12:false}))} hrs.`
+      + (res.comprobante ? ` Te enviamos el comprobante a ${esc(planDocente.data.correo||"tu correo")}.` : "");
+    delete planDocente.elegidos[planId];
+  }catch(e){ alert(e.message || "No se pudo enviar. Revisa tu conexión e inténtalo de nuevo."); }
+  planDocente.enviando = null;
+  await planDocenteCargar();
+  window.scrollTo({top:0, behavior:"smooth"});
+}
 async function abrirAusentismo(){
   document.getElementById("modal-ausentismo").classList.remove("hidden");
   document.getElementById("aus-buscar-input").value = "";

@@ -20,6 +20,7 @@ const { Pool, types } = require("pg");
 // ("YYYY-MM-DD"), sin tocar timestamptz (creado_en, etc.), que sí debe seguir siendo parseable.
 types.setTypeParser(1082, val => val);
 const { enviarCorreo } = require("./email");
+const { registrarPlanificaciones } = require("./planificaciones");
 const { enviarPush } = require("./push");
 const Anthropic = require("@anthropic-ai/sdk");
 
@@ -123,6 +124,10 @@ const app = express();
 // del navegador, así que CORS no le aplica) — con el wildcard, cualquier sitio web externo
 // podía leer las respuestas de la API desde el navegador de cualquier visitante. Sin cabeceras
 // CORS, el navegador aplica su política de mismo-origen por defecto, que es lo que queremos.
+// Planificaciones: el archivo de la docente (hasta 10 MB) viaja en base64 dentro del JSON, así
+// que su ruta pública acepta más que el resto. Va antes del parser general: el cuerpo ya queda
+// leído y el de 8 MB lo deja pasar.
+app.use("/api/plan-docente", express.json({ limit: "15mb" }));
 app.use(express.json({ limit: "8mb" })); // documentos adjuntos van en base64 dentro del JSON
 
 // Cabeceras de seguridad básicas. CSP completa queda pendiente (el frontend usa scripts inline y
@@ -1358,7 +1363,12 @@ app.post("/tasks/vencimientos", requireTasksSecret, asyncRoute(async (req, res) 
       await pool.query("update items set recordatorio_etapa=$1 where id=$2", [etapa, it.id]);
     }
   }
-  res.json({ revisados, avisos, correos });
+  // Planificaciones: links del mes y recordatorio del día anterior al plazo. Si falla, no
+  // impide que la tarea de vencimientos responda bien.
+  let planificacionesHoy = null;
+  try { planificacionesHoy = await planificaciones.tareaDiaria(); }
+  catch (err) { console.error("Planificaciones: error en la tarea diaria -", err.message); }
+  res.json({ revisados, avisos, correos, planificaciones: planificacionesHoy });
   registrarEspacioEnLog(); // una vez al día queda registrado cuánto ocupa cada colegio
 }));
 
@@ -2869,6 +2879,12 @@ app.get("/manifest.webmanifest", (req, res) => {
       { src: "/icons/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   });
+});
+
+// ---------- Planificaciones (UTP) ----------
+const planificaciones = registrarPlanificaciones(app, {
+  pool, asyncRoute, verificarActor, actorDeHeaders, crearAlerta, enviarCorreo,
+  ahoraChile: agendaAhoraChile, sumarDias: agendaSumarDias,
 });
 
 // ---------- estáticos (sirve el propio frontend) ----------

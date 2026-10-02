@@ -439,3 +439,93 @@ create table if not exists sesiones (
   expira_en timestamptz not null
 );
 create index if not exists sesiones_usuario_idx on sesiones(usuario_id);
+
+-- ---------- Planificaciones (UTP) ----------
+-- Cada mes la UTP recibe una planificación por cada asignatura y curso que hace cada docente.
+-- Las docentes no necesitan cuenta: reciben un link personal por correo (token) y suben ahí.
+-- Configuración por colegio: día en que salen los links y día límite de entrega. "activo" se
+-- enciende la primera vez que la UTP guarda la configuración o envía links: recién ahí la tarea
+-- diaria empieza a enviar sola los links y recordatorios de ese colegio.
+create table if not exists planificacion_config (
+  colegio_id text primary key references colegios(id) on delete cascade,
+  dia_envio smallint not null default 1,
+  dia_limite smallint not null default 5,
+  envio_automatico boolean not null default true,
+  activo boolean not null default false,
+  actualizado_por text,
+  actualizado_en timestamptz not null default now()
+);
+
+-- Un período por colegio y mes. item_id es el hito del Timeline de la UTP donde se cuelgan los
+-- avisos de "planificación recibida" (así llegan a la campanita y al celular como cualquier aviso).
+create table if not exists planificacion_periodos (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  anio smallint not null,
+  mes smallint not null,
+  fecha_limite date not null,
+  item_id bigint references items(id) on delete set null,
+  links_enviados_en timestamptz,
+  recordatorio_enviado_en timestamptz,
+  creado_en timestamptz not null default now(),
+  unique (colegio_id, anio, mes)
+);
+
+-- Cada docente del período, con su link personal. Nombre y correo quedan copiados al crear el
+-- período, para que el historial no cambie si después se edita el directorio.
+create table if not exists planificacion_docentes (
+  id bigserial primary key,
+  periodo_id bigint not null references planificacion_periodos(id) on delete cascade,
+  colegio_id text not null references colegios(id) on delete cascade,
+  persona_id bigint not null references directorio_personas(id) on delete cascade,
+  nombre text not null,
+  correo text,
+  token text not null unique,
+  link_enviado_en timestamptz,
+  recordatorio_enviado_en timestamptz,
+  unique (periodo_id, persona_id)
+);
+
+-- Una planificación por asignatura y curso de cada docente en el período.
+create table if not exists planificaciones (
+  id bigserial primary key,
+  periodo_docente_id bigint not null references planificacion_docentes(id) on delete cascade,
+  periodo_id bigint not null references planificacion_periodos(id) on delete cascade,
+  colegio_id text not null references colegios(id) on delete cascade,
+  asignatura text not null,
+  curso text not null,
+  estado text not null default 'pendiente',   -- 'pendiente' | 'entregada' | 'revisada'
+  archivo_nombre text,
+  archivo_bytes integer,
+  archivo_data text,
+  entregada_en timestamptz,
+  atrasada boolean not null default false,
+  unique (periodo_docente_id, asignatura, curso)
+);
+create index if not exists planificaciones_periodo_idx on planificaciones(periodo_id);
+
+-- Historial del módulo: envíos, recordatorios, entregas y cambios de configuración.
+create table if not exists planificacion_historial (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  periodo_id bigint references planificacion_periodos(id) on delete cascade,
+  accion text not null,
+  detalle text,
+  autor text not null,
+  creado_en timestamptz not null default now()
+);
+create index if not exists planificacion_historial_colegio_idx on planificacion_historial(colegio_id, creado_en desc);
+
+-- Cada envío de una docente (incluye reemplazos): su historial de entregas y el respaldo del
+-- comprobante que le llega por correo.
+create table if not exists planificacion_entregas (
+  id bigserial primary key,
+  planificacion_id bigint not null references planificaciones(id) on delete cascade,
+  periodo_docente_id bigint not null references planificacion_docentes(id) on delete cascade,
+  archivo_nombre text not null,
+  archivo_bytes integer,
+  atrasada boolean not null default false,
+  comprobante_enviado boolean not null default false,
+  entregada_en timestamptz not null default now()
+);
+create index if not exists planificacion_entregas_docente_idx on planificacion_entregas(periodo_docente_id, entregada_en desc);
