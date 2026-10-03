@@ -3857,13 +3857,20 @@ async function planCopiarLink(link, nombre){
   try{ await navigator.clipboard.writeText(link); toast(`Link de ${nombre} copiado. Pégalo en WhatsApp o en un correo.`); }
   catch(e){ prompt(`Copia el link de ${nombre}:`, link); }
 }
+// Envío masivo con el mes ya preparado: a las que aún no reciben su link, o reenvío a todas
+// las que tienen algo pendiente. Siempre muestra a quién le llegará antes de enviar.
 function planEnviarTodos(){
   const d = planEstado.data;
   if(!d.periodo){ planPrimerEnvio(); return; }
-  const pendientes = d.docentes.filter(doc=>doc.items.some(i=>i.estado==="pendiente"));
-  if(!pendientes.length){ planMostrarResultado("Todas las docentes ya entregaron: no hay a quién reenviar.", false); return; }
-  planConfirmar(`Se reenviará el link por correo a <b>${pendientes.length} docente${pendientes.length===1?"":"s"}</b> con planificaciones pendientes: ${pendientes.map(x=>esc(x.nombre)).join(", ")}.`,
-    [{texto:'<i class="fa-solid fa-paper-plane"></i> Sí, reenviar', principal:true, accion:()=>planEnviar({})}]);
+  const pendientes = d.docentes.filter(doc=>doc.items.some(i=>i.estado==="pendiente") && doc.correo);
+  const sinLink = pendientes.filter(doc=>!doc.link_enviado_en);
+  if(!pendientes.length){ planMostrarResultado("No hay docentes con planificaciones pendientes y correo a quien enviar.", false); return; }
+  const lista = (arr)=>`<div class="mt-1 max-h-28 overflow-y-auto text-slate-400">${arr.map(x=>esc(x.nombre)).join(" · ")}</div>`;
+  const botones = [];
+  if(sinLink.length) botones.push({texto:`<i class="fa-solid fa-paper-plane"></i> Enviar a las ${sinLink.length} que aún no lo reciben`, principal:true, accion:()=>planEnviar({soloSinLink:true})});
+  if(pendientes.length > sinLink.length) botones.push({texto:`<i class="fa-solid fa-rotate-right"></i> Reenviar a las ${pendientes.length} con pendientes`, principal:!sinLink.length, accion:()=>planEnviar({})});
+  planConfirmar((sinLink.length ? `<b>${sinLink.length} docente${sinLink.length===1?"":"s"}</b> aún no reciben su link:${lista(sinLink)}` : "")
+    + (pendientes.length > sinLink.length ? `<p class="${sinLink.length?"mt-3":""}"><b>${pendientes.length}</b> tienen planificaciones pendientes (incluye a quienes ya recibieron el link).</p>` : ""), botones);
 }
 function planPrimerEnvio(){
   const d = planEstado.data;
@@ -3886,7 +3893,10 @@ function planPintar(){
       + (d.periodo.links_enviados_en ? ` · links enviados el ${esc(planFechaCorta(d.periodo.links_enviados_en))}` : "")
       + (d.periodo.recordatorio_enviado_en ? ` · recordatorio enviado el ${esc(planFechaCorta(d.periodo.recordatorio_enviado_en))}` : "")
     : `Aún no se han enviado los links de este mes`;
-  document.getElementById("plan-btn-enviar").hidden = !d.periodo;
+  const btnEnviar = document.getElementById("plan-btn-enviar");
+  btnEnviar.hidden = !d.periodo;
+  btnEnviar.innerHTML = d.docentes.some(doc=>!doc.link_enviado_en && doc.correo)
+    ? '<i class="fa-solid fa-paper-plane"></i> Enviar links a todas' : '<i class="fa-solid fa-rotate-right"></i> Reenviar a pendientes';
   document.querySelectorAll(".plan-tab").forEach(b=>{
     const on = b.dataset.t===planEstado.tab;
     b.classList.toggle("bg-teal-600", on); b.classList.toggle("text-white", on); b.classList.toggle("border-teal-600", on);
@@ -4029,7 +4039,12 @@ async function planVerArchivo(id){
   }catch(e){ toast("No se pudo abrir el archivo"); }
 }
 function planVistaEnvios(d){
-  return `<div class="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
+  const sinLink = d.docentes.filter(doc=>!doc.link_enviado_en && doc.correo && doc.items.some(i=>i.estado==="pendiente")).length;
+  return `<div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <p class="text-[11px] text-slate-400">${sinLink ? `<b class="text-white">${sinLink}</b> docente${sinLink===1?"":"s"} aún sin su link.` : "Todas las docentes con correo ya recibieron su link."}</p>
+    <button onclick="planEnviarTodos()" class="gaduai-btn-teal text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-solid fa-paper-plane"></i> ${sinLink ? "Enviar links a todas" : "Reenviar a pendientes"}</button>
+  </div>
+  <div class="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
     <table class="w-full text-xs">
       <tr class="text-[10px] uppercase tracking-wide text-slate-500 text-left"><th class="p-3">Docente</th><th class="p-3">Entregadas</th><th class="p-3">Link</th><th class="p-3">Recordatorio</th><th class="p-3"></th></tr>
       ${d.docentes.map(doc=>{

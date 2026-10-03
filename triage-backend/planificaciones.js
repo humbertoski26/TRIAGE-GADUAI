@@ -298,6 +298,7 @@ function registrarPlanificaciones(app, d) {
     for (const pd of docentes) {
       const items = await itemsDe(pd.id);
       if (!req.body.personaId && !items.some((i) => i.estado === "pendiente")) continue;
+      if (req.body.soloSinLink && pd.link_enviado_en) continue; // "solo a las que aún no lo reciben"
       if (!pd.correo) { sinCorreo++; continue; }
       porEnviar.push(pd);
     }
