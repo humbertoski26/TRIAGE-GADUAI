@@ -163,6 +163,8 @@
   :root[data-theme="claro"] .plan-sel{border-color:#0034DA!important;box-shadow:0 0 0 1px #0034DA}
   :root[data-theme="claro"] .plan-ia{background:#EAFBF8;border-color:#9FE5DB}
   :root[data-theme="claro"] .plan-ia i{color:#0F8A7C!important}
+  .plan-fila{background:rgba(2,6,23,.45)}
+  :root[data-theme="claro"] .plan-fila{background:#ffffff;border:1px solid #D7F3EF}
   .gaduai-btn-amber:hover{background:#b45f04}
   /* ---------- Fase 9/18: PULSO GADUAI — monitor de signos vitales del colegio ----------
      Botón más grande que sus vecinos (Entrevista/Relacionai/IA GADUAI/Buscador) a propósito
@@ -682,6 +684,18 @@
       <button onclick="cmLeerArchivo('horario')" class="w-full bg-amber-600/20 text-amber-300 border border-amber-500/30 text-xs font-bold py-2.5 rounded-xl mb-3"><i class="fa-solid fa-table mr-1"></i> Leer archivo y previsualizar</button>
       <div id="cm-horario-preview"></div>
     </div>
+
+    <div id="bloque-programas" class="hidden">
+      <p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-book-open mr-1 text-indigo-300"></i> Planes y programas ministeriales</p>
+      <p class="text-[10px] text-slate-500 mb-3">Sube el programa de cada asignatura y nivel (PDF o Word con texto, hasta 25 MB; idealmente la versión digital del sitio del Mineduc). La IA de Planificaciones lo usa para revisar la coherencia de cada planificación. Escribe la asignatura igual que en el horario docente; si un programa sirve para varios niveles, deja el nivel vacío.</p>
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        <input id="prog-asignatura" placeholder="Asignatura (ej: Lenguaje)" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white">
+        <input id="prog-nivel" placeholder="Nivel (ej: 3° básico) — opcional" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white">
+      </div>
+      <input id="prog-archivo" type="file" accept=".pdf,.docx" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-[10px] text-slate-400 mb-2">
+      <button id="prog-btn" onclick="subirPrograma()" class="w-full gaduai-btn-accent text-white text-xs font-bold py-2.5 rounded-xl mb-3"><i class="fa-solid fa-file-arrow-up mr-1"></i> Subir programa</button>
+      <div id="prog-lista" class="space-y-2"></div>
+    </div>
   </div>
 </div>
 
@@ -863,6 +877,12 @@
         <label class="text-[11px] text-slate-400 flex items-end gap-2 pb-2"><input id="plan-cfg-auto" type="checkbox" class="w-4 h-4"> Enviar los links y el recordatorio automáticamente</label>
       </div>
       <p class="text-[10.5px] text-slate-500 mt-2">El recordatorio sale el día anterior al plazo, solo a quien no ha entregado. Las asignaturas y cursos de cada docente salen de Configuración → Horarios docentes, y su correo, de Directorio: colaboradores.</p>
+      <div class="mt-4 pt-4 border-t border-slate-800">
+        <p class="text-xs font-bold text-white mb-1"><i class="fa-solid fa-brain plan-acento"></i> Criterios de revisión de la IA</p>
+        <p class="text-[10.5px] text-slate-500 mb-2">Uno por línea, con el formato <b>Nombre: qué debe cumplir</b>. La IA revisa cada planificación con estos criterios y en este orden.</p>
+        <textarea id="plan-cfg-criterios" rows="9" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[12px] text-white"></textarea>
+        <p id="plan-cfg-programas" class="text-[10.5px] text-slate-500 mt-2"></p>
+      </div>
       <button onclick="planGuardarConfig()" class="mt-3 gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-regular fa-floppy-disk"></i> Guardar</button>
     </div>
 
@@ -1637,6 +1657,7 @@ const CONFIG_SUBTEMAS = [
   {id:"cm-funcionario", label:"Directorio: colaboradores", icon:"fa-people-group", color:"cyan", soloMaster:false},
   {id:"cm-estudiante", label:"Directorio: estudiantes", icon:"fa-user-graduate", color:"violet", soloMaster:false},
   {id:"cm-horario", label:"Horarios docentes", icon:"fa-calendar-days", color:"amber", soloMaster:false},
+  {id:"programas", label:"Programas ministeriales", icon:"fa-book-open", color:"indigo", soloMaster:false},
 ];
 async function abrirUsuarios(){
   const esDirector = STATE.perfil === "Director/a de colegio";
@@ -1668,6 +1689,50 @@ async function mostrarSubtemaConfig(id){
   if(id==="insignia") await cargarInsigniaPreview();
   if(id==="pulso-config") await cargarPulsoConfigPreview();
   if(id==="documentos-ia") await renderListaDocumentos();
+  if(id==="programas") await renderProgramas();
+}
+/* ---------- Configuración: planes y programas ministeriales (Dirección) ---------- */
+async function renderProgramas(){
+  const cont = document.getElementById("prog-lista");
+  try{
+    const lista = await api(`/api/colegios/${STATE.colegioId}/planificacion-programas`);
+    cont.innerHTML = lista.map(p=>`<div class="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2.5">
+        <i class="fa-solid fa-book-open text-indigo-300"></i>
+        <div class="flex-1 min-w-0"><p class="text-xs font-bold text-white">${esc(p.asignatura)}${p.nivel?` · ${esc(p.nivel)}`:" · todos los niveles"}</p>
+          <p class="text-[10px] text-slate-500 truncate">${esc(p.archivo_nombre)}${p.paginas?` · ${p.paginas} págs.`:""} · subido por ${esc(p.subido_por)}</p></div>
+        <button id="prog-del-${p.id}" onclick="eliminarPrograma(${p.id})" class="text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-700 text-slate-300 hover:text-rose-300">Quitar</button>
+      </div>`).join("") || '<p class="text-[11px] text-slate-500 text-center py-3">Aún no hay programas cargados.</p>';
+  }catch(e){ cont.innerHTML = '<p class="text-[11px] text-rose-300">No se pudieron cargar los programas.</p>'; }
+}
+async function subirPrograma(){
+  const asignatura = document.getElementById("prog-asignatura").value.trim();
+  const nivel = document.getElementById("prog-nivel").value.trim();
+  const file = document.getElementById("prog-archivo").files[0];
+  if(!asignatura){ toast("Escribe la asignatura"); return; }
+  if(!file){ toast("Elige el archivo del programa"); return; }
+  if(!/\.(pdf|docx)$/i.test(file.name)){ toast("El programa debe ser PDF o Word (.docx)"); return; }
+  if(file.size > 25*1024*1024){ toast("El archivo pesa más de 25 MB"); return; }
+  const btn = document.getElementById("prog-btn");
+  btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Leyendo el programa…';
+  try{
+    const data = await new Promise((ok, mal)=>{ const fr = new FileReader(); fr.onload = ()=>ok(fr.result); fr.onerror = mal; fr.readAsDataURL(file); });
+    const r = await api(`/api/colegios/${STATE.colegioId}/planificacion-programas`, {method:"POST", body: JSON.stringify(actorBody({asignatura, nivel, nombre:file.name, data}))});
+    toast(`Programa cargado${r.paginas?` (${r.paginas} páginas)`:""}`);
+    document.getElementById("prog-asignatura").value = ""; document.getElementById("prog-nivel").value = ""; document.getElementById("prog-archivo").value = "";
+    await renderProgramas();
+  }catch(e){
+    toast(e.message==="sin_texto" ? "Ese PDF parece escaneado (solo imágenes) y la IA no puede leerlo. Usa la versión digital del programa." :
+          e.message==="archivo_grande" ? "El archivo pesa más de 25 MB" : e.message==="solo_direccion" ? "Solo Dirección puede subir programas" : "No se pudo leer el programa. Prueba con otro archivo.");
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-file-arrow-up mr-1"></i> Subir programa';
+}
+// Dos clics para quitar (sin ventanas emergentes del navegador).
+async function eliminarPrograma(id){
+  const btn = document.getElementById(`prog-del-${id}`);
+  if(btn && btn.dataset.confirmar !== "1"){ btn.dataset.confirmar = "1"; btn.textContent = "¿Quitar? Clic otra vez"; btn.classList.add("text-rose-300"); return; }
+  try{ await api(`/api/colegios/${STATE.colegioId}/planificacion-programas/${id}/eliminar`, {method:"POST", body: JSON.stringify(actorBody({}))}); toast("Programa quitado"); }
+  catch(e){ toast("No se pudo quitar el programa"); }
+  await renderProgramas();
 }
 async function cargarInsigniaPreview(){
   const img = document.getElementById("insignia-preview");
@@ -3827,6 +3892,11 @@ function planToggleConfig(){
     document.getElementById("plan-cfg-envio").value = d.config.dia_envio;
     document.getElementById("plan-cfg-limite").value = d.config.dia_limite;
     document.getElementById("plan-cfg-auto").checked = !!d.config.envio_automatico;
+    document.getElementById("plan-cfg-criterios").value = (d.config.criterios||[]).map(c=>c.descripcion ? `${c.nombre}: ${c.descripcion}` : c.nombre).join("\n");
+    const prog = d.programas || [];
+    document.getElementById("plan-cfg-programas").innerHTML = prog.length
+      ? `<b>Programas ministeriales cargados (${prog.length}):</b> ${prog.map(p=>esc(p.asignatura)+(p.nivel?" · "+esc(p.nivel):"")).join(", ")}. Los sube Dirección en Configuración → Programas ministeriales.`
+      : `Aún no hay programas ministeriales cargados: sin ellos, la IA no puede revisar la coherencia con el programa. Los sube Dirección en Configuración → Programas ministeriales.`;
   }
 }
 async function planGuardarConfig(){
@@ -3836,9 +3906,13 @@ async function planGuardarConfig(){
     toast("Revisa los días: los links deben salir antes o el mismo día del plazo"); return;
   }
   try{
-    await api(`/api/colegios/${STATE.colegioId}/planificaciones/config`, {method:"POST", body: JSON.stringify(actorBody({diaEnvio, diaLimite, envioAutomatico: document.getElementById("plan-cfg-auto").checked}))});
+    const criterios = document.getElementById("plan-cfg-criterios").value.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{
+      const i = l.indexOf(":"); return i>0 ? {nombre:l.slice(0,i).trim(), descripcion:l.slice(i+1).trim()} : {nombre:l, descripcion:""};
+    });
+    if(!criterios.length){ toast("Deja al menos un criterio de revisión"); return; }
+    await api(`/api/colegios/${STATE.colegioId}/planificaciones/config`, {method:"POST", body: JSON.stringify(actorBody({diaEnvio, diaLimite, envioAutomatico: document.getElementById("plan-cfg-auto").checked, criterios}))});
     document.getElementById("plan-config").hidden = true;
-    toast("Calendario guardado");
+    toast("Configuración guardada");
     await planCargar();
   }catch(e){ toast("No se pudo guardar"); }
 }
@@ -4102,7 +4176,7 @@ function planHtmlAnalisis(planId, r){
   return caja(`
     <p class="text-[11px] text-slate-400 mb-3">${cumplen} de ${crit.length} criterios cumplidos · ${a.programa ? `revisada contra el programa de <b class="text-slate-200">${esc(a.programa)}</b>` : `<span class="text-amber-200">sin programa ministerial cargado para esta asignatura y nivel</span>`}</p>
     <div class="space-y-1.5">${crit.map(c=>{ const k = PLAN_CUMPLE[c.cumple] || PLAN_CUMPLE.no_verificable; return `
-      <div class="flex gap-2 text-xs bg-slate-950/60 rounded-lg px-3 py-2">
+      <div class="flex gap-2 text-xs plan-fila rounded-lg px-3 py-2">
         <i class="fa-solid ${k[0]} mt-0.5" title="${k[1]}"></i>
         <div><b class="text-slate-200">${esc(c.criterio)}</b> <span class="text-[10px] text-slate-500">· ${k[1]}</span><p class="text-slate-400">${esc(c.comentario)}</p></div>
       </div>`; }).join("")}</div>
@@ -4275,7 +4349,10 @@ function planDocenteTarjeta(it){
   const input = `<input type="file" class="hidden" accept=".pdf,.doc,.docx" onchange="planDocenteElegir(${it.id}, this.files[0])">`;
   let cuerpo;
   if(it.estado==="revisada"){
-    cuerpo = `<p class="mt-3 text-sm" style="color:#5B5D72"><i class="fa-solid fa-file"></i> ${esc(it.archivo_nombre)}</p>`;
+    cuerpo = `<p class="mt-3 text-sm" style="color:#5B5D72"><i class="fa-solid fa-file"></i> ${esc(it.archivo_nombre)}</p>`
+      + (it.retroalimentacion ? `<div class="mt-3 rounded-xl p-4 text-sm" style="background:#EAF0FF;color:#171A2E">
+          <p class="font-bold mb-1" style="color:#0C0B70"><i class="fa-solid fa-comment-dots"></i> Retroalimentación de la Unidad Técnica</p>
+          <p style="white-space:pre-wrap">${esc(it.retroalimentacion)}</p></div>` : "");
   } else if(elegido){
     // Archivo elegido, aún sin enviar: se muestra para confirmar y recién se sube con "Enviar".
     cuerpo = `<div class="mt-3 rounded-xl p-3" style="background:#EAF0FF">
