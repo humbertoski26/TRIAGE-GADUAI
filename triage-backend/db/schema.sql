@@ -529,3 +529,30 @@ create table if not exists planificacion_entregas (
   entregada_en timestamptz not null default now()
 );
 create index if not exists planificacion_entregas_docente_idx on planificacion_entregas(periodo_docente_id, entregada_en desc);
+
+-- ---------- Planificaciones, etapa 2: revisión con IA y V°B° ----------
+-- Criterios de revisión que define la UTP (lista de {nombre, descripcion}); null = los de fábrica.
+alter table planificacion_config add column if not exists criterios jsonb;
+-- Análisis de la IA (criterio por criterio + propuesta de retroalimentación) y el cierre de la UTP.
+alter table planificaciones add column if not exists analisis_estado text;   -- null | analizando | listo | error | sin_ia | no_legible
+alter table planificaciones add column if not exists analisis_ia jsonb;
+alter table planificaciones add column if not exists analisis_en timestamptz;
+alter table planificaciones add column if not exists retroalimentacion text;  -- borrador de la UTP; al V°B° queda la versión enviada
+alter table planificaciones add column if not exists vb_por text;
+alter table planificaciones add column if not exists vb_en timestamptz;
+
+-- Planes y programas ministeriales que sube Dirección, por asignatura y nivel. Se guarda el texto
+-- extraído (no el archivo): es lo que la IA usa para revisar la coherencia de cada planificación.
+create table if not exists planificacion_programas (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  asignatura text not null,
+  nivel text,
+  archivo_nombre text not null,
+  texto text not null,
+  paginas integer,
+  caracteres integer,
+  subido_por text not null,
+  creado_en timestamptz not null default now()
+);
+create index if not exists planificacion_programas_colegio_idx on planificacion_programas(colegio_id);

@@ -128,6 +128,8 @@ const app = express();
 // que su ruta pública acepta más que el resto. Va antes del parser general: el cuerpo ya queda
 // leído y el de 8 MB lo deja pasar.
 app.use("/api/plan-docente", express.json({ limit: "15mb" }));
+// Los planes y programas ministeriales son documentos largos (hasta 25 MB).
+app.use("/api/colegios/:id/planificacion-programas", express.json({ limit: "36mb" }));
 app.use(express.json({ limit: "8mb" })); // documentos adjuntos van en base64 dentro del JSON
 
 // Cabeceras de seguridad básicas. CSP completa queda pendiente (el frontend usa scripts inline y
@@ -2883,7 +2885,7 @@ app.get("/manifest.webmanifest", (req, res) => {
 
 // ---------- Planificaciones (UTP) ----------
 const planificaciones = registrarPlanificaciones(app, {
-  pool, asyncRoute, verificarActor, actorDeHeaders, crearAlerta, enviarCorreo, correoConfigurado,
+  pool, asyncRoute, verificarActor, actorDeHeaders, crearAlerta, enviarCorreo, correoConfigurado, anthropic,
   ahoraChile: agendaAhoraChile, sumarDias: agendaSumarDias,
 });
 

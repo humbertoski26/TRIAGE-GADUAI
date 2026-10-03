@@ -16,6 +16,8 @@
     "express": "^4.19.2",
     "nodemailer": "^6.9.14",
     "pg": "^8.12.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.8.0"
   }
 }

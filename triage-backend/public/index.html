@@ -849,7 +849,7 @@
       <div class="flex gap-2 items-center">
         <button onclick="planEnviarTodos()" id="plan-btn-enviar" class="text-[11px] font-bold px-3 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-200"><i class="fa-solid fa-paper-plane"></i> Reenviar links a pendientes</button>
         <button onclick="planToggleConfig()" class="text-[11px] font-bold px-3 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-200"><i class="fa-solid fa-gear"></i> Configurar</button>
-        <button onclick="cerrarModalId('modal-planificaciones');cargarPlanBadge()" class="text-slate-400 hover:text-white ml-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button onclick="cerrarModalId('modal-planificaciones');clearTimeout(planRevisionTimer);cargarPlanBadge()" class="text-slate-400 hover:text-white ml-1"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
     </div>
 
@@ -4058,8 +4058,10 @@ function planAbrir(id){
           <p class="text-[11px] text-slate-500">Entregada el ${esc(planFechaCorta(it.entregada_en))} · ${it.atrasada?"atrasada":"a tiempo"}${kb?" · "+kb:""}</p></div>
         <button onclick="planVerArchivo(${it.id})" class="text-xs font-bold px-3 py-2 rounded-xl border border-slate-700 hover:bg-slate-800"><i class="fa-solid fa-eye"></i> Abrir</button>
       </div>
-      <div class="mt-4 text-[11px] text-slate-400 plan-ia rounded-xl px-3 py-2"><i class="fa-solid fa-brain mr-1"></i> La revisión con IA, la retroalimentación y el V°B° llegan en la próxima etapa.</div>
+      <div id="plan-rev-ia" class="mt-4"><p class="text-[11px] text-slate-500"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Cargando la revisión…</p></div>
+      <div id="plan-rev-retro" class="mt-4"></div>
     </div>`;
+    planCargarRevision(it.id);
   }
   const r = box.getBoundingClientRect();
   if(r.top > window.innerHeight * 0.55 || r.bottom < 80) box.scrollIntoView({behavior:"smooth", block:"start"});
@@ -4068,6 +4070,109 @@ function planAbrir(id){
     b.classList.toggle("plan-sel", on); b.classList.toggle("border-slate-800", !on);
   });
 }
+/* ---------- Planificaciones, etapa 2: revisión con IA, retroalimentación y V°B° ---------- */
+let planRevisionTimer = null;
+const PLAN_CUMPLE = {
+  si:["fa-circle-check text-emerald-400","Cumple"], parcial:["fa-circle-half-stroke text-amber-400","Parcial"],
+  no:["fa-circle-xmark text-rose-400","No cumple"], no_verificable:["fa-circle-question text-slate-400","No verificable"],
+};
+async function planCargarRevision(planId){
+  clearTimeout(planRevisionTimer);
+  if(planEstado.abierto !== planId || !document.getElementById("plan-rev-ia")) return;
+  let r;
+  try{ r = await api(`/api/colegios/${STATE.colegioId}/planificaciones/${planId}/detalle`); }
+  catch(e){ document.getElementById("plan-rev-ia").innerHTML = '<p class="text-[11px] text-rose-300">No se pudo cargar la revisión. Cierra y vuelve a abrir la planificación.</p>'; return; }
+  if(planEstado.abierto !== planId) return;
+  document.getElementById("plan-rev-ia").innerHTML = planHtmlAnalisis(planId, r);
+  planPintarRetro(planId, r);
+  // Mientras la IA trabaja, se vuelve a consultar cada 5 segundos.
+  if(r.analisis_estado === "analizando") planRevisionTimer = setTimeout(()=>planCargarRevision(planId), 5000);
+}
+function planHtmlAnalisis(planId, r){
+  const a = r.analisis_ia || {};
+  const caja = (contenido) => `<div class="plan-ia rounded-2xl p-4"><p class="text-xs font-bold text-white mb-2"><i class="fa-solid fa-brain mr-1"></i> Análisis de la IA</p>${contenido}</div>`;
+  const reintentar = `<button onclick="planReanalizar(${planId})" class="mt-3 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800"><i class="fa-solid fa-rotate-right"></i> Volver a analizar</button>`;
+  if(r.analisis_estado === "analizando") return caja(`<p class="text-[12px] text-slate-300"><i class="fa-solid fa-spinner fa-spin mr-1"></i> La IA está revisando la planificación. Suele tardar menos de un minuto.</p>`);
+  if(r.analisis_estado === "sin_ia") return caja(`<p class="text-[12px] text-slate-300">La revisión con IA no está activa en este GADUAI. Puedes escribir la retroalimentación a mano.</p>`);
+  if(r.analisis_estado === "no_legible") return caja(`<p class="text-[12px] text-amber-200">${esc(a.motivo || "La IA no pudo leer este archivo.")} Pide a la docente que la suba en PDF o Word (.docx).</p>`);
+  if(r.analisis_estado === "error") return caja(`<p class="text-[12px] text-rose-300">${esc(a.motivo || "No se pudo completar la revisión con IA.")}</p>${reintentar}`);
+  if(r.analisis_estado !== "listo") return caja(`<p class="text-[12px] text-slate-300">Aún no hay análisis.</p>${reintentar}`);
+  const crit = a.criterios || [];
+  const cumplen = crit.filter(c=>c.cumple==="si").length;
+  return caja(`
+    <p class="text-[11px] text-slate-400 mb-3">${cumplen} de ${crit.length} criterios cumplidos · ${a.programa ? `revisada contra el programa de <b class="text-slate-200">${esc(a.programa)}</b>` : `<span class="text-amber-200">sin programa ministerial cargado para esta asignatura y nivel</span>`}</p>
+    <div class="space-y-1.5">${crit.map(c=>{ const k = PLAN_CUMPLE[c.cumple] || PLAN_CUMPLE.no_verificable; return `
+      <div class="flex gap-2 text-xs bg-slate-950/60 rounded-lg px-3 py-2">
+        <i class="fa-solid ${k[0]} mt-0.5" title="${k[1]}"></i>
+        <div><b class="text-slate-200">${esc(c.criterio)}</b> <span class="text-[10px] text-slate-500">· ${k[1]}</span><p class="text-slate-400">${esc(c.comentario)}</p></div>
+      </div>`; }).join("")}</div>
+    ${a.resumen ? `<p class="text-[12px] text-slate-300 mt-3"><b>En resumen:</b> ${esc(a.resumen)}</p>` : ""}
+    ${reintentar}`);
+}
+function planPintarRetro(planId, r){
+  const box = document.getElementById("plan-rev-retro");
+  if(!box) return;
+  const d = planEstado.data;
+  let doc, it; d.docentes.forEach(x=>x.items.forEach(i=>{ if(i.id===planId){ doc=x; it=i; } }));
+  if(r.vb_en){
+    box.innerHTML = `<div class="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4">
+      <p class="text-xs font-bold text-emerald-300 mb-2"><i class="fa-solid fa-circle-check mr-1"></i> V°B° dado · retroalimentación enviada</p>
+      <p class="text-[12px] text-slate-200 whitespace-pre-wrap">${esc(r.retroalimentacion||"")}</p>
+      <p class="text-[10.5px] text-slate-500 mt-3">V°B° de ${esc(r.vb_por||"")} el ${esc(new Date(r.vb_en).toLocaleString("es-CL",{day:"numeric",month:"long",hour:"2-digit",minute:"2-digit",hour12:false}))} hrs.</p>
+    </div>`;
+    return;
+  }
+  const propuesta = (r.analisis_ia && r.analisis_ia.retroalimentacion) || "";
+  const area = document.getElementById("plan-retro-texto");
+  // Si ya está el editor, no se pisa lo que la UTP haya escrito: solo se completa si sigue vacío.
+  if(area){ if(!area.value.trim() && propuesta && area.dataset.editado !== "1") area.value = propuesta; return; }
+  box.innerHTML = `<div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+    <p class="text-xs font-bold text-white mb-1"><i class="fa-solid fa-pen-to-square plan-acento mr-1"></i> Retroalimentación para ${esc((doc&&doc.nombre)||"la docente")}</p>
+    <p class="text-[10.5px] text-slate-500 mb-2">Propuesta por la IA: edítala, agrega o quita lo que quieras antes de dar el V°B°.</p>
+    <textarea id="plan-retro-texto" rows="10" oninput="this.dataset.editado='1'" placeholder="${r.analisis_estado==="analizando"?"La propuesta de la IA aparecerá aquí en un momento…":"Escribe la retroalimentación para la docente…"}" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-[13px] text-slate-200 outline-none">${esc(r.retroalimentacion || propuesta)}</textarea>
+    <div id="plan-vb-zona" class="flex flex-wrap gap-2 mt-3">${planBotonesVB(planId)}</div>
+  </div>`;
+}
+function planBotonesVB(planId){
+  return `<button onclick="planPedirVB(${planId})" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2.5 rounded-xl"><i class="fa-solid fa-check-double"></i> Dar V°B° y enviar a la docente</button>
+      <button onclick="planGuardarRetro(${planId})" class="text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800"><i class="fa-regular fa-floppy-disk"></i> Guardar borrador</button>`;
+}
+async function planReanalizar(planId){
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/planificaciones/${planId}/analizar`, {method:"POST", body: JSON.stringify(actorBody({}))});
+    await planCargarRevision(planId);
+  }catch(e){ toast("No se pudo iniciar la revisión"); }
+}
+async function planGuardarRetro(planId){
+  const texto = document.getElementById("plan-retro-texto").value;
+  try{ await api(`/api/colegios/${STATE.colegioId}/planificaciones/${planId}/retro`, {method:"POST", body: JSON.stringify(actorBody({texto}))}); toast("Borrador guardado"); }
+  catch(e){ toast("No se pudo guardar el borrador"); }
+}
+// Confirmación dentro de la tarjeta antes de enviar (sin ventanas emergentes del navegador).
+function planPedirVB(planId){
+  const texto = document.getElementById("plan-retro-texto").value.trim();
+  if(!texto){ toast("Escribe la retroalimentación antes de dar el V°B°"); return; }
+  const d = planEstado.data; let doc; d.docentes.forEach(x=>x.items.forEach(i=>{ if(i.id===planId) doc=x; }));
+  document.getElementById("plan-vb-zona").innerHTML = `<div class="w-full text-[12px] text-slate-200 bg-slate-950 border plan-borde rounded-xl p-3">
+      Se enviará esta retroalimentación ${doc && doc.correo ? `al correo de <b>${esc(doc.nombre)}</b>` : "(la docente no tiene correo: quedará solo en GADUAI)"} y la planificación quedará revisada con ticket verde.
+      <div class="flex flex-wrap gap-2 mt-3">
+        <button id="plan-vb-si" onclick="planDarVB(${planId})" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-solid fa-check-double"></i> Sí, dar V°B° y enviar</button>
+        <button onclick="document.getElementById('plan-vb-zona').innerHTML=planBotonesVB(${planId})" class="text-xs font-bold px-4 py-2 rounded-xl text-slate-400 hover:text-white">Cancelar</button>
+      </div></div>`;
+}
+async function planDarVB(planId){
+  const texto = document.getElementById("plan-retro-texto").value.trim();
+  const btn = document.getElementById("plan-vb-si");
+  if(btn){ btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando…'; }
+  try{
+    const r = await api(`/api/colegios/${STATE.colegioId}/planificaciones/${planId}/vb`, {method:"POST", body: JSON.stringify(actorBody({texto}))});
+    toast(r.correo ? "V°B° dado: la retroalimentación se envió a la docente" : "V°B° dado (el correo a la docente no se pudo enviar)");
+    planEstado.abierto = planId; planEstado.filtro = "entregadas"; // queda a la vista con su ticket verde
+    await planCargar();
+    cargarPlanBadge();
+  }catch(e){ toast(e.message==="ya_revisada" ? "Esta planificación ya tenía V°B°" : "No se pudo dar el V°B°. Inténtalo de nuevo."); planCargarRevision(planId); }
+}
+
 async function planVerArchivo(id){
   try{
     const r = await api(`/api/colegios/${STATE.colegioId}/planificaciones/${id}/archivo`);

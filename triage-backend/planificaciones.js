@@ -16,6 +16,46 @@
 const crypto = require("crypto");
 
 const PERFILES_PLANIFICACION = ["UTP"];
+// Dirección sube los planes y programas ministeriales (los mismos dos perfiles que administran el colegio).
+const PERFILES_PROGRAMAS = ["Director ejecutivo/máster", "Director/a de colegio"];
+// Revisión con IA: el modelo vigente de Claude, con esfuerzo medio (equilibrio calidad/costo) y el
+// respaldo automático de Anthropic si el modelo declina una solicitud.
+const MODELO_REVISION = "claude-opus-5-5";
+const PROGRAMA_MAX_BYTES = 25 * 1024 * 1024;
+// Criterios de fábrica; la UTP los ajusta en Planificaciones → Configurar.
+const CRITERIOS_BASE = [
+  { nombre: "Fecha o período", descripcion: "Indica claramente el período (fechas o semanas) que cubre la planificación." },
+  { nombre: "Título de la unidad", descripcion: "Declara el nombre de la unidad que se trabajará." },
+  { nombre: "Objetivos de aprendizaje (OA)", descripcion: "Declara los OA del programa que corresponden, por número o descripción." },
+  { nombre: "Coherencia con la unidad en curso", descripcion: "Las actividades corresponden a la unidad que el curso está trabajando en este período." },
+  { nombre: "Coherencia con el programa ministerial", descripcion: "Los OA, contenidos y actividades se alinean con el programa de la asignatura y nivel." },
+  { nombre: "Actividades de aprendizaje", descripcion: "Describe actividades concretas (inicio, desarrollo y cierre) coherentes con los OA." },
+  { nombre: "Evaluación", descripcion: "Indica cómo y cuándo se evaluará el logro de los objetivos." },
+  { nombre: "Adecuaciones y diversificación (DUA)", descripcion: "Considera adecuaciones o estrategias diversificadas para las necesidades de sus estudiantes." },
+];
+// Respuesta estructurada que se le pide a la IA (JSON validado por la API).
+const ESQUEMA_ANALISIS = {
+  type: "object",
+  properties: {
+    criterios: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          criterio: { type: "string" },
+          cumple: { type: "string", enum: ["si", "parcial", "no", "no_verificable"] },
+          comentario: { type: "string" },
+        },
+        required: ["criterio", "cumple", "comentario"],
+        additionalProperties: false,
+      },
+    },
+    resumen: { type: "string" },
+    retroalimentacion: { type: "string" },
+  },
+  required: ["criterios", "resumen", "retroalimentacion"],
+  additionalProperties: false,
+};
 const PERSONA_AVISOS = "Planificaciones (automático)";
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
   "septiembre", "octubre", "noviembre", "diciembre"];
@@ -69,7 +109,7 @@ async function repararTextosMalCodificados(pool) {
 const DATA_URI_RE = /^data:([\w.+-]+\/[\w.+-]+)?(;[\w.+=-]+)*;base64,([A-Za-z0-9+/=\s]+)$/;
 
 function registrarPlanificaciones(app, d) {
-  const { pool, asyncRoute, verificarActor, actorDeHeaders, crearAlerta, enviarCorreo, correoConfigurado, ahoraChile, sumarDias } = d;
+  const { pool, asyncRoute, verificarActor, actorDeHeaders, crearAlerta, enviarCorreo, correoConfigurado, ahoraChile, sumarDias, anthropic } = d;
 
   // ---------- utilidades ----------
   const nombreMes = (mes) => MESES[mes - 1];
@@ -296,7 +336,8 @@ function registrarPlanificaciones(app, d) {
         "select id, persona_id, nombre, correo, token, link_enviado_en, recordatorio_enviado_en from planificacion_docentes where periodo_id=$1 order by nombre", [periodo.id]
       )).rows;
       const planes = (await pool.query(
-        `select id, periodo_docente_id, asignatura, curso, estado, archivo_nombre, archivo_bytes, entregada_en, atrasada
+        `select id, periodo_docente_id, asignatura, curso, estado, archivo_nombre, archivo_bytes, entregada_en, atrasada,
+                analisis_estado, vb_por, vb_en
            from planificaciones where periodo_id=$1 order by asignatura, curso`, [periodo.id]
       )).rows;
       const base = baseUrl(req);
@@ -309,7 +350,9 @@ function registrarPlanificaciones(app, d) {
       "select accion, detalle, autor, creado_en from planificacion_historial where colegio_id=$1 order by creado_en desc limit 60", [colegioId]
     )).rows;
     res.json({
-      hoy, anio, mes, config, correoActivo: correoConfigurado(), periodo: periodo && { ...periodo, fecha_limite: isoFecha(periodo.fecha_limite) },
+      hoy, anio, mes, config: { ...config, criterios: config.criterios || CRITERIOS_BASE }, iaActiva: !!anthropic,
+      programas: (await pool.query("select id, asignatura, nivel, archivo_nombre from planificacion_programas where colegio_id=$1 order by asignatura, nivel", [colegioId])).rows,
+      correoActivo: correoConfigurado(), periodo: periodo && { ...periodo, fecha_limite: isoFecha(periodo.fecha_limite) },
       fechaLimiteSugerida: fechaLimiteDe(anio, mes, config.dia_limite), docentes, sinCorreo, historial: hist,
       previstos: { docentes: conHorario.length, planificaciones: conHorario.reduce((n, d) => n + d.items.length, 0),
         nombres: conHorario.map((d) => ({ nombre: d.nombre, conCorreo: !!d.correo })).sort((a, b) => a.nombre.localeCompare(b.nombre)) },
@@ -330,6 +373,13 @@ function registrarPlanificaciones(app, d) {
               actualizado_por=$5, actualizado_en=now() where colegio_id=$1`,
       [colegioId, diaEnvio, diaLimite, req.body.envioAutomatico !== false, actor.nombre]
     );
+    if (Array.isArray(req.body.criterios)) {
+      const criterios = req.body.criterios
+        .map((c) => ({ nombre: String(c.nombre || "").trim().slice(0, 120), descripcion: String(c.descripcion || "").trim().slice(0, 400) }))
+        .filter((c) => c.nombre).slice(0, 15);
+      await pool.query("update planificacion_config set criterios=$2 where colegio_id=$1",
+        [colegioId, criterios.length ? JSON.stringify(criterios) : null]);
+    }
     await historial(colegioId, null, "Configuración actualizada",
       `Links el día ${diaEnvio}, plazo el día ${diaLimite} de cada mes, envío ${req.body.envioAutomatico !== false ? "automático" : "manual"}.`, actor.nombre);
     res.json({ ok: true });
@@ -412,7 +462,8 @@ function registrarPlanificaciones(app, d) {
     pd = await docentePorToken(req.params.token);
     if (!pd) return res.status(404).json({ error: "link_invalido" });
     const items = (await pool.query(
-      `select id, asignatura, curso, estado, archivo_nombre, entregada_en, atrasada
+      `select id, asignatura, curso, estado, archivo_nombre, entregada_en, atrasada,
+              case when estado='revisada' then retroalimentacion end as retroalimentacion, vb_en
          from planificaciones where periodo_docente_id=$1 order by asignatura, curso`, [pd.id]
     )).rows;
     // Historial de todas sus entregas en GADUAI (este mes y anteriores), del más reciente al más antiguo.
@@ -459,9 +510,10 @@ function registrarPlanificaciones(app, d) {
     const reemplazo = plan.estado === "entregada";
     await pool.query(
       `update planificaciones set archivo_nombre=$2, archivo_bytes=$3, archivo_data=$4, estado='entregada',
-              entregada_en=now(), atrasada=$5 where id=$1`,
+              entregada_en=now(), atrasada=$5, analisis_estado=null, analisis_ia=null, retroalimentacion=null where id=$1`,
       [plan.id, nombre, bytes, dataLimpia, atrasada]
     );
+    analizarEnSegundoPlano(plan.id); // la UTP la encuentra ya revisada por la IA
     const que = `${plan.asignatura} · ${plan.curso}`;
     const accion = reemplazo ? "Planificación reemplazada" : "Planificación recibida";
     const entrega = (await pool.query(
@@ -495,6 +547,242 @@ function registrarPlanificaciones(app, d) {
       }
     }
     res.json({ ok: true, atrasada, comprobante, entregadaEn: entrega.entregada_en });
+  }));
+
+  // ---------- etapa 2: lectura de documentos ----------
+  // Las librerías se cargan al usarlas: si faltaran, el resto del módulo sigue funcionando.
+  async function textoDePdf(buffer) {
+    const pdfParse = require("pdf-parse/lib/pdf-parse.js");
+    const r = await pdfParse(buffer);
+    return { texto: String(r.text || "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim(), paginas: r.numpages || null };
+  }
+  async function textoDeDocx(buffer) {
+    const mammoth = require("mammoth");
+    const r = await mammoth.extractRawText({ buffer });
+    return { texto: String(r.value || "").replace(/\n{3,}/g, "\n\n").trim(), paginas: null };
+  }
+  function decodificarDataUri(data) {
+    const m = String(data || "").match(DATA_URI_RE);
+    if (!m) return null;
+    return { tipo: (m[1] || "").toLowerCase(), base64: m[3].replace(/\s/g, "") };
+  }
+  const clave = (s) => claveAsignatura(arreglarTildes(s));
+  // Programa que corresponde a la planificación: misma asignatura y nivel; si no hay del nivel,
+  // uno de la asignatura sin nivel indicado.
+  async function programaPara(colegioId, asignatura, curso) {
+    const filas = (await pool.query("select id, asignatura, nivel, archivo_nombre, texto from planificacion_programas where colegio_id=$1", [colegioId])).rows;
+    const deAsig = filas.filter((f) => clave(f.asignatura) === clave(asignatura));
+    const nivelCurso = clave(curso).replace(/\s+[a-z]$/, ""); // "3° básico a" → "3° básico"
+    return deAsig.find((f) => f.nivel && nivelCurso.startsWith(clave(f.nivel))) || deAsig.find((f) => !f.nivel) || null;
+  }
+
+  // ---------- etapa 2: revisión con IA ----------
+  async function analizarPlanificacion(planId) {
+    const plan = (await pool.query(
+      `select p.*, pd.nombre as docente, per.anio, per.mes, co.nombre as colegio_nombre
+         from planificaciones p join planificacion_docentes pd on pd.id=p.periodo_docente_id
+         join planificacion_periodos per on per.id=p.periodo_id join colegios co on co.id=p.colegio_id
+        where p.id=$1`, [planId]
+    )).rows[0];
+    if (!plan || !plan.archivo_data) return;
+    const guardar = (estado, analisis) => pool.query(
+      "update planificaciones set analisis_estado=$2, analisis_ia=$3, analisis_en=now() where id=$1",
+      [planId, estado, analisis ? JSON.stringify(analisis) : null]
+    );
+    if (!anthropic) return guardar("sin_ia", null);
+
+    const archivo = decodificarDataUri(plan.archivo_data);
+    const ext = (String(plan.archivo_nombre).match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase();
+    let bloquePlan;
+    if (ext === "pdf" && archivo) {
+      bloquePlan = { type: "document", source: { type: "base64", media_type: "application/pdf", data: archivo.base64 } };
+    } else if (ext === "docx" && archivo) {
+      const { texto } = await textoDeDocx(Buffer.from(archivo.base64, "base64"));
+      if (!texto) return guardar("no_legible", { motivo: "El documento Word no tiene texto legible." });
+      bloquePlan = { type: "text", text: `PLANIFICACIÓN (texto extraído de ${plan.archivo_nombre}):\n\n${texto}` };
+    } else {
+      return guardar("no_legible", { motivo: "Formato .doc antiguo: la IA solo lee PDF y Word moderno (.docx)." });
+    }
+
+    const config = await configDe(plan.colegio_id);
+    const criterios = config.criterios || CRITERIOS_BASE;
+    const programa = await programaPara(plan.colegio_id, plan.asignatura, plan.curso);
+    const instrucciones =
+      `Eres asesor/a técnico-pedagógico/a de la Unidad Técnico-Pedagógica (UTP) de ${plan.colegio_nombre}, en Chile. ` +
+      `Revisas las planificaciones que entregan las docentes y propones a la jefa de UTP un análisis y una retroalimentación. ` +
+      `La jefa de UTP revisa, edita y decide; tú no apruebas nada.\n\n` +
+      `Evalúa la planificación contra cada uno de estos criterios, en este mismo orden y con el mismo nombre:\n` +
+      criterios.map((c, i) => `${i + 1}. ${c.nombre}: ${c.descripcion}`).join("\n") +
+      `\n\nPara cada criterio indica "si", "parcial", "no" o "no_verificable" (solo si con la información disponible no se puede ` +
+      `comprobar, por ejemplo la coherencia con el programa cuando no se adjunta el programa), y un comentario breve y concreto ` +
+      `que cite lo que dice o falta en la planificación. No inventes contenido que no esté en el documento.\n\n` +
+      `"resumen": 2 o 3 oraciones para la jefa de UTP con lo principal.\n` +
+      `"retroalimentacion": un mensaje para la docente, en español de Chile, cordial y profesional, dirigido a ella por su nombre. ` +
+      `Destaca primero lo logrado, luego sugerencias concretas y accionables (máximo 4), y cierra con "Cordialmente,\\nUnidad Técnico-Pedagógica". ` +
+      `Sin listas de puntaje ni lenguaje de evaluación punitiva.`;
+    const system = [{ type: "text", text: instrucciones }];
+    if (programa) {
+      // El programa es largo y se repite en todas las revisiones de esa asignatura: va en caché.
+      system.push({ type: "text", text: `PROGRAMA MINISTERIAL de referencia (${programa.asignatura}${programa.nivel ? " · " + programa.nivel : ""}, archivo ${programa.archivo_nombre}):\n\n${programa.texto}`, cache_control: { type: "ephemeral" } });
+    }
+    const contexto = `Docente: ${plan.docente}\nAsignatura: ${plan.asignatura}\nCurso: ${plan.curso}\nMes planificado: ${nombreMes(plan.mes)} ${plan.anio}\n` +
+      (programa ? "" : "No hay programa ministerial cargado para esta asignatura y nivel: marca la coherencia con el programa como no_verificable.\n");
+
+    try {
+      const respuesta = await anthropic.beta.messages.create({
+        model: MODELO_REVISION,
+        max_tokens: 16000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        output_config: { effort: "medium", format: { type: "json_schema", schema: ESQUEMA_ANALISIS } },
+        system,
+        messages: [{ role: "user", content: [bloquePlan, { type: "text", text: contexto + "\nRevisa esta planificación." }] }],
+      });
+      if (respuesta.stop_reason === "refusal") return guardar("error", { motivo: "La IA no pudo revisar este documento." });
+      if (respuesta.stop_reason === "max_tokens") return guardar("error", { motivo: "La respuesta de la IA quedó incompleta. Vuelve a analizar." });
+      const texto = respuesta.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+      const json = JSON.parse(texto);
+      await guardar("listo", {
+        ...json, modelo: respuesta.model, generado_en: new Date().toISOString(),
+        programa: programa ? `${programa.asignatura}${programa.nivel ? " · " + programa.nivel : ""}` : null,
+      });
+    } catch (err) {
+      console.error("Planificaciones: error en la revisión con IA de", planId, "-", err.message);
+      await guardar("error", { motivo: "No se pudo completar la revisión con IA. Vuelve a intentarlo en unos minutos." });
+    }
+  }
+  function analizarEnSegundoPlano(planId) {
+    pool.query("update planificaciones set analisis_estado='analizando', analisis_en=now() where id=$1", [planId])
+      .then(() => analizarPlanificacion(planId))
+      .catch((err) => {
+        console.error("Planificaciones: falló la revisión con IA de", planId, "-", err.message);
+        pool.query("update planificaciones set analisis_estado='error', analisis_ia=$2 where id=$1",
+          [planId, JSON.stringify({ motivo: "No se pudo leer el documento para revisarlo. Vuelve a intentarlo." })]).catch(() => {});
+      });
+  }
+
+  async function planDeUtp(req, res) {
+    const colegioId = req.params.id;
+    const actor = await actorUtp(req, colegioId);
+    if (!actor) { res.status(403).json({ error: "solo_utp" }); return {}; }
+    const plan = (await pool.query(
+      `select p.*, pd.nombre as docente, pd.correo, per.anio, per.mes, per.item_id, co.nombre as colegio_nombre
+         from planificaciones p join planificacion_docentes pd on pd.id=p.periodo_docente_id
+         join planificacion_periodos per on per.id=p.periodo_id join colegios co on co.id=p.colegio_id
+        where p.id=$1 and p.colegio_id=$2`, [req.params.planId, colegioId]
+    )).rows[0];
+    if (!plan) { res.status(404).json({ error: "no_encontrado" }); return {}; }
+    return { actor, plan };
+  }
+
+  // Detalle para la UTP: análisis de la IA y borrador de retroalimentación.
+  app.get("/api/colegios/:id/planificaciones/:planId/detalle", asyncRoute(async (req, res) => {
+    const { plan } = await planDeUtp(req, res);
+    if (!plan) return;
+    let estado = plan.analisis_estado;
+    // Una revisión que quedó a medias (ej. el servidor se reinició) se da por fallida a los 10 minutos.
+    if (estado === "analizando" && plan.analisis_en && Date.now() - new Date(plan.analisis_en).getTime() > 10 * 60 * 1000) estado = "error";
+    if (!estado && plan.estado !== "pendiente") { analizarEnSegundoPlano(plan.id); estado = "analizando"; }
+    res.json({
+      analisis_estado: estado, analisis_ia: plan.analisis_ia, retroalimentacion: plan.retroalimentacion,
+      vb_por: plan.vb_por, vb_en: plan.vb_en, iaActiva: !!anthropic,
+    });
+  }));
+
+  app.post("/api/colegios/:id/planificaciones/:planId/analizar", asyncRoute(async (req, res) => {
+    const { plan } = await planDeUtp(req, res);
+    if (!plan) return;
+    if (plan.estado === "pendiente") return res.status(409).json({ error: "sin_archivo" });
+    analizarEnSegundoPlano(plan.id);
+    res.json({ ok: true });
+  }));
+
+  app.post("/api/colegios/:id/planificaciones/:planId/retro", asyncRoute(async (req, res) => {
+    const { plan } = await planDeUtp(req, res);
+    if (!plan) return;
+    if (plan.estado === "revisada") return res.status(409).json({ error: "ya_revisada" });
+    await pool.query("update planificaciones set retroalimentacion=$2 where id=$1", [plan.id, String(req.body.texto || "").slice(0, 8000)]);
+    res.json({ ok: true });
+  }));
+
+  // V°B°: la retroalimentación (editada por la UTP) se envía al correo de la docente y la
+  // planificación queda revisada (ticket verde). Aviso a la UTP e historial.
+  app.post("/api/colegios/:id/planificaciones/:planId/vb", asyncRoute(async (req, res) => {
+    const { actor, plan } = await planDeUtp(req, res);
+    if (!plan) return;
+    if (plan.estado !== "entregada") return res.status(409).json({ error: plan.estado === "revisada" ? "ya_revisada" : "sin_archivo" });
+    const texto = String(req.body.texto || "").trim().slice(0, 8000);
+    if (!texto) return res.status(400).json({ error: "retro_vacia" });
+    await pool.query(
+      "update planificaciones set estado='revisada', retroalimentacion=$2, vb_por=$3, vb_en=now() where id=$1",
+      [plan.id, texto, actor.nombre]
+    );
+    const que = `${plan.asignatura} · ${plan.curso}`;
+    let correo = false;
+    if (plan.correo) {
+      correo = await enviarCorreo({
+        to: plan.correo,
+        asunto: `Retroalimentación de tu planificación de ${que} · ${plan.colegio_nombre}`,
+        texto: `${texto}\n\n—\nPlanificación de ${nombreMes(plan.mes)} ${plan.anio} · ${que}\nRevisada por ${actor.nombre} (UTP) · ${plan.colegio_nombre}`,
+      });
+    }
+    await historial(plan.colegio_id, plan.periodo_id, "Retroalimentación entregada",
+      `${plan.docente} — ${que}${correo ? " (enviada por correo)" : plan.correo ? " (el correo no se pudo enviar)" : " (sin correo)"}`, actor.nombre);
+    if (plan.item_id) {
+      for (const utp of await nombresUtp(plan.colegio_id)) {
+        crearAlerta(plan.colegio_id, plan.item_id, utp, `Retroalimentación entregada: ${plan.docente} — ${que}`, { autor: "Planificaciones" }).catch(() => {});
+      }
+    }
+    res.json({ ok: true, correo });
+  }));
+
+  // ---------- etapa 2: planes y programas ministeriales (los sube Dirección) ----------
+  async function actorConPerfil(req, colegioId, perfiles) {
+    const { correo, clave } = req.method === "GET" ? actorDeHeaders(req)
+      : { correo: (req.body || {}).actorCorreo, clave: (req.body || {}).actorClave };
+    const actor = await verificarActor(colegioId, correo, clave);
+    return actor && perfiles.includes(actor.perfil) ? actor : null;
+  }
+  app.get("/api/colegios/:id/planificacion-programas", asyncRoute(async (req, res) => {
+    const actor = await actorConPerfil(req, req.params.id, [...PERFILES_PROGRAMAS, ...PERFILES_PLANIFICACION]);
+    if (!actor) return res.status(403).json({ error: "sin_permiso" });
+    const r = await pool.query(
+      `select id, asignatura, nivel, archivo_nombre, paginas, caracteres, subido_por, creado_en
+         from planificacion_programas where colegio_id=$1 order by asignatura, nivel`, [req.params.id]
+    );
+    res.json(r.rows);
+  }));
+  app.post("/api/colegios/:id/planificacion-programas", asyncRoute(async (req, res) => {
+    const actor = await actorConPerfil(req, req.params.id, PERFILES_PROGRAMAS);
+    if (!actor) return res.status(403).json({ error: "solo_direccion" });
+    const asignatura = normalizar(req.body.asignatura).slice(0, 120);
+    const nivel = normalizar(req.body.nivel).slice(0, 60) || null;
+    const nombre = String(req.body.nombre || "").trim().slice(0, 180);
+    const ext = (nombre.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase();
+    const archivo = decodificarDataUri(req.body.data);
+    if (!asignatura || !archivo || !["pdf", "docx"].includes(ext)) return res.status(400).json({ error: "datos_invalidos" });
+    const buffer = Buffer.from(archivo.base64, "base64");
+    if (buffer.length > PROGRAMA_MAX_BYTES) return res.status(413).json({ error: "archivo_grande" });
+    let extraido;
+    try { extraido = ext === "pdf" ? await textoDePdf(buffer) : await textoDeDocx(buffer); }
+    catch (err) { return res.status(422).json({ error: "no_legible" }); }
+    // Un PDF escaneado (solo imágenes) no tiene texto: se avisa en vez de guardar un programa vacío.
+    if (!extraido.texto || extraido.texto.length < 500) return res.status(422).json({ error: "sin_texto" });
+    const r = await pool.query(
+      `insert into planificacion_programas (colegio_id, asignatura, nivel, archivo_nombre, texto, paginas, caracteres, subido_por)
+       values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
+      [req.params.id, asignatura, nivel, nombre, extraido.texto, extraido.paginas, extraido.texto.length, actor.nombre]
+    );
+    await historial(req.params.id, null, "Programa ministerial cargado", `${asignatura}${nivel ? " · " + nivel : ""} (${nombre})`, actor.nombre);
+    res.json({ ok: true, id: r.rows[0].id, paginas: extraido.paginas, caracteres: extraido.texto.length });
+  }));
+  app.post("/api/colegios/:id/planificacion-programas/:progId/eliminar", asyncRoute(async (req, res) => {
+    const actor = await actorConPerfil(req, req.params.id, PERFILES_PROGRAMAS);
+    if (!actor) return res.status(403).json({ error: "solo_direccion" });
+    const r = await pool.query("delete from planificacion_programas where id=$1 and colegio_id=$2 returning asignatura, nivel, archivo_nombre",
+      [req.params.progId, req.params.id]);
+    if (r.rows.length) await historial(req.params.id, null, "Programa ministerial eliminado", `${r.rows[0].asignatura}${r.rows[0].nivel ? " · " + r.rows[0].nivel : ""} (${r.rows[0].archivo_nombre})`, actor.nombre);
+    res.json({ ok: true });
   }));
 
   return { tareaDiaria, PERSONA_AVISOS };
