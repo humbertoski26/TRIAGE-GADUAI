@@ -1896,7 +1896,19 @@ function cmLeerArchivo(modo){
   const reader = new FileReader();
   reader.onload = (e) => {
     try{
-      const wb = XLSX.read(e.target.result, {type:"array"});
+      // Un .csv puede venir en UTF-8 (Google Sheets, "CSV UTF-8" de Excel) o en la codificación
+      // antigua de Windows/Excel. Leído siempre como la antigua, "3° básico" quedaba "3Â° bÃ¡sico":
+      // se intenta UTF-8 estricto y, si no calza, se lee como Windows-1252.
+      let wb;
+      if(/\.csv$/i.test(file.name)){
+        const bytes = new Uint8Array(e.target.result);
+        let texto;
+        try{ texto = new TextDecoder("utf-8", {fatal:true}).decode(bytes); }
+        catch(_){ texto = new TextDecoder("windows-1252").decode(bytes); }
+        wb = XLSX.read(texto.replace(/^\uFEFF/, ""), {type:"string"});
+      } else {
+        wb = XLSX.read(e.target.result, {type:"array"});
+      }
       const hoja = wb.Sheets[wb.SheetNames[0]];
       const filasCrudas = XLSX.utils.sheet_to_json(hoja, {defval:""});
       const filas = filasCrudas.map(CM_CONFIG[modo].mapFila);

@@ -111,7 +111,17 @@ function registrarPlanificaciones(app, d) {
       )).rows[0] || (await pool.query("select * from planificacion_periodos where colegio_id=$1 and anio=$2 and mes=$3", [colegioId, anio, mes])).rows[0];
       await historial(colegioId, periodo.id, "Período creado", `Planificaciones de ${nombreMes(mes)} ${anio}, plazo ${fechaLarga(fechaLimite)}.`, autor);
     }
-    for (const doc of await docentesConHorario(colegioId)) {
+    await sincronizarDocentes(colegioId, periodo);
+    return periodo;
+  }
+
+  // Lleva el mes al horario vigente: suma docentes y asignaturas nuevas, y quita las entradas
+  // pendientes (sin archivo) que ya no están en el horario — ej. si se corrigió la planilla.
+  // Lo ya entregado nunca se borra.
+  async function sincronizarDocentes(colegioId, periodo) {
+    const conHorario = await docentesConHorario(colegioId);
+    const vigentes = new Set(conHorario.map((d) => String(d.persona_id)));
+    for (const doc of conHorario) {
       let pd = (await pool.query("select * from planificacion_docentes where periodo_id=$1 and persona_id=$2", [periodo.id, doc.persona_id])).rows[0];
       if (!pd) {
         pd = (await pool.query(
@@ -129,8 +139,23 @@ function registrarPlanificaciones(app, d) {
           [pd.id, periodo.id, colegioId, it.asignatura, it.curso]
         );
       }
+      const claves = doc.items.map((it) => `${claveAsignatura(it.asignatura)}|${it.curso.toLowerCase()}`);
+      const actuales = (await pool.query(
+        "select id, asignatura, curso from planificaciones where periodo_docente_id=$1 and estado='pendiente' and archivo_data is null", [pd.id]
+      )).rows;
+      for (const p of actuales) {
+        if (!claves.includes(`${claveAsignatura(p.asignatura)}|${normalizar(p.curso).toLowerCase()}`)) {
+          await pool.query("delete from planificaciones where id=$1", [p.id]);
+        }
+      }
     }
-    return periodo;
+    // Docentes que ya no tienen horario: se quitan solo si no entregaron nada.
+    const enMes = (await pool.query("select id, persona_id from planificacion_docentes where periodo_id=$1", [periodo.id])).rows;
+    for (const pd of enMes) {
+      if (vigentes.has(String(pd.persona_id))) continue;
+      const entrego = (await pool.query("select 1 from planificaciones where periodo_docente_id=$1 and estado <> 'pendiente' limit 1", [pd.id])).rows.length;
+      if (!entrego) await pool.query("delete from planificacion_docentes where id=$1", [pd.id]);
+    }
   }
 
   async function itemsDe(pdId) {
@@ -226,6 +251,7 @@ function registrarPlanificaciones(app, d) {
     const periodo = (await pool.query("select * from planificacion_periodos where colegio_id=$1 and anio=$2 and mes=$3", [colegioId, anio, mes])).rows[0] || null;
     let docentes = [];
     if (periodo) {
+      await sincronizarDocentes(colegioId, periodo);
       const pds = (await pool.query(
         "select id, persona_id, nombre, correo, token, link_enviado_en, recordatorio_enviado_en from planificacion_docentes where periodo_id=$1 order by nombre", [periodo.id]
       )).rows;
