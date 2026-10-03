@@ -853,6 +853,7 @@
     </div>
 
     <div id="plan-avisos"></div>
+    <div id="plan-confirmar"></div>
     <div id="plan-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
 
     <div class="flex gap-2 mb-4" id="plan-tabs">
@@ -3811,8 +3812,11 @@ async function planGuardarConfig(){
     await planCargar();
   }catch(e){ toast("No se pudo guardar"); }
 }
-async function planEnviar(extra, confirmacion){
-  if(confirmacion && !confirm(confirmacion)) return;
+let planEnviando = false;
+async function planEnviar(extra){
+  if(planEnviando) return;
+  planEnviando = true;
+  document.querySelectorAll(".plan-btn-envio").forEach(b=>{ b.disabled = true; b.dataset.txt = b.innerHTML; b.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando…'; });
   try{
     const r = await api(`/api/colegios/${STATE.colegioId}/planificaciones/enviar`, {method:"POST", body: JSON.stringify(actorBody({anio:planEstado.anio, mes:planEstado.mes, ...extra}))});
     await planCargar();
@@ -3825,8 +3829,25 @@ async function planEnviar(extra, confirmacion){
     if(r.sinCorreo) partes.push(`${r.sinCorreo} docente${r.sinCorreo===1?"":"s"} sin correo en el directorio.`);
     if(!partes.length) partes.push(r.docentes ? "Todas las docentes ya entregaron: no había a quién enviar." : "No hay docentes con horario cargado para este mes.");
     planMostrarResultado(partes.join(" "), !!r.fallidos || (!r.enviados && !!r.sinCorreo));
+    if(r.preparado){ planEstado.tab = "envios"; planPintar(); planMostrarResultado("Mes preparado sin enviar correos. En esta pestaña puedes copiar el link de cada docente o enviárselo por correo una por una.", false); }
     if(r.fallidos){ planEstado.tab = "envios"; planPintar(); }
-  }catch(e){ toast("No se pudieron enviar los links"); }
+  }catch(e){ planMostrarResultado("No se pudieron enviar los links. Revisa tu conexión e inténtalo de nuevo.", true); }
+  finally{
+    planEnviando = false;
+    document.querySelectorAll(".plan-btn-envio").forEach(b=>{ b.disabled = false; if(b.dataset.txt) b.innerHTML = b.dataset.txt; });
+  }
+}
+// Confirmación dentro de la pantalla (algunos navegadores bloquean las ventanas emergentes
+// de confirmación sin avisar, y el botón parecía no responder). Muestra a quién le llegará.
+function planConfirmar(html, botones){
+  const box = document.getElementById("plan-confirmar");
+  box.innerHTML = `<div class="bg-slate-950 border border-teal-500/40 rounded-2xl p-4 mb-4">
+    <div class="text-xs text-slate-200">${html}</div>
+    <div class="flex flex-wrap gap-2 mt-3">${botones.map((b,i)=>`<button data-i="${i}" class="plan-btn-envio text-xs font-bold px-4 py-2 rounded-xl ${b.principal?"gaduai-btn-teal text-white":"border border-slate-700 text-slate-200 hover:bg-slate-800"}">${b.texto}</button>`).join("")}
+      <button onclick="document.getElementById('plan-confirmar').innerHTML=''" class="text-xs font-bold px-4 py-2 rounded-xl text-slate-400 hover:text-white">Cancelar</button></div>
+  </div>`;
+  box.querySelectorAll("button[data-i]").forEach(el=>el.onclick=async()=>{ await botones[+el.dataset.i].accion(); document.getElementById("plan-confirmar").innerHTML=""; });
+  box.scrollIntoView({behavior:"smooth", block:"nearest"});
 }
 function planMostrarResultado(texto, esError){
   const box = document.getElementById("plan-avisos");
@@ -3839,11 +3860,21 @@ async function planCopiarLink(link, nombre){
 function planEnviarTodos(){
   const d = planEstado.data;
   if(!d.periodo){ planPrimerEnvio(); return; }
-  planEnviar({}, "Se reenviará el link a todas las docentes que aún tienen planificaciones pendientes este mes. ¿Continuar?");
+  const pendientes = d.docentes.filter(doc=>doc.items.some(i=>i.estado==="pendiente"));
+  if(!pendientes.length){ planMostrarResultado("Todas las docentes ya entregaron: no hay a quién reenviar.", false); return; }
+  planConfirmar(`Se reenviará el link por correo a <b>${pendientes.length} docente${pendientes.length===1?"":"s"}</b> con planificaciones pendientes: ${pendientes.map(x=>esc(x.nombre)).join(", ")}.`,
+    [{texto:'<i class="fa-solid fa-paper-plane"></i> Sí, reenviar', principal:true, accion:()=>planEnviar({})}]);
 }
 function planPrimerEnvio(){
-  const fecha = document.getElementById("plan-primer-fecha");
-  planEnviar({fechaLimite: fecha ? fecha.value : undefined}, `Se enviará el link de ${PLAN_MESES[planEstado.mes-1]} a cada docente con horario cargado. ¿Continuar?`);
+  const d = planEstado.data;
+  const fecha = (document.getElementById("plan-primer-fecha")||{}).value || d.fechaLimiteSugerida;
+  const nombres = d.previstos.nombres || [];
+  const conCorreo = nombres.filter(n=>n.conCorreo);
+  planConfirmar(`Plazo: <b>${esc(planFechaLarga(fecha))}</b>. Se enviará el link de ${PLAN_MESES[d.mes-1]} por correo a <b>${conCorreo.length} docente${conCorreo.length===1?"":"s"}</b>:
+      <div class="mt-2 max-h-32 overflow-y-auto text-slate-400">${nombres.map(n=>esc(n.nombre)+(n.conCorreo?"":' <span class="text-amber-300">(sin correo)</span>')).join(" · ")}</div>
+      <p class="mt-2 text-slate-400">Si prefieres no escribirles a todas ahora, prepara el mes sin enviar: después copias o envías el link de cada docente desde la pestaña Envíos.</p>`,
+    [{texto:`<i class="fa-solid fa-paper-plane"></i> Enviar a ${conCorreo.length} docente${conCorreo.length===1?"":"s"}`, principal:true, accion:()=>planEnviar({fechaLimite: fecha})},
+     {texto:'<i class="fa-regular fa-folder-open"></i> Preparar el mes sin enviar correos', accion:()=>planEnviar({fechaLimite: fecha, soloPreparar:true})}]);
 }
 function planTab(t){ planEstado.tab = t; planPintar(); }
 
@@ -3895,7 +3926,7 @@ function planVistaSinPeriodo(d){
     ${d.previstos.docentes ? `<div class="flex flex-wrap items-end justify-center gap-3 mt-5">
       <label class="text-[11px] text-slate-400 text-left">Plazo de entrega
         <input id="plan-primer-fecha" type="date" value="${d.fechaLimiteSugerida}" class="block mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
-      <button onclick="planPrimerEnvio()" class="gaduai-btn-teal text-white text-xs font-bold px-5 py-2.5 rounded-xl"><i class="fa-solid fa-paper-plane"></i> Enviar links de ${PLAN_MESES[d.mes-1]}</button>
+      <button onclick="planPrimerEnvio()" class="plan-btn-envio gaduai-btn-teal text-white text-xs font-bold px-5 py-2.5 rounded-xl"><i class="fa-solid fa-paper-plane"></i> Enviar links de ${PLAN_MESES[d.mes-1]}</button>
     </div>` : `<p class="text-[11px] text-amber-200 mt-4">No hay docentes con horario cargado. Súbelo en Configuración → Horarios docentes (lo hace Dirección).</p>`}
   </div>`;
 }
@@ -3962,7 +3993,7 @@ function planAbrir(id){
   if(it.estado==="pendiente"){
     box.innerHTML = `<div class="bg-slate-950 border ${d.hoy>d.periodo.fecha_limite?"border-rose-900/60":"border-slate-800"} rounded-2xl p-5">${cab}
       <p class="text-sm text-slate-300 mt-4">${doc.link_enviado_en?`Link enviado el ${esc(planFechaCorta(doc.link_enviado_en))}`:"Aún no se le envía el link"}${doc.recordatorio_enviado_en?` · recordatorio el ${esc(planFechaCorta(doc.recordatorio_enviado_en))}`:""}.</p>
-      ${doc.correo ? `<button onclick="planEnviar({personaId:${doc.persona_id}})" class="mt-4 gaduai-btn-teal text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-solid fa-paper-plane"></i> ${doc.link_enviado_en?"Reenviar link":"Enviar link"} a ${esc(doc.nombre.split(" ")[0])}</button>`
+      ${doc.correo ? `<button onclick="planEnviar({personaId:${doc.persona_id}})" class="plan-btn-envio mt-4 gaduai-btn-teal text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-solid fa-paper-plane"></i> ${doc.link_enviado_en?"Reenviar link":"Enviar link"} a ${esc(doc.nombre.split(" ")[0])}</button>`
         : `<p class="text-[11px] text-amber-200 mt-3">Sin correo en el directorio: agrégalo para poder enviarle su link.</p>`}
     </div>`;
   } else {
@@ -4010,7 +4041,7 @@ function planVistaEnvios(d){
           <td class="p-3 text-slate-400">${doc.recordatorio_enviado_en?esc(planFechaCorta(doc.recordatorio_enviado_en)):"—"}</td>
           <td class="p-3 text-right whitespace-nowrap">
             <button onclick='planCopiarLink(${esc(JSON.stringify(doc.link))}, ${esc(JSON.stringify(doc.nombre))})' class="text-[10px] font-bold px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-200"><i class="fa-regular fa-copy"></i> Copiar link</button>
-            ${doc.correo?`<button onclick="planEnviar({personaId:${doc.persona_id}})" class="text-[10px] font-bold px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-200">${doc.link_enviado_en?"Reenviar":"Enviar"} por correo</button>`:""}</td>
+            ${doc.correo?`<button onclick="planEnviar({personaId:${doc.persona_id}})" class="plan-btn-envio text-[10px] font-bold px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-200">${doc.link_enviado_en?"Reenviar":"Enviar"} por correo</button>`:""}</td>
         </tr>`;}).join("")}
     </table>
   </div>`;

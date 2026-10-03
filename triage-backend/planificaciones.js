@@ -245,7 +245,8 @@ function registrarPlanificaciones(app, d) {
     res.json({
       hoy, anio, mes, config, correoActivo: correoConfigurado(), periodo: periodo && { ...periodo, fecha_limite: isoFecha(periodo.fecha_limite) },
       fechaLimiteSugerida: fechaLimiteDe(anio, mes, config.dia_limite), docentes, sinCorreo, historial: hist,
-      previstos: { docentes: conHorario.length, planificaciones: conHorario.reduce((n, d) => n + d.items.length, 0) },
+      previstos: { docentes: conHorario.length, planificaciones: conHorario.reduce((n, d) => n + d.items.length, 0),
+        nombres: conHorario.map((d) => ({ nombre: d.nombre, conCorreo: !!d.correo })).sort((a, b) => a.nombre.localeCompare(b.nombre)) },
     });
   }));
 
@@ -288,12 +289,22 @@ function registrarPlanificaciones(app, d) {
     const colegio = (await pool.query("select nombre from colegios where id=$1", [colegioId])).rows[0];
     let docentes = (await pool.query("select * from planificacion_docentes where periodo_id=$1", [periodo.id])).rows;
     if (req.body.personaId) docentes = docentes.filter((pd) => String(pd.persona_id) === String(req.body.personaId));
+    // "soloPreparar": crea el mes y los links sin enviar correos (para copiarlos o enviar uno a uno).
+    if (req.body.soloPreparar) {
+      return res.json({ ok: true, preparado: true, enviados: 0, sinCorreo: 0, fallidos: 0, correoActivo: correoConfigurado(), docentes: docentes.length });
+    }
     let enviados = 0, sinCorreo = 0, fallidos = 0;
+    const porEnviar = [];
     for (const pd of docentes) {
       const items = await itemsDe(pd.id);
       if (!req.body.personaId && !items.some((i) => i.estado === "pendiente")) continue;
       if (!pd.correo) { sinCorreo++; continue; }
-      if (await enviarLink(periodo, pd, colegio.nombre, baseUrl(req), actor.nombre)) enviados++; else fallidos++;
+      porEnviar.push(pd);
+    }
+    // De a 5 correos a la vez: con 20 o más docentes, uno por uno demoraría demasiado.
+    for (let i = 0; i < porEnviar.length; i += 5) {
+      const lote = await Promise.all(porEnviar.slice(i, i + 5).map((pd) => enviarLink(periodo, pd, colegio.nombre, baseUrl(req), actor.nombre)));
+      lote.forEach((ok) => { if (ok) enviados++; else fallidos++; });
     }
     // Solo se da por "enviado el mes" si de verdad salió algún correo: así, si el correo falla,
     // la tarea diaria lo vuelve a intentar al otro día.
