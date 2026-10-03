@@ -540,6 +540,9 @@ alter table planificaciones add column if not exists analisis_en timestamptz;
 alter table planificaciones add column if not exists retroalimentacion text;  -- borrador de la UTP; al V°B° queda la versión enviada
 alter table planificaciones add column if not exists vb_por text;
 alter table planificaciones add column if not exists vb_en timestamptz;
+-- La UTP debe abrir el documento antes de ver la revisión con IA y dar el V°B°.
+alter table planificaciones add column if not exists abierta_por text;
+alter table planificaciones add column if not exists abierta_en timestamptz;
 
 -- Planes y programas ministeriales que sube Dirección, por asignatura y nivel. Se guarda el texto
 -- extraído (no el archivo): es lo que la IA usa para revisar la coherencia de cada planificación.

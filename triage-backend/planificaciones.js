@@ -439,6 +439,8 @@ function registrarPlanificaciones(app, d) {
       [req.params.planId, colegioId]
     );
     if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+    // Queda registrado que la UTP abrió el documento: recién ahí se habilita la revisión con IA.
+    await pool.query("update planificaciones set abierta_por=$2, abierta_en=now() where id=$1 and abierta_en is null", [req.params.planId, actor.nombre]);
     res.json({ nombre: r.rows[0].archivo_nombre, data: r.rows[0].archivo_data });
   }));
 
@@ -686,6 +688,7 @@ function registrarPlanificaciones(app, d) {
     res.json({
       analisis_estado: estado, analisis_ia: plan.analisis_ia, retroalimentacion: plan.retroalimentacion,
       vb_por: plan.vb_por, vb_en: plan.vb_en, iaActiva: !!anthropic,
+      abierta_por: plan.abierta_por, abierta_en: plan.abierta_en,
     });
   }));
 
@@ -701,6 +704,7 @@ function registrarPlanificaciones(app, d) {
     const { plan } = await planDeUtp(req, res);
     if (!plan) return;
     if (plan.estado === "revisada") return res.status(409).json({ error: "ya_revisada" });
+    if (!plan.abierta_en) return res.status(409).json({ error: "sin_abrir" });
     await pool.query("update planificaciones set retroalimentacion=$2 where id=$1", [plan.id, String(req.body.texto || "").slice(0, 8000)]);
     res.json({ ok: true });
   }));
@@ -711,6 +715,7 @@ function registrarPlanificaciones(app, d) {
     const { actor, plan } = await planDeUtp(req, res);
     if (!plan) return;
     if (plan.estado !== "entregada") return res.status(409).json({ error: plan.estado === "revisada" ? "ya_revisada" : "sin_archivo" });
+    if (!plan.abierta_en) return res.status(409).json({ error: "sin_abrir" });
     const texto = String(req.body.texto || "").trim().slice(0, 8000);
     if (!texto) return res.status(400).json({ error: "retro_vacia" });
     await pool.query(

@@ -4159,6 +4159,17 @@ async function planCargarRevision(planId){
   try{ r = await api(`/api/colegios/${STATE.colegioId}/planificaciones/${planId}/detalle`); }
   catch(e){ document.getElementById("plan-rev-ia").innerHTML = '<p class="text-[11px] text-rose-300">No se pudo cargar la revisión. Cierra y vuelve a abrir la planificación.</p>'; return; }
   if(planEstado.abierto !== planId) return;
+  // Primero la UTP abre el documento; recién después ve la revisión con IA y puede dar el V°B°.
+  if(!r.abierta_en && !r.vb_en){
+    document.getElementById("plan-rev-ia").innerHTML = `<div class="plan-ia rounded-2xl p-5 text-center">
+      <i class="fa-solid fa-lock text-xl plan-acento"></i>
+      <p class="text-sm font-bold text-white mt-2">Abre la planificación para revisarla</p>
+      <p class="text-[11.5px] text-slate-400 mt-1">Después de leer el documento verás el análisis de la IA y podrás escribir la retroalimentación y dar el V°B°.</p>
+      <button onclick="planVerArchivo(${planId})" class="mt-3 gaduai-btn-accent text-white text-xs font-bold px-4 py-2.5 rounded-xl"><i class="fa-solid fa-eye"></i> Abrir documento</button>
+    </div>`;
+    document.getElementById("plan-rev-retro").innerHTML = "";
+    return;
+  }
   document.getElementById("plan-rev-ia").innerHTML = planHtmlAnalisis(planId, r);
   planPintarRetro(planId, r);
   // Mientras la IA trabaja, se vuelve a consultar cada 5 segundos.
@@ -4247,10 +4258,14 @@ async function planDarVB(planId){
     planEstado.abierto = String(planId); planEstado.filtro = "entregadas"; // queda a la vista con su ticket verde
     await planCargar();
     cargarPlanBadge();
-  }catch(e){ toast(e.message==="ya_revisada" ? "Esta planificación ya tenía V°B°" : "No se pudo dar el V°B°. Inténtalo de nuevo."); planCargarRevision(planId); }
+  }catch(e){ toast(e.message==="ya_revisada" ? "Esta planificación ya tenía V°B°" : e.message==="sin_abrir" ? "Abre el documento antes de dar el V°B°" : "No se pudo dar el V°B°. Inténtalo de nuevo."); planCargarRevision(planId); }
 }
 
 async function planVerArchivo(id){
+  // La pestaña del PDF se abre en el mismo clic (antes de descargar): si se abre después,
+  // Safari y la app de escritorio la bloquean como ventana emergente.
+  let nombre = ""; (planEstado.data?.docentes||[]).forEach(x=>x.items.forEach(i=>{ if(String(i.id)===String(id)) nombre = i.archivo_nombre||""; }));
+  const pesta = /\.pdf$/i.test(nombre) ? window.open("", "_blank") : null;
   try{
     const r = await api(`/api/colegios/${STATE.colegioId}/planificaciones/${id}/archivo`);
     const [cab, b64] = r.data.split(",");
@@ -4258,10 +4273,11 @@ async function planVerArchivo(id){
     const bin = atob(b64), bytes = new Uint8Array(bin.length);
     for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
     const url = URL.createObjectURL(new Blob([bytes], {type: tipo}));
-    if(tipo==="application/pdf"){ window.open(url, "_blank"); }
-    else { const a = document.createElement("a"); a.href = url; a.download = r.nombre; document.body.appendChild(a); a.click(); a.remove(); }
+    if(tipo==="application/pdf"){ if(pesta) pesta.location.href = url; else window.open(url, "_blank"); }
+    else { if(pesta) pesta.close(); const a = document.createElement("a"); a.href = url; a.download = r.nombre; document.body.appendChild(a); a.click(); a.remove(); }
     setTimeout(()=>URL.revokeObjectURL(url), 60000);
-  }catch(e){ toast("No se pudo abrir el archivo"); }
+    if(planEstado.abierto === String(id)) planCargarRevision(id); // ya abierta: se muestra la revisión con IA
+  }catch(e){ if(pesta) pesta.close(); toast("No se pudo abrir el archivo"); }
 }
 function planVistaEnvios(d){
   const sinLink = d.docentes.filter(doc=>!doc.link_enviado_en && doc.correo && doc.items.some(i=>i.estado==="pendiente")).length;
