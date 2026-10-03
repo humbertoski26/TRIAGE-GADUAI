@@ -4087,7 +4087,7 @@ function planVistaBandeja(d){
         <div class="${depto?"ml-3 border-l border-slate-800 pl-3":""} mt-2">
           <p class="text-[11px] font-bold text-slate-300 mb-1"><i class="fa-solid fa-user text-slate-500"></i> ${esc(doc.nombre)}</p>
           ${doc.items.map(it=>{ const c = planChip(it,d); return `
-            <button onclick="planAbrir(${it.id})" class="w-full text-left flex items-center justify-between gap-2 px-3 py-2 rounded-xl border ${planEstado.abierto===it.id?"plan-sel":"border-slate-800"} hover:bg-slate-800/60 mb-1.5">
+            <button onclick="planAbrir(${it.id})" class="w-full text-left flex items-center justify-between gap-2 px-3 py-2 rounded-xl border ${planEstado.abierto===String(it.id)?"plan-sel":"border-slate-800"} hover:bg-slate-800/60 mb-1.5">
               <span class="text-xs"><b class="text-white">${esc(it.asignatura)}</b> <span class="text-slate-400">· ${esc(it.curso)}</span></span>
               <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${c[0]}">${c[1]}</span>
             </button>`; }).join("")}
@@ -4106,7 +4106,8 @@ function planVistaBandeja(d){
 function planAbrir(id){
   const d = planEstado.data;
   let doc, it;
-  d.docentes.forEach(x=>x.items.forEach(i=>{ if(i.id===id){ doc=x; it=i; } }));
+  id = String(id); // el servidor entrega los id como texto (bigint): se compara siempre como texto
+  d.docentes.forEach(x=>x.items.forEach(i=>{ if(String(i.id)===id){ doc=x; it=i; } }));
   if(!it) return;
   planEstado.abierto = id;
   const box = document.getElementById("plan-detalle");
@@ -4151,6 +4152,7 @@ const PLAN_CUMPLE = {
   no:["fa-circle-xmark text-rose-400","No cumple"], no_verificable:["fa-circle-question text-slate-400","No verificable"],
 };
 async function planCargarRevision(planId){
+  planId = String(planId);
   clearTimeout(planRevisionTimer);
   if(planEstado.abierto !== planId || !document.getElementById("plan-rev-ia")) return;
   let r;
@@ -4187,7 +4189,8 @@ function planPintarRetro(planId, r){
   const box = document.getElementById("plan-rev-retro");
   if(!box) return;
   const d = planEstado.data;
-  let doc, it; d.docentes.forEach(x=>x.items.forEach(i=>{ if(i.id===planId){ doc=x; it=i; } }));
+  planId = String(planId);
+  let doc, it; d.docentes.forEach(x=>x.items.forEach(i=>{ if(String(i.id)===planId){ doc=x; it=i; } }));
   if(r.vb_en){
     box.innerHTML = `<div class="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4">
       <p class="text-xs font-bold text-emerald-300 mb-2"><i class="fa-solid fa-circle-check mr-1"></i> V°B° dado · retroalimentación enviada</p>
@@ -4226,7 +4229,7 @@ async function planGuardarRetro(planId){
 function planPedirVB(planId){
   const texto = document.getElementById("plan-retro-texto").value.trim();
   if(!texto){ toast("Escribe la retroalimentación antes de dar el V°B°"); return; }
-  const d = planEstado.data; let doc; d.docentes.forEach(x=>x.items.forEach(i=>{ if(i.id===planId) doc=x; }));
+  const d = planEstado.data; let doc; d.docentes.forEach(x=>x.items.forEach(i=>{ if(String(i.id)===String(planId)) doc=x; }));
   document.getElementById("plan-vb-zona").innerHTML = `<div class="w-full text-[12px] text-slate-200 bg-slate-950 border plan-borde rounded-xl p-3">
       Se enviará esta retroalimentación ${doc && doc.correo ? `al correo de <b>${esc(doc.nombre)}</b>` : "(la docente no tiene correo: quedará solo en GADUAI)"} y la planificación quedará revisada con ticket verde.
       <div class="flex flex-wrap gap-2 mt-3">
@@ -4241,7 +4244,7 @@ async function planDarVB(planId){
   try{
     const r = await api(`/api/colegios/${STATE.colegioId}/planificaciones/${planId}/vb`, {method:"POST", body: JSON.stringify(actorBody({texto}))});
     toast(r.correo ? "V°B° dado: la retroalimentación se envió a la docente" : "V°B° dado (el correo a la docente no se pudo enviar)");
-    planEstado.abierto = planId; planEstado.filtro = "entregadas"; // queda a la vista con su ticket verde
+    planEstado.abierto = String(planId); planEstado.filtro = "entregadas"; // queda a la vista con su ticket verde
     await planCargar();
     cargarPlanBadge();
   }catch(e){ toast(e.message==="ya_revisada" ? "Esta planificación ya tenía V°B°" : "No se pudo dar el V°B°. Inténtalo de nuevo."); planCargarRevision(planId); }
@@ -4342,7 +4345,7 @@ function planDocentePintar(){
 function planDocenteTarjeta(it){
   const entregada = it.estado!=="pendiente";
   const elegido = planDocente.elegidos[it.id];
-  const enviando = planDocente.enviando===it.id;
+  const enviando = String(planDocente.enviando)===String(it.id);
   const chip = it.estado==="revisada" ? `<span class="text-[11px] font-bold px-2 py-1 rounded-full" style="background:#DCFCE7;color:#15803d">✓ Revisada</span>`
     : entregada ? `<span class="text-[11px] font-bold px-2 py-1 rounded-full" style="background:#DCFCE7;color:#15803d">✓ Entregada el ${esc(planFechaCorta(it.entregada_en))}${it.atrasada?" (atrasada)":""}</span>`
     : `<span class="text-[11px] font-bold px-2 py-1 rounded-full" style="background:#FEF3C7;color:#b45309">Pendiente</span>`;
@@ -4398,7 +4401,7 @@ async function planDocenteEnviar(planId){
     if(!r.ok){
       throw new Error(res.error==="archivo_grande" ? "El archivo pesa más de 10 MB." : res.error==="formato_invalido" ? "Formato no aceptado: usa Word o PDF." : res.error==="ya_revisada" ? "Esta planificación ya fue revisada por la Unidad Técnica." : res.error==="demasiados_intentos" ? "Demasiados intentos seguidos. Espera unos minutos." : "No se pudo enviar. Inténtalo de nuevo.");
     }
-    const it = planDocente.data.items.find(i=>i.id===planId);
+    const it = planDocente.data.items.find(i=>String(i.id)===String(planId));
     const cuando = new Date(res.entregadaEn || Date.now());
     planDocente.mensaje = `Enviada: <b>${esc(it.asignatura)} · ${esc(it.curso)}</b>, el ${esc(cuando.toLocaleDateString("es-CL",{day:"numeric",month:"long"}))} a las ${esc(cuando.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hour12:false}))} hrs.`
       + (res.comprobante ? ` Te enviamos el comprobante a ${esc(planDocente.data.correo||"tu correo")}.` : "");
