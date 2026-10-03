@@ -107,6 +107,7 @@
   :root[data-theme="claro"] .gaduai-btn-lime.text-white,
   :root[data-theme="claro"] .gaduai-btn-violet.text-white,
   :root[data-theme="claro"] .gaduai-btn-amber.text-white,
+  :root[data-theme="claro"] .gaduai-btn-plan.text-white,
   :root[data-theme="claro"] .bg-indigo-600.text-white,
   :root[data-theme="claro"] .bg-indigo-600\/30.text-white,
   :root[data-theme="claro"] .bg-emerald-600.text-white,
@@ -148,7 +149,20 @@
      realmente significa este botón (cubrir un bloque urgente), en vez de inventar un color
      nuevo fuera de la paleta institucional. */
   .gaduai-btn-amber{background:#d97706}
-  .gaduai-btn-teal{background:#0f766e}
+  /* Planificaciones — paleta institucional: azul marino #0C0B70 y azul intenso #0034DA; el
+     turquesa #20C9B5 queda solo para lo que hace la IA. Cada clase trae su versión para modo claro. */
+  .gaduai-btn-plan{background:linear-gradient(90deg,#0C0B70,#0034DA)}
+  .plan-acento{color:#9DB2FF}
+  .plan-borde{border-color:rgba(91,123,255,.45)!important}
+  .plan-sel{border-color:#5B7BFF!important;box-shadow:0 0 0 1px #5B7BFF}
+  .plan-tab-on{background:#0034DA!important;border-color:#0034DA!important;color:#fff!important}
+  .plan-ia{background:rgba(32,201,181,.10);border:1px solid rgba(32,201,181,.35)}
+  .plan-ia i{color:#20C9B5}
+  :root[data-theme="claro"] .plan-acento{color:#0034DA!important}
+  :root[data-theme="claro"] .plan-borde{border-color:rgba(0,52,218,.30)!important}
+  :root[data-theme="claro"] .plan-sel{border-color:#0034DA!important;box-shadow:0 0 0 1px #0034DA}
+  :root[data-theme="claro"] .plan-ia{background:#EAFBF8;border-color:#9FE5DB}
+  :root[data-theme="claro"] .plan-ia i{color:#0F8A7C!important}
   .gaduai-btn-amber:hover{background:#b45f04}
   /* ---------- Fase 9/18: PULSO GADUAI — monitor de signos vitales del colegio ----------
      Botón más grande que sus vecinos (Entrevista/Relacionai/IA GADUAI/Buscador) a propósito
@@ -403,7 +417,7 @@
           <button onclick="abrirIA()" title="IA GADUAI" class="gaduai-gradient text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-brain"></i> IA GADUAI</button>
           <button id="btn-buscador" hidden onclick="abrirBuscador()" title="Buscador" class="gaduai-btn-violet text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-magnifying-glass"></i> Buscador</button>
           <button onclick="abrirAgenda()" title="Agenda / Calendario" class="gaduai-btn-lime text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-calendar-days"></i> Agenda</button>
-          <button id="btn-planificaciones" hidden onclick="abrirPlanificaciones()" title="Planificaciones" class="gaduai-btn-teal text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px] relative"><i class="fa-solid fa-folder-open"></i> Planificaciones <span id="plan-badge" hidden class="absolute -top-2 -right-2 bg-rose-600 text-white text-[10px] font-black rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center"></span></button>
+          <button id="btn-planificaciones" hidden onclick="abrirPlanificaciones()" title="Planificaciones" class="gaduai-btn-plan text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px] relative"><i class="fa-solid fa-folder-open"></i> Planificaciones <span id="plan-badge" hidden class="absolute -top-2 -right-2 bg-rose-600 text-white text-[10px] font-black rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center"></span></button>
           <button id="btn-ausentismo" hidden onclick="abrirAusentismo()" title="Ausentismo" class="gaduai-btn-amber text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-user-clock"></i> Ausentismo</button>
         </div>
 
@@ -824,7 +838,7 @@
   <div class="w-full max-w-6xl bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
     <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
       <div>
-        <p class="text-[10px] uppercase tracking-widest text-teal-300 font-bold"><i class="fa-solid fa-folder-open"></i> Planificaciones</p>
+        <p class="text-[10px] uppercase tracking-widest plan-acento font-bold"><i class="fa-solid fa-folder-open"></i> Planificaciones</p>
         <div class="flex items-center gap-3">
           <button onclick="planNavegar(-1)" class="text-slate-500 hover:text-white" title="Mes anterior"><i class="fa-solid fa-chevron-left"></i></button>
           <h3 id="plan-titulo" class="text-xl font-black text-white">—</h3>
@@ -839,8 +853,8 @@
       </div>
     </div>
 
-    <div id="plan-config" hidden class="bg-slate-950 border border-teal-500/30 rounded-2xl p-4 mb-4">
-      <p class="text-xs font-bold text-white mb-3"><i class="fa-solid fa-gear text-teal-300"></i> Calendario de entregas</p>
+    <div id="plan-config" hidden class="bg-slate-950 border plan-borde rounded-2xl p-4 mb-4">
+      <p class="text-xs font-bold text-white mb-3"><i class="fa-solid fa-gear plan-acento"></i> Calendario de entregas</p>
       <div class="grid sm:grid-cols-3 gap-3">
         <label class="text-[11px] text-slate-400">Día del mes en que salen los links
           <input id="plan-cfg-envio" type="number" min="1" max="28" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
@@ -849,7 +863,7 @@
         <label class="text-[11px] text-slate-400 flex items-end gap-2 pb-2"><input id="plan-cfg-auto" type="checkbox" class="w-4 h-4"> Enviar los links y el recordatorio automáticamente</label>
       </div>
       <p class="text-[10.5px] text-slate-500 mt-2">El recordatorio sale el día anterior al plazo, solo a quien no ha entregado. Las asignaturas y cursos de cada docente salen de Configuración → Horarios docentes, y su correo, de Directorio: colaboradores.</p>
-      <button onclick="planGuardarConfig()" class="mt-3 gaduai-btn-teal text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-regular fa-floppy-disk"></i> Guardar</button>
+      <button onclick="planGuardarConfig()" class="mt-3 gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-regular fa-floppy-disk"></i> Guardar</button>
     </div>
 
     <div id="plan-avisos"></div>
@@ -3366,7 +3380,7 @@ async function abrirAlertas(){
       <p class="text-xs font-bold text-white mt-1">${esc(a.item.titulo)}</p>
       ${a.mensaje?`<p class="text-[11px] text-slate-400 mt-1">${esc(a.mensaje)}</p>`:''}
       ${a.item.persona===PLAN_PERSONA_AVISOS
-        ? `<button onclick="cerrarModalId('modal-alertas');abrirPlanificaciones()" class="text-[10px] text-teal-300 mt-2"><i class="fa-solid fa-folder-open mr-1"></i>Abrir Planificaciones</button>`
+        ? `<button onclick="cerrarModalId('modal-alertas');abrirPlanificaciones()" class="text-[10px] plan-acento mt-2"><i class="fa-solid fa-folder-open mr-1"></i>Abrir Planificaciones</button>`
         : a.item.tipo==='hito'
         ? `<button onclick="cerrarModalId('modal-alertas');abrirChat(${a.item.id})" class="text-[10px] text-sky-300 mt-2"><i class="fa-solid fa-comments mr-1"></i>Responder en el chat</button>`
         : `<button onclick="cerrarModalId('modal-alertas');abrirCirculo(${a.item.id})" class="text-[10px] text-sky-300 mt-2"><i class="fa-solid fa-arrows-spin mr-1"></i>Responder en la tarea</button>`}
@@ -3853,9 +3867,9 @@ async function planEnviar(extra){
 // de confirmación sin avisar, y el botón parecía no responder). Muestra a quién le llegará.
 function planConfirmar(html, botones){
   const box = document.getElementById("plan-confirmar");
-  box.innerHTML = `<div class="bg-slate-950 border border-teal-500/40 rounded-2xl p-4 mb-4">
+  box.innerHTML = `<div class="bg-slate-950 border plan-borde rounded-2xl p-4 mb-4">
     <div class="text-xs text-slate-200">${html}</div>
-    <div class="flex flex-wrap gap-2 mt-3">${botones.map((b,i)=>`<button data-i="${i}" class="plan-btn-envio text-xs font-bold px-4 py-2 rounded-xl ${b.principal?"gaduai-btn-teal text-white":"border border-slate-700 text-slate-200 hover:bg-slate-800"}">${b.texto}</button>`).join("")}
+    <div class="flex flex-wrap gap-2 mt-3">${botones.map((b,i)=>`<button data-i="${i}" class="plan-btn-envio text-xs font-bold px-4 py-2 rounded-xl ${b.principal?"gaduai-btn-accent text-white":"border border-slate-700 text-slate-200 hover:bg-slate-800"}">${b.texto}</button>`).join("")}
       <button onclick="document.getElementById('plan-confirmar').innerHTML=''" class="text-xs font-bold px-4 py-2 rounded-xl text-slate-400 hover:text-white">Cancelar</button></div>
   </div>`;
   box.querySelectorAll("button[data-i]").forEach(el=>el.onclick=async()=>{ await botones[+el.dataset.i].accion(); document.getElementById("plan-confirmar").innerHTML=""; });
@@ -3911,7 +3925,7 @@ function planPintar(){
     ? '<i class="fa-solid fa-paper-plane"></i> Enviar links a todas' : '<i class="fa-solid fa-rotate-right"></i> Reenviar a pendientes';
   document.querySelectorAll(".plan-tab").forEach(b=>{
     const on = b.dataset.t===planEstado.tab;
-    b.classList.toggle("bg-teal-600", on); b.classList.toggle("text-white", on); b.classList.toggle("border-teal-600", on);
+    b.classList.toggle("plan-tab-on", on);
     b.classList.toggle("text-slate-300", !on);
   });
   const avisos = [];
@@ -3927,7 +3941,7 @@ function planPintar(){
   document.getElementById("plan-kpis").innerHTML = d.periodo
     ? kpi(items.length,"Esperadas","text-white")
       + kpi(items.filter(i=>i.estado!=="pendiente").length, `Entregadas${(n=>n?` (${n} atrasada${n===1?"":"s"})`:"")(items.filter(i=>i.atrasada).length)}`, "text-sky-300")
-      + kpi(items.filter(i=>i.estado==="entregada").length, "Por revisar", "text-teal-300")
+      + kpi(items.filter(i=>i.estado==="entregada").length, "Por revisar", "plan-acento")
       + kpi(pend, vencido ? "Sin entregar · vencido" : "Pendientes", vencido && pend ? "text-rose-300" : "text-slate-300")
     : "";
 
@@ -3941,14 +3955,14 @@ function planPintar(){
 function planVistaSinPeriodo(d){
   const futuro = `${d.anio}-${String(d.mes).padStart(2,"0")}` > d.hoy.slice(0,7);
   return `<div class="bg-slate-950 border border-dashed border-slate-700 rounded-2xl p-8 text-center">
-    <i class="fa-solid fa-paper-plane text-3xl text-teal-300"></i>
+    <i class="fa-solid fa-paper-plane text-3xl plan-acento"></i>
     <p class="text-sm font-bold text-white mt-3">Aún no se han enviado los links de ${PLAN_MESES[d.mes-1]}</p>
     <p class="text-[11px] text-slate-400 mt-1">${d.config.activo && d.config.envio_automatico && futuro ? `Saldrán solos el día ${d.config.dia_envio}. También puedes enviarlos ahora.` : "Puedes enviarlos ahora."}
       Recibirán su link <b>${d.previstos.docentes}</b> docente${d.previstos.docentes===1?"":"s"}, con <b>${d.previstos.planificaciones}</b> planificaciones en total (una por asignatura y curso de su horario).</p>
     ${d.previstos.docentes ? `<div class="flex flex-wrap items-end justify-center gap-3 mt-5">
       <label class="text-[11px] text-slate-400 text-left">Plazo de entrega
         <input id="plan-primer-fecha" type="date" value="${d.fechaLimiteSugerida}" class="block mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
-      <button onclick="planPrimerEnvio()" class="plan-btn-envio gaduai-btn-teal text-white text-xs font-bold px-5 py-2.5 rounded-xl"><i class="fa-solid fa-paper-plane"></i> Enviar links de ${PLAN_MESES[d.mes-1]}</button>
+      <button onclick="planPrimerEnvio()" class="plan-btn-envio gaduai-btn-accent text-white text-xs font-bold px-5 py-2.5 rounded-xl"><i class="fa-solid fa-paper-plane"></i> Enviar links de ${PLAN_MESES[d.mes-1]}</button>
     </div>` : `<p class="text-[11px] text-amber-200 mt-4">No hay docentes con horario cargado. Súbelo en Configuración → Horarios docentes (lo hace Dirección).</p>`}
   </div>`;
 }
@@ -3975,7 +3989,7 @@ function planVistaBandeja(d){
     const entregadas = g.docentes.reduce((s,x)=>s+x.items.filter(i=>i.estado!=="pendiente").length,0);
     return `<details class="bg-slate-950 border border-slate-800 rounded-2xl p-4" open>
       <summary class="flex items-center gap-2 cursor-pointer list-none">
-        <i class="fa-solid ${depto?"fa-people-group text-teal-300":"fa-book text-sky-300"}"></i>
+        <i class="fa-solid ${depto?"fa-people-group plan-acento":"fa-book plan-acento"}"></i>
         <span class="font-bold text-white text-sm">${depto?"Departamento de ":""}${esc(g.asignatura)}</span>
         <span class="ml-auto text-[11px] text-slate-400">${entregadas}/${total} entregadas</span>
       </summary>
@@ -3984,7 +3998,7 @@ function planVistaBandeja(d){
         <div class="${depto?"ml-3 border-l border-slate-800 pl-3":""} mt-2">
           <p class="text-[11px] font-bold text-slate-300 mb-1"><i class="fa-solid fa-user text-slate-500"></i> ${esc(doc.nombre)}</p>
           ${doc.items.map(it=>{ const c = planChip(it,d); return `
-            <button onclick="planAbrir(${it.id})" class="w-full text-left flex items-center justify-between gap-2 px-3 py-2 rounded-xl border ${planEstado.abierto===it.id?"border-teal-500":"border-slate-800"} hover:bg-slate-800/60 mb-1.5">
+            <button onclick="planAbrir(${it.id})" class="w-full text-left flex items-center justify-between gap-2 px-3 py-2 rounded-xl border ${planEstado.abierto===it.id?"plan-sel":"border-slate-800"} hover:bg-slate-800/60 mb-1.5">
               <span class="text-xs"><b class="text-white">${esc(it.asignatura)}</b> <span class="text-slate-400">· ${esc(it.curso)}</span></span>
               <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${c[0]}">${c[1]}</span>
             </button>`; }).join("")}
@@ -4015,7 +4029,7 @@ function planAbrir(id){
   if(it.estado==="pendiente"){
     box.innerHTML = `<div class="bg-slate-950 border ${d.hoy>d.periodo.fecha_limite?"border-rose-900/60":"border-slate-800"} rounded-2xl p-5">${cab}
       <p class="text-sm text-slate-300 mt-4">${doc.link_enviado_en?`Link enviado el ${esc(planFechaCorta(doc.link_enviado_en))}`:"Aún no se le envía el link"}${doc.recordatorio_enviado_en?` · recordatorio el ${esc(planFechaCorta(doc.recordatorio_enviado_en))}`:""}.</p>
-      ${doc.correo ? `<button onclick="planEnviar({personaId:${doc.persona_id}})" class="plan-btn-envio mt-4 gaduai-btn-teal text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-solid fa-paper-plane"></i> ${doc.link_enviado_en?"Reenviar link":"Enviar link"} a ${esc(doc.nombre.split(" ")[0])}</button>`
+      ${doc.correo ? `<button onclick="planEnviar({personaId:${doc.persona_id}})" class="plan-btn-envio mt-4 gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-solid fa-paper-plane"></i> ${doc.link_enviado_en?"Reenviar link":"Enviar link"} a ${esc(doc.nombre.split(" ")[0])}</button>`
         : `<p class="text-[11px] text-amber-200 mt-3">Sin correo en el directorio: agrégalo para poder enviarle su link.</p>`}
     </div>`;
   } else {
@@ -4029,12 +4043,12 @@ function planAbrir(id){
           <p class="text-[11px] text-slate-500">Entregada el ${esc(planFechaCorta(it.entregada_en))} · ${it.atrasada?"atrasada":"a tiempo"}${kb?" · "+kb:""}</p></div>
         <button onclick="planVerArchivo(${it.id})" class="text-xs font-bold px-3 py-2 rounded-xl border border-slate-700 hover:bg-slate-800"><i class="fa-solid fa-eye"></i> Abrir</button>
       </div>
-      <div class="mt-4 text-[11px] text-slate-400 bg-indigo-500/10 border border-indigo-500/30 rounded-xl px-3 py-2"><i class="fa-solid fa-brain text-indigo-300 mr-1"></i> La revisión con IA, la retroalimentación y el V°B° llegan en la próxima etapa.</div>
+      <div class="mt-4 text-[11px] text-slate-400 plan-ia rounded-xl px-3 py-2"><i class="fa-solid fa-brain mr-1"></i> La revisión con IA, la retroalimentación y el V°B° llegan en la próxima etapa.</div>
     </div>`;
   }
   document.querySelectorAll("#plan-vista button[onclick^='planAbrir']").forEach(b=>{
     const on = b.getAttribute("onclick")===`planAbrir(${id})`;
-    b.classList.toggle("border-teal-500", on); b.classList.toggle("border-slate-800", !on);
+    b.classList.toggle("plan-sel", on); b.classList.toggle("border-slate-800", !on);
   });
 }
 async function planVerArchivo(id){
@@ -4054,7 +4068,7 @@ function planVistaEnvios(d){
   const sinLink = d.docentes.filter(doc=>!doc.link_enviado_en && doc.correo && doc.items.some(i=>i.estado==="pendiente")).length;
   return `<div class="flex flex-wrap items-center justify-between gap-2 mb-3">
     <p class="text-[11px] text-slate-400">${sinLink ? `<b class="text-white">${sinLink}</b> docente${sinLink===1?"":"s"} aún sin su link.` : "Todas las docentes con correo ya recibieron su link."}</p>
-    <button onclick="planEnviarTodos()" class="gaduai-btn-teal text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-solid fa-paper-plane"></i> ${sinLink ? "Enviar links a todas" : "Reenviar a pendientes"}</button>
+    <button onclick="planEnviarTodos()" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-solid fa-paper-plane"></i> ${sinLink ? "Enviar links a todas" : "Reenviar a pendientes"}</button>
   </div>
   <div class="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
     <table class="w-full text-xs">
