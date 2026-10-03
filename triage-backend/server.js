@@ -20,7 +20,7 @@ const { Pool, types } = require("pg");
 // ("YYYY-MM-DD"), sin tocar timestamptz (creado_en, etc.), que sí debe seguir siendo parseable.
 types.setTypeParser(1082, val => val);
 const { enviarCorreo, correoConfigurado } = require("./email");
-const { registrarPlanificaciones } = require("./planificaciones");
+const { registrarPlanificaciones, repararTextosMalCodificados } = require("./planificaciones");
 const { enviarPush } = require("./push");
 const Anthropic = require("@anthropic-ai/sdk");
 
@@ -2933,6 +2933,7 @@ async function start() {
   await pool.query(schema);
   await migrarClavesAHash();
   await asegurarNombresUnicos();
+  await repararTextosMalCodificados(pool).catch((err) => console.error("No se pudieron reparar textos mal codificados:", err.message));
   registrarEspacioEnLog(); // sin await: no retrasa el arranque
   app.listen(PORT, () => console.log(`TRIAGE GADUAI backend escuchando en el puerto ${PORT}`));
 }

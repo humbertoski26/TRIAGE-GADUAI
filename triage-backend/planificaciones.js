@@ -26,6 +26,46 @@ const TIPOS_ARCHIVO = {
   doc: "application/msword",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
+// Bytes 0x80-0x9F de Windows-1252 que no coinciden con Latin-1 (comillas tipográficas, guiones, etc.).
+const CP1252 = { "€": 0x80, "‚": 0x82, "ƒ": 0x83, "„": 0x84, "…": 0x85, "†": 0x86, "‡": 0x87, "ˆ": 0x88, "‰": 0x89,
+  "Š": 0x8a, "‹": 0x8b, "Œ": 0x8c, "Ž": 0x8e, "‘": 0x91, "’": 0x92, "“": 0x93, "”": 0x94, "•": 0x95, "–": 0x96,
+  "—": 0x97, "˜": 0x98, "™": 0x99, "š": 0x9a, "›": 0x9b, "œ": 0x9c, "ž": 0x9e, "Ÿ": 0x9f };
+// Repara un texto UTF-8 que quedó guardado como si fuera Windows-1252 ("3Â° bÃ¡sico" → "3° básico",
+// "MuÃ±oz" → "Muñoz"). Pasaba con planillas .csv subidas antes de la corrección de lectura. Si el
+// texto no tiene ese patrón, o no se puede reparar limpiamente, se devuelve tal cual.
+function arreglarTildes(texto) {
+  const s = String(texto ?? "");
+  if (!/[ÃÂ]/.test(s)) return texto;
+  const bytes = [];
+  for (const ch of s) {
+    const c = ch.codePointAt(0);
+    if (c <= 0xff) bytes.push(c);
+    else if (CP1252[ch] !== undefined) bytes.push(CP1252[ch]);
+    else return texto;
+  }
+  const r = Buffer.from(bytes).toString("utf8");
+  return r.includes("\uFFFD") ? texto : r;
+}
+
+// Corrige en la base los textos que ya quedaron mal codificados (horarios y directorio). Idempotente:
+// solo toca filas con el patrón y se puede correr en cada arranque.
+async function repararTextosMalCodificados(pool) {
+  const tablas = [["docentes_horario", ["curso", "asignatura"]], ["directorio_personas", ["nombre", "detalle"]]];
+  let corregidas = 0;
+  for (const [tabla, cols] of tablas) {
+    const filtro = cols.map((c) => `${c} ~ '[ÃÂ]'`).join(" or ");
+    const filas = (await pool.query(`select id, ${cols.join(", ")} from ${tabla} where ${filtro}`)).rows;
+    for (const f of filas) {
+      const nuevos = cols.map((c) => arreglarTildes(f[c]));
+      if (nuevos.some((v, i) => v !== f[cols[i]])) {
+        await pool.query(`update ${tabla} set ${cols.map((c, i) => `${c}=$${i + 2}`).join(", ")} where id=$1`, [f.id, ...nuevos]);
+        corregidas++;
+      }
+    }
+  }
+  if (corregidas) console.log(`Textos con tildes mal codificadas reparados: ${corregidas} fila(s).`);
+}
+
 const DATA_URI_RE = /^data:([\w.+-]+\/[\w.+-]+)?(;[\w.+=-]+)*;base64,([A-Za-z0-9+/=\s]+)$/;
 
 function registrarPlanificaciones(app, d) {
@@ -86,7 +126,7 @@ function registrarPlanificaciones(app, d) {
     const porPersona = new Map();
     for (const f of r.rows) {
       if (!porPersona.has(f.persona_id)) porPersona.set(f.persona_id, { persona_id: f.persona_id, nombre: f.nombre, correo: f.correo, items: new Map() });
-      const asignatura = normalizar(f.asignatura), curso = normalizar(f.curso);
+      const asignatura = normalizar(arreglarTildes(f.asignatura)), curso = normalizar(arreglarTildes(f.curso));
       porPersona.get(f.persona_id).items.set(`${claveAsignatura(asignatura)}|${curso.toLowerCase()}`, { asignatura, curso });
     }
     return [...porPersona.values()].map((p) => ({ ...p, items: [...p.items.values()] }));
@@ -365,7 +405,11 @@ function registrarPlanificaciones(app, d) {
   }
 
   app.get("/api/plan-docente/:token", asyncRoute(async (req, res) => {
-    const pd = await docentePorToken(req.params.token);
+    let pd = await docentePorToken(req.params.token);
+    if (!pd) return res.status(404).json({ error: "link_invalido" });
+    const periodoActual = (await pool.query("select * from planificacion_periodos where id=$1", [pd.periodo_id])).rows[0];
+    await sincronizarDocentes(pd.colegio_id, periodoActual);
+    pd = await docentePorToken(req.params.token);
     if (!pd) return res.status(404).json({ error: "link_invalido" });
     const items = (await pool.query(
       `select id, asignatura, curso, estado, archivo_nombre, entregada_en, atrasada
@@ -456,4 +500,4 @@ function registrarPlanificaciones(app, d) {
   return { tareaDiaria, PERSONA_AVISOS };
 }
 
-module.exports = { registrarPlanificaciones, PERFILES_PLANIFICACION };
+module.exports = { registrarPlanificaciones, PERFILES_PLANIFICACION, repararTextosMalCodificados, arreglarTildes };
