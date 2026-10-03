@@ -3771,7 +3771,11 @@ const PERFILES_PLANIFICACION = ["UTP"];
 const PLAN_PERSONA_AVISOS = "Planificaciones (automático)";
 const PLAN_MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const PLAN_TIPOS = ["pdf","doc","docx"]; // las planificaciones se entregan en Word o PDF
-let planEstado = { anio:null, mes:null, data:null, tab:"bandeja", abierto:null };
+let planEstado = { anio:null, mes:null, data:null, tab:"bandeja", abierto:null, filtro:null };
+// Filtros de la bandeja: con muchas docentes, lo que hay que revisar no puede quedar perdido.
+const PLAN_FILTROS = { revisar:["Por revisar", it=>it.estado==="entregada"], entregadas:["Entregadas", it=>it.estado!=="pendiente"],
+  pendientes:["Pendientes", it=>it.estado==="pendiente"], todas:["Todas", ()=>true] };
+function planFiltrar(f){ planEstado.filtro = f; planEstado.tab = "bandeja"; planEstado.abierto = null; planPintar(); }
 
 function planFechaLarga(iso){
   const [y,m,d] = String(iso).slice(0,10).split("-").map(Number);
@@ -3798,14 +3802,14 @@ async function cargarPlanBadge(){
 }
 
 async function abrirPlanificaciones(){
-  planEstado.anio = null; planEstado.mes = null; planEstado.abierto = null;
+  planEstado.anio = null; planEstado.mes = null; planEstado.abierto = null; planEstado.filtro = null; planEstado.tab = "bandeja";
   document.getElementById("modal-planificaciones").classList.remove("hidden");
   await planCargar();
 }
 function planNavegar(delta){
   let m = planEstado.mes + delta, y = planEstado.anio;
   if(m < 1){ m = 12; y--; } if(m > 12){ m = 1; y++; }
-  planEstado.mes = m; planEstado.anio = y; planEstado.abierto = null;
+  planEstado.mes = m; planEstado.anio = y; planEstado.abierto = null; planEstado.filtro = null;
   planCargar();
 }
 async function planCargar(){
@@ -3936,13 +3940,15 @@ function planPintar(){
 
   const items = d.docentes.flatMap(doc=>doc.items);
   const vencido = d.periodo && d.hoy > d.periodo.fecha_limite;
-  const kpi = (n, t, color) => `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-4"><p class="text-3xl font-black ${color}">${n}</p><p class="text-[11px] text-slate-400">${t}</p></div>`;
   const pend = items.filter(i=>i.estado==="pendiente").length;
+  // Por defecto: si hay algo por revisar, la bandeja parte mostrando solo eso.
+  if(!planEstado.filtro) planEstado.filtro = items.some(i=>i.estado==="entregada") ? "revisar" : "todas";
+  const kpi = (n, t, color, f) => `<button onclick="planFiltrar('${f}')" title="Ver ${PLAN_FILTROS[f][0].toLowerCase()}" class="text-left bg-slate-950 border ${planEstado.filtro===f&&planEstado.tab==="bandeja"?"plan-sel":"border-slate-800"} rounded-2xl p-4 hover:bg-slate-900"><p class="text-3xl font-black ${color}">${n}</p><p class="text-[11px] text-slate-400">${t}</p></button>`;
   document.getElementById("plan-kpis").innerHTML = d.periodo
-    ? kpi(items.length,"Esperadas","text-white")
-      + kpi(items.filter(i=>i.estado!=="pendiente").length, `Entregadas${(n=>n?` (${n} atrasada${n===1?"":"s"})`:"")(items.filter(i=>i.atrasada).length)}`, "text-sky-300")
-      + kpi(items.filter(i=>i.estado==="entregada").length, "Por revisar", "plan-acento")
-      + kpi(pend, vencido ? "Sin entregar · vencido" : "Pendientes", vencido && pend ? "text-rose-300" : "text-slate-300")
+    ? kpi(items.length,"Esperadas","text-white","todas")
+      + kpi(items.filter(i=>i.estado!=="pendiente").length, `Entregadas${(n=>n?` (${n} atrasada${n===1?"":"s"})`:"")(items.filter(i=>i.atrasada).length)}`, "text-sky-300","entregadas")
+      + kpi(items.filter(i=>i.estado==="entregada").length, "Por revisar", "plan-acento","revisar")
+      + kpi(pend, vencido ? "Sin entregar · vencido" : "Pendientes", vencido && pend ? "text-rose-300" : "text-slate-300","pendientes")
     : "";
 
   const v = document.getElementById("plan-vista");
@@ -3968,7 +3974,8 @@ function planVistaSinPeriodo(d){
 }
 
 // Agrupa por asignatura: con 2 o más docentes de la misma asignatura se muestra como departamento.
-function planGrupos(d){
+function planGrupos(d, filtro){
+  const pasa = PLAN_FILTROS[filtro||"todas"][1];
   const grupos = new Map();
   d.docentes.forEach(doc=>doc.items.forEach(it=>{
     const k = it.asignatura.toLowerCase();
@@ -3977,14 +3984,22 @@ function planGrupos(d){
     if(!g.docentes.has(doc.id)) g.docentes.set(doc.id, {...doc, items: []});
     g.docentes.get(doc.id).items.push(it);
   }));
-  return [...grupos.values()].map(g=>({...g, docentes:[...g.docentes.values()]}))
-    .sort((a,b)=> (b.docentes.length>1)-(a.docentes.length>1) || a.asignatura.localeCompare(b.asignatura));
+  return [...grupos.values()]
+    .map(g=>{ const todas=[...g.docentes.values()]; return {...g, depto: todas.length>1, totalDocentes: todas.length,
+      docentes: todas.map(x=>({...x, items:x.items.filter(pasa)})).filter(x=>x.items.length)}; })
+    .filter(g=>g.docentes.length)
+    .sort((a,b)=> (b.depto)-(a.depto) || a.asignatura.localeCompare(b.asignatura));
 }
 function planVistaBandeja(d){
-  const grupos = planGrupos(d);
-  if(!grupos.length) return `<p class="text-[11px] text-slate-500 text-center py-8">No hay planificaciones en este mes.</p>`;
+  const todos = d.docentes.flatMap(doc=>doc.items);
+  const chips = `<div class="flex flex-wrap gap-2 mb-3">${Object.entries(PLAN_FILTROS).map(([k,[nombre,f]])=>{
+    const n = todos.filter(f).length, on = planEstado.filtro===k;
+    return `<button onclick="planFiltrar('${k}')" class="text-[11px] font-bold px-3 py-1.5 rounded-full border ${on?"plan-tab-on":"border-slate-700 text-slate-300 hover:bg-slate-800"}">${nombre} (${n})</button>`;
+  }).join("")}</div>`;
+  const grupos = planGrupos(d, planEstado.filtro);
+  if(!grupos.length) return chips + `<p class="text-[11px] text-slate-500 text-center py-8">${planEstado.filtro==="revisar"?"No hay planificaciones por revisar. ¡Todo al día!":"No hay planificaciones en este filtro."}</p>`;
   const arbol = grupos.map((g,gi)=>{
-    const depto = g.docentes.length > 1;
+    const depto = g.depto;
     const total = g.docentes.reduce((s,x)=>s+x.items.length,0);
     const entregadas = g.docentes.reduce((s,x)=>s+x.items.filter(i=>i.estado!=="pendiente").length,0);
     return `<details class="bg-slate-950 border border-slate-800 rounded-2xl p-4" open>
@@ -3993,7 +4008,7 @@ function planVistaBandeja(d){
         <span class="font-bold text-white text-sm">${depto?"Departamento de ":""}${esc(g.asignatura)}</span>
         <span class="ml-auto text-[11px] text-slate-400">${entregadas}/${total} entregadas</span>
       </summary>
-      ${depto?`<p class="text-[10px] text-slate-500 mt-1 ml-6">${g.docentes.length} docentes</p>`:""}
+      ${depto?`<p class="text-[10px] text-slate-500 mt-1 ml-6">${g.totalDocentes} docentes</p>`:""}
       ${g.docentes.map(doc=>`
         <div class="${depto?"ml-3 border-l border-slate-800 pl-3":""} mt-2">
           <p class="text-[11px] font-bold text-slate-300 mb-1"><i class="fa-solid fa-user text-slate-500"></i> ${esc(doc.nombre)}</p>
@@ -4005,7 +4020,7 @@ function planVistaBandeja(d){
         </div>`).join("")}
     </details>`;
   }).join("");
-  return `<div class="grid md:grid-cols-5 gap-4">
+  return chips + `<div class="grid md:grid-cols-5 gap-4">
     <div class="md:col-span-2 space-y-3">${arbol}</div>
     <div class="md:col-span-3" id="plan-detalle">
       <div class="bg-slate-950 border border-dashed border-slate-700 rounded-2xl p-8 text-center text-slate-500 text-sm h-full flex flex-col items-center justify-center">
@@ -4046,6 +4061,8 @@ function planAbrir(id){
       <div class="mt-4 text-[11px] text-slate-400 plan-ia rounded-xl px-3 py-2"><i class="fa-solid fa-brain mr-1"></i> La revisión con IA, la retroalimentación y el V°B° llegan en la próxima etapa.</div>
     </div>`;
   }
+  const r = box.getBoundingClientRect();
+  if(r.top > window.innerHeight * 0.55 || r.bottom < 80) box.scrollIntoView({behavior:"smooth", block:"start"});
   document.querySelectorAll("#plan-vista button[onclick^='planAbrir']").forEach(b=>{
     const on = b.getAttribute("onclick")===`planAbrir(${id})`;
     b.classList.toggle("plan-sel", on); b.classList.toggle("border-slate-800", !on);
