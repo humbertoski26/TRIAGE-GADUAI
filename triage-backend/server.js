@@ -19,7 +19,7 @@ const { Pool, types } = require("pg");
 // frontend. OID 1082 = tipo "date" en Postgres; se deja pasar tal cual viene de la base
 // ("YYYY-MM-DD"), sin tocar timestamptz (creado_en, etc.), que sí debe seguir siendo parseable.
 types.setTypeParser(1082, val => val);
-const { enviarCorreo } = require("./email");
+const { enviarCorreo, correoConfigurado } = require("./email");
 const { registrarPlanificaciones } = require("./planificaciones");
 const { enviarPush } = require("./push");
 const Anthropic = require("@anthropic-ai/sdk");
@@ -2883,7 +2883,7 @@ app.get("/manifest.webmanifest", (req, res) => {
 
 // ---------- Planificaciones (UTP) ----------
 const planificaciones = registrarPlanificaciones(app, {
-  pool, asyncRoute, verificarActor, actorDeHeaders, crearAlerta, enviarCorreo,
+  pool, asyncRoute, verificarActor, actorDeHeaders, crearAlerta, enviarCorreo, correoConfigurado,
   ahoraChile: agendaAhoraChile, sumarDias: agendaSumarDias,
 });
 

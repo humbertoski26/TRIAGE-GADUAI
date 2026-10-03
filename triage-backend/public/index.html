@@ -3815,9 +3815,26 @@ async function planEnviar(extra, confirmacion){
   if(confirmacion && !confirm(confirmacion)) return;
   try{
     const r = await api(`/api/colegios/${STATE.colegioId}/planificaciones/enviar`, {method:"POST", body: JSON.stringify(actorBody({anio:planEstado.anio, mes:planEstado.mes, ...extra}))});
-    toast(r.enviados ? `Link enviado a ${r.enviados} docente${r.enviados===1?"":"s"}` + (r.sinCorreo?` · ${r.sinCorreo} sin correo`:"") : (r.sinCorreo ? "Esa docente no tiene correo en el directorio" : "No había docentes con planificaciones pendientes"));
     await planCargar();
+    // Mensaje claro de lo que pasó: si el correo no salió, se dice por qué y cómo seguir.
+    const partes = [];
+    if(r.enviados) partes.push(`Link enviado a ${r.enviados} docente${r.enviados===1?"":"s"}.`);
+    if(r.fallidos) partes.push(r.correoActivo === false
+      ? `No se pudo enviar ningún correo: este GADUAI no tiene configurado el envío de correos. Mientras tanto, copia cada link desde la pestaña Envíos y mándalo por WhatsApp o tu correo.`
+      : `${r.fallidos} correo${r.fallidos===1?"":"s"} no se pudo enviar. Copia el link desde la pestaña Envíos y mándalo por otro medio.`);
+    if(r.sinCorreo) partes.push(`${r.sinCorreo} docente${r.sinCorreo===1?"":"s"} sin correo en el directorio.`);
+    if(!partes.length) partes.push(r.docentes ? "Todas las docentes ya entregaron: no había a quién enviar." : "No hay docentes con horario cargado para este mes.");
+    planMostrarResultado(partes.join(" "), !!r.fallidos || (!r.enviados && !!r.sinCorreo));
+    if(r.fallidos){ planEstado.tab = "envios"; planPintar(); }
   }catch(e){ toast("No se pudieron enviar los links"); }
+}
+function planMostrarResultado(texto, esError){
+  const box = document.getElementById("plan-avisos");
+  box.insertAdjacentHTML("afterbegin", `<div class="text-[12px] ${esError?"text-rose-200 bg-rose-500/10 border-rose-500/30":"text-emerald-200 bg-emerald-500/10 border-emerald-500/30"} border rounded-xl px-3 py-2 mb-2"><i class="fa-solid ${esError?"fa-triangle-exclamation":"fa-circle-check"} mr-1"></i>${esc(texto)}</div>`);
+}
+async function planCopiarLink(link, nombre){
+  try{ await navigator.clipboard.writeText(link); toast(`Link de ${nombre} copiado. Pégalo en WhatsApp o en un correo.`); }
+  catch(e){ prompt(`Copia el link de ${nombre}:`, link); }
 }
 function planEnviarTodos(){
   const d = planEstado.data;
@@ -3846,6 +3863,7 @@ function planPintar(){
   });
   const avisos = [];
   if(!d.config.activo) avisos.push(`<b>Primer uso:</b> revisa el calendario en <b>Configurar</b> (por defecto, links el día ${d.config.dia_envio} y plazo el día ${d.config.dia_limite}). El envío automático parte cuando guardes la configuración o envíes los primeros links.`);
+  if(d.correoActivo === false) avisos.push(`<b>Este GADUAI no tiene configurado el envío de correos</b>: los links, recordatorios y comprobantes no saldrán por correo. Mientras se configura, copia cada link desde la pestaña Envíos y mándalo por WhatsApp o por tu correo.`);
   if(d.sinCorreo.length) avisos.push(`<b>${d.sinCorreo.length} docente${d.sinCorreo.length===1?"":"s"} sin correo</b> en el directorio, no ${d.sinCorreo.length===1?"puede":"pueden"} recibir su link: ${d.sinCorreo.map(esc).join(", ")}. Agrégalo en Configuración → Directorio: colaboradores.`);
   document.getElementById("plan-avisos").innerHTML = avisos.map(a=>`<div class="text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2 mb-2"><i class="fa-solid fa-circle-info mr-1"></i>${a}</div>`).join("");
 
@@ -3990,7 +4008,9 @@ function planVistaEnvios(d){
           <td class="p-3 ${ent===doc.items.length?"text-emerald-300":"text-slate-300"}">${ent} de ${doc.items.length}</td>
           <td class="p-3 text-slate-400">${doc.link_enviado_en?esc(planFechaCorta(doc.link_enviado_en)):"—"}</td>
           <td class="p-3 text-slate-400">${doc.recordatorio_enviado_en?esc(planFechaCorta(doc.recordatorio_enviado_en)):"—"}</td>
-          <td class="p-3 text-right">${doc.correo?`<button onclick="planEnviar({personaId:${doc.persona_id}})" class="text-[10px] font-bold px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-200">${doc.link_enviado_en?"Reenviar":"Enviar"} link</button>`:""}</td>
+          <td class="p-3 text-right whitespace-nowrap">
+            <button onclick='planCopiarLink(${esc(JSON.stringify(doc.link))}, ${esc(JSON.stringify(doc.nombre))})' class="text-[10px] font-bold px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-200"><i class="fa-regular fa-copy"></i> Copiar link</button>
+            ${doc.correo?`<button onclick="planEnviar({personaId:${doc.persona_id}})" class="text-[10px] font-bold px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-200">${doc.link_enviado_en?"Reenviar":"Enviar"} por correo</button>`:""}</td>
         </tr>`;}).join("")}
     </table>
   </div>`;

@@ -53,4 +53,4 @@ async function enviarCorreo({ to, asunto, texto }) {
   }
 }
 
-module.exports = { enviarCorreo };
+module.exports = { enviarCorreo, correoConfigurado: configurado };

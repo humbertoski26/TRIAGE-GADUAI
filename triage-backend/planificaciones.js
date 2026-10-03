@@ -29,7 +29,7 @@ const TIPOS_ARCHIVO = {
 const DATA_URI_RE = /^data:([\w.+-]+\/[\w.+-]+)?(;[\w.+=-]+)*;base64,([A-Za-z0-9+/=\s]+)$/;
 
 function registrarPlanificaciones(app, d) {
-  const { pool, asyncRoute, verificarActor, actorDeHeaders, crearAlerta, enviarCorreo, ahoraChile, sumarDias } = d;
+  const { pool, asyncRoute, verificarActor, actorDeHeaders, crearAlerta, enviarCorreo, correoConfigurado, ahoraChile, sumarDias } = d;
 
   // ---------- utilidades ----------
   const nombreMes = (mes) => MESES[mes - 1];
@@ -191,8 +191,11 @@ function registrarPlanificaciones(app, d) {
         if (dia >= c.dia_envio && (!periodo || !periodo.links_enviados_en)) {
           periodo = await asegurarPeriodo(c.colegio_id, anio, mes, fechaLimiteDe(anio, mes, c.dia_limite), "Sistema");
           const docentes = (await pool.query("select * from planificacion_docentes where periodo_id=$1 and link_enviado_en is null", [periodo.id])).rows;
-          for (const pd of docentes) if (await enviarLink(periodo, pd, c.colegio_nombre, base, "Sistema")) resumen.links++;
-          await pool.query("update planificacion_periodos set links_enviados_en=now() where id=$1", [periodo.id]);
+          let enviadosColegio = 0;
+          for (const pd of docentes) if (await enviarLink(periodo, pd, c.colegio_nombre, base, "Sistema")) enviadosColegio++;
+          resumen.links += enviadosColegio;
+          // Si no salió ningún correo (sin correo configurado o falla), se reintenta mañana.
+          if (enviadosColegio) await pool.query("update planificacion_periodos set links_enviados_en=now() where id=$1", [periodo.id]);
         }
         // Recordatorios: el día anterior al plazo de cualquier período abierto (incluye uno con fecha propia).
         const porVencer = (await pool.query(
@@ -224,13 +227,15 @@ function registrarPlanificaciones(app, d) {
     let docentes = [];
     if (periodo) {
       const pds = (await pool.query(
-        "select id, persona_id, nombre, correo, link_enviado_en, recordatorio_enviado_en from planificacion_docentes where periodo_id=$1 order by nombre", [periodo.id]
+        "select id, persona_id, nombre, correo, token, link_enviado_en, recordatorio_enviado_en from planificacion_docentes where periodo_id=$1 order by nombre", [periodo.id]
       )).rows;
       const planes = (await pool.query(
         `select id, periodo_docente_id, asignatura, curso, estado, archivo_nombre, archivo_bytes, entregada_en, atrasada
            from planificaciones where periodo_id=$1 order by asignatura, curso`, [periodo.id]
       )).rows;
-      docentes = pds.map((pd) => ({ ...pd, items: planes.filter((p) => String(p.periodo_docente_id) === String(pd.id)) }));
+      const base = baseUrl(req);
+      docentes = pds.map(({ token, ...pd }) => ({ ...pd, link: `${base}/planificacion/${token}`,
+        items: planes.filter((p) => String(p.periodo_docente_id) === String(pd.id)) }));
     }
     const conHorario = await docentesConHorario(colegioId);
     const sinCorreo = conHorario.filter((d) => !d.correo).map((d) => d.nombre);
@@ -238,7 +243,7 @@ function registrarPlanificaciones(app, d) {
       "select accion, detalle, autor, creado_en from planificacion_historial where colegio_id=$1 order by creado_en desc limit 60", [colegioId]
     )).rows;
     res.json({
-      hoy, anio, mes, config, periodo: periodo && { ...periodo, fecha_limite: isoFecha(periodo.fecha_limite) },
+      hoy, anio, mes, config, correoActivo: correoConfigurado(), periodo: periodo && { ...periodo, fecha_limite: isoFecha(periodo.fecha_limite) },
       fechaLimiteSugerida: fechaLimiteDe(anio, mes, config.dia_limite), docentes, sinCorreo, historial: hist,
       previstos: { docentes: conHorario.length, planificaciones: conHorario.reduce((n, d) => n + d.items.length, 0) },
     });
@@ -283,15 +288,18 @@ function registrarPlanificaciones(app, d) {
     const colegio = (await pool.query("select nombre from colegios where id=$1", [colegioId])).rows[0];
     let docentes = (await pool.query("select * from planificacion_docentes where periodo_id=$1", [periodo.id])).rows;
     if (req.body.personaId) docentes = docentes.filter((pd) => String(pd.persona_id) === String(req.body.personaId));
-    let enviados = 0, sinCorreo = 0;
+    let enviados = 0, sinCorreo = 0, fallidos = 0;
     for (const pd of docentes) {
       const items = await itemsDe(pd.id);
       if (!req.body.personaId && !items.some((i) => i.estado === "pendiente")) continue;
       if (!pd.correo) { sinCorreo++; continue; }
-      if (await enviarLink(periodo, pd, colegio.nombre, baseUrl(req), actor.nombre)) enviados++;
+      if (await enviarLink(periodo, pd, colegio.nombre, baseUrl(req), actor.nombre)) enviados++; else fallidos++;
     }
-    await pool.query("update planificacion_periodos set links_enviados_en=coalesce(links_enviados_en, now()) where id=$1", [periodo.id]);
-    res.json({ ok: true, enviados, sinCorreo });
+    // Solo se da por "enviado el mes" si de verdad salió algún correo: así, si el correo falla,
+    // la tarea diaria lo vuelve a intentar al otro día.
+    if (enviados) await pool.query("update planificacion_periodos set links_enviados_en=coalesce(links_enviados_en, now()) where id=$1", [periodo.id]);
+    if (fallidos) await historial(colegioId, periodo.id, "Envío fallido", `${fallidos} correo(s) no se pudieron enviar${correoConfigurado() ? "" : ": este GADUAI no tiene configurado el envío de correos"}.`, actor.nombre);
+    res.json({ ok: true, enviados, sinCorreo, fallidos, correoActivo: correoConfigurado(), docentes: docentes.length });
   }));
 
   app.get("/api/colegios/:id/planificaciones/:planId/archivo", asyncRoute(async (req, res) => {
