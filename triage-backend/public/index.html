@@ -2172,7 +2172,9 @@ function diasHastaCliente(fechaStr){
   // "YYYY-MM-DD" — hay que recortar antes de pegarle una hora nueva, si no queda un string
   // inválido ("...000ZT12:00:00") que Date() no puede parsear (bug real, ya corregido).
   const f = new Date(String(fechaStr).slice(0,10) + "T12:00:00");
-  return Math.round((f - hoy) / 86400000);
+  // floor, no round: la fecha queda a mediodía, así que hoy da 0,5 → 0 (con round daba 1 y lo
+  // que vence hoy no aparecía en "Hoy"; ayer daba -0 y se mostraba como "Vence hoy").
+  return Math.floor((f - hoy) / 86400000);
 }
 function pulsoNum(v, fallback){ return (v===null || v===undefined || v==="") ? fallback : Number(v); }
 // Un ítem Triage Rojo cuenta como "evento crítico abierto" mientras no esté cerrado — mismo
