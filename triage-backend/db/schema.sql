@@ -697,3 +697,6 @@ create index if not exists peirie_aportes_exp_idx on peirie_aportes(expediente_i
 
 -- PEI/RIE: nombre del establecimiento tal como aparece en sus documentos (si difiere del nombre en GADUAI).
 alter table peirie_expedientes add column if not exists establecimiento text;
+
+-- Plan del colegio: completo (todo GADUAI) o peirie (solo PEI/RIE). Lo fija el panel de GADUAI.
+alter table colegios add column if not exists plan text not null default 'completo';

@@ -149,6 +149,36 @@ app.use((req, res, next) => {
   next();
 });
 
+// ---------- Plan del colegio: "completo" (todo GADUAI) o "peirie" (solo PEI/RIE) ----------
+// Un colegio con plan PEI/RIE solo puede usar su cuenta, sus avisos, las tareas del Timeline que
+// nacen de PEI/RIE y el propio módulo. El resto de la API le responde 403 aunque alguien intente
+// llamarla directo: protege el producto y el gasto de IA. El plan se cachea 60 s por colegio.
+const PLANES = ["completo", "peirie"];
+const cachePlan = new Map(); // colegioId -> { plan, hasta }
+async function planDe(colegioId) {
+  const c = cachePlan.get(colegioId);
+  if (c && c.hasta > Date.now()) return c.plan;
+  const r = await pool.query("select plan from colegios where id=$1", [colegioId]);
+  const plan = (r.rows[0] && r.rows[0].plan) || "completo";
+  cachePlan.set(colegioId, { plan, hasta: Date.now() + 60 * 1000 });
+  return plan;
+}
+const RUTAS_PLAN_PEIRIE = [
+  /^\/?$/, /^\/(login|logout|insignia|push-subscripcion|reset-master|plan)$/,
+  /^\/usuarios(\/(cambiar-clave|push-preferencia|tema))?$/, /^\/alertas\/marcar-leidas$/,
+  /^\/timeline\/\d+\/(circulo|chat|chat-leido|alertar|reaccionar)$/, /^\/peirie(\/|$)/,
+];
+app.use("/api/colegios/:id", (req, res, next) => {
+  planDe(req.params.id).then((plan) => {
+    if (plan !== "peirie") return next();
+    const ruta = req.path.replace(/\/+$/, "") || "/";
+    // El Timeline se puede leer (ahí viven las tareas de PEI/RIE), pero no crear ítems sueltos.
+    if (ruta === "/timeline" && req.method === "GET") return next();
+    if (RUTAS_PLAN_PEIRIE.some((re) => re.test(ruta))) return next();
+    res.status(403).json({ error: "plan_peirie" });
+  }).catch(next);
+});
+
 // Límite simple de intentos de login por IP — corta fuerza bruta contra /login sin depender
 // de un paquete nuevo. En memoria del proceso (el servicio corre en una sola instancia, ver
 // numInstances=1 en Render); se resetea solo cada 15 min por IP.
@@ -367,6 +397,7 @@ async function crearAlerta(colegioId, itemId, destinatario, mensaje, { autor = "
 // requireAdminKey) — un colegio ya no puede autoactivarse desde la pantalla pública.
 app.post("/api/colegios", requireAdminKey, asyncRoute(async (req, res) => {
   const { nombre, comuna, correoMaster } = req.body || {};
+  const plan = PLANES.includes((req.body || {}).plan) ? req.body.plan : "completo";
   if (!nombre || !nombre.trim()) return res.status(400).json({ error: "nombre_requerido" });
   const id = slug(nombre) || ("colegio-" + Date.now());
   const existe = await pool.query("select id from colegios where id=$1", [id]);
@@ -375,12 +406,23 @@ app.post("/api/colegios", requireAdminKey, asyncRoute(async (req, res) => {
   const correo = (correoMaster && correoMaster.trim()) || `director@${id}.cl`;
   const clave = claveAleatoria(); // se muestra una sola vez en esta respuesta; en la base solo queda el hash
   const claveHash = await bcrypt.hash(clave, 10);
-  await pool.query("insert into colegios (id, nombre, comuna) values ($1,$2,$3)", [id, nombre.trim(), comuna || null]);
+  await pool.query("insert into colegios (id, nombre, comuna, plan) values ($1,$2,$3,$4)", [id, nombre.trim(), comuna || null, plan]);
   await pool.query(
     "insert into usuarios (colegio_id, nombre, correo, clave_hash, perfil) values ($1,$2,$3,$4,$5)",
     [id, "Director ejecutivo", correo, claveHash, PERFIL_MASTER]
   );
-  res.json({ id, nombre: nombre.trim(), comuna: comuna || null, master: { correo, clave } });
+  res.json({ id, nombre: nombre.trim(), comuna: comuna || null, plan, master: { correo, clave } });
+}));
+
+// Solo admin (panel de GADUAI): cambia el plan de un colegio que ya existe. Pasar de "peirie" a
+// "completo" no borra nada: el colegio simplemente empieza a ver todos los módulos.
+app.post("/api/colegios/:id/plan", requireAdminKey, asyncRoute(async (req, res) => {
+  const plan = (req.body || {}).plan;
+  if (!PLANES.includes(plan)) return res.status(400).json({ error: "plan_invalido" });
+  const r = await pool.query("update colegios set plan=$2 where id=$1 returning id", [req.params.id, plan]);
+  if (!r.rows.length) return res.status(404).json({ error: "no_encontrado" });
+  cachePlan.delete(req.params.id);
+  res.json({ ok: true, id: req.params.id, plan });
 }));
 
 // Solo admin: genera una clave nueva para el usuario máster de un colegio que ya existe —
@@ -490,7 +532,7 @@ app.post("/api/colegios/:id/limpiar-actividad", requireAdminKey, asyncRoute(asyn
 // de loguearse. No expone la lista completa, solo un colegio puntual si se sabe su id.
 app.get("/api/colegios/:id", asyncRoute(async (req, res) => {
   const r = await pool.query(
-    `select id, nombre, comuna, relacionai_url,
+    `select id, nombre, comuna, relacionai_url, plan,
             pulso_asistencia_valor, pulso_asistencia_min, pulso_asistencia_max,
             pulso_matricula_valor, pulso_matricula_min, pulso_matricula_max
      from colegios where id=$1`,

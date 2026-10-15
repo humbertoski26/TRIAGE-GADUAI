@@ -199,6 +199,13 @@
   :root[data-theme="claro"] .pr-sel{border-color:#8B5CF6!important}
   :root[data-theme="claro"] .pr-cita{background:#F7F4FF}
   :root[data-theme="claro"] .pr-plazo{background:#F3EEFF;border-color:#8B5CF6}
+  /* Plan "Solo PEI/RIE": la app muestra solo su barra propia y el módulo PEI/RIE a pantalla
+     completa (debajo de la barra). Los demás modales (círculo, avisos, cuentas) quedan encima. */
+  .plan-peirie #pantalla-app > :not(#pr-solo-bar){display:none!important}
+  .plan-peirie #modal-peirie{top:64px;z-index:40;align-items:flex-start;overflow-y:auto;backdrop-filter:none;padding:16px}
+  .plan-peirie #modal-peirie > div{max-width:1280px;max-height:none;animation:none}
+  .plan-peirie #pr-btn-cerrar{display:none}
+  #pr-solo-bar{position:sticky;top:0;z-index:45;height:64px}
   /* ---------- Fase 9/18: PULSO GADUAI — monitor de signos vitales del colegio ----------
      Botón más grande que sus vecinos (Entrevista/Relacionai/IA GADUAI/Buscador) a propósito
      — es el primero y el más importante de la fila. Se ve como un monitor clínico: 3 líneas
@@ -944,7 +951,7 @@
       </div>
       <div class="flex gap-2 items-center">
         <button id="pr-btn-editar" hidden onclick="prEditarExpediente()" class="text-[11px] font-bold px-3 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-200"><i class="fa-solid fa-gear"></i> Expediente</button>
-        <button onclick="prCerrar()" class="text-slate-400 hover:text-white ml-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+        <button id="pr-btn-cerrar" onclick="prCerrar()" class="text-slate-400 hover:text-white ml-1"><i class="fa-solid fa-xmark text-xl"></i></button>
       </div>
     </div>
     <div id="pr-tabs" class="flex flex-wrap gap-2 mb-4">
@@ -952,6 +959,7 @@
       <button data-t="documentos" onclick="prTab('documentos')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-file-lines"></i> Documentos</button>
       <button data-t="hallazgos" onclick="prTab('hallazgos')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-list-check"></i> Hallazgos</button>
       <button data-t="coherencia" onclick="prTab('coherencia')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-arrows-left-right"></i> Coherencia</button>
+      <button data-t="tareas" onclick="prTab('tareas')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-circle-check"></i> Mis tareas</button>
       <button data-t="participacion" onclick="prTab('participacion')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-people-group"></i> Participación</button>
       <button data-t="matriz" onclick="prTab('matriz')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-scale-balanced"></i> Matriz normativa</button>
       <button data-t="historial" onclick="prTab('historial')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-clock-rotate-left"></i> Historial</button>
@@ -1503,6 +1511,8 @@ async function entrarApp(){
   document.getElementById("btn-ausentismo").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
   document.getElementById("btn-planificaciones").hidden = !PERFILES_PLANIFICACION.includes(STATE.perfil);
   document.getElementById("btn-peirie").hidden = !PERFILES_PEIRIE.includes(STATE.perfil);
+  if(STATE.colegio && STATE.colegio.plan === "peirie"){ await prActivarModoSolo(); return; }
+  document.documentElement.classList.remove("plan-peirie");
   cargarPlanBadge();
   actualizarLinkRelacionai();
   eiSetup();
@@ -1699,6 +1709,7 @@ async function activarPush(){
 
 function cerrarSesion(){
   if(pollTimer) clearInterval(pollTimer);
+  document.documentElement.classList.remove("plan-peirie"); cerrarModalId("modal-peirie");
   if(relojTimer) clearInterval(relojTimer);
   if(STATE.clave) api(`/api/colegios/${STATE.colegioId}/logout`, {method:"POST", body: JSON.stringify(actorBody())}).catch(()=>{});
   STATE.clave = "";
@@ -1724,7 +1735,9 @@ const CONFIG_SUBTEMAS = [
 async function abrirUsuarios(){
   const esDirector = STATE.perfil === "Director/a de colegio";
   const puedeAdminColegio = STATE.isMaster || esDirector; // mismos 2 perfiles que administran Relacionai
-  const visibles = CONFIG_SUBTEMAS.filter(s => s.soloMaster ? STATE.isMaster : puedeAdminColegio);
+  // En el plan Solo PEI/RIE solo se administran las cuentas del equipo.
+  const soloPeiRie = STATE.colegio && STATE.colegio.plan === "peirie";
+  const visibles = CONFIG_SUBTEMAS.filter(s => (s.soloMaster ? STATE.isMaster : puedeAdminColegio) && (!soloPeiRie || s.id === CONFIG_SUBTEMAS[0].id));
   document.getElementById("config-tabs").innerHTML = visibles.map(s => `
     <button data-id="${s.id}" onclick="mostrarSubtemaConfig('${s.id}')"
       class="config-tab-btn text-[10px] font-bold px-3 py-2 rounded-lg border border-${s.color}-500/30 text-${s.color}-300 flex items-center gap-1.5">
@@ -3939,7 +3952,10 @@ async function prCargar(){
     const a = prEstado.data.analisis;
     const enCurso = (a && a.estado==="analizando") || (prEstado.data.participacion||[]).some(p=>p.analisis_estado==="analizando");
     if(enCurso && !document.getElementById("modal-peirie").classList.contains("hidden")) prEstado.timer = setTimeout(prCargar, 8000);
-  }catch(e){ toast(e.message==="sin_permiso" ? "PEI/RIE es para Dirección, UTP y Convivencia" : "No se pudo cargar PEI/RIE"); }
+  }catch(e){
+    if(e.message==="sin_permiso" && document.documentElement.classList.contains("plan-peirie")){ prEstado.soloTareas = true; prPintarSoloTareas(); return; }
+    toast(e.message==="sin_permiso" ? "PEI/RIE es para Dirección, UTP y Convivencia" : "No se pudo cargar PEI/RIE");
+  }
 }
 function prTab(t){ prEstado.tab = t; prEstado.accion = null; prEstado.accionAporte = null; prPintar(); }
 
@@ -3958,7 +3974,7 @@ function prPintar(){
   const v = document.getElementById("pr-vista");
   if(!exp || prEstado.editando){ v.innerHTML = prFormExpediente(exp); return; }
   v.innerHTML = ({ expediente:prVistaExpediente, documentos:prVistaDocumentos, hallazgos:prVistaHallazgos,
-    coherencia:prVistaCoherencia, participacion:prVistaParticipacion, matriz:prVistaMatriz, historial:prVistaHistorial })[prEstado.tab](d);
+    coherencia:prVistaCoherencia, participacion:prVistaParticipacion, tareas:prVistaTareas, matriz:prVistaMatriz, historial:prVistaHistorial })[prEstado.tab](d);
 }
 function prEditarExpediente(){ prEstado.editando = true; prPintar(); }
 
@@ -4076,7 +4092,7 @@ function prPasoAPaso(d){
     ["Crear el expediente: responsables, fecha meta y tipo de colegio.", true, null],
     ["Subir el PEI y el Reglamento Interno (y sus anexos) en Word o PDF.", tiene("pei") && tiene("rie"), "documentos"],
     ["Tocar «Analizar con IA» y esperar el aviso en la campanita.", diag, "documentos"],
-    ["Revisar cada hallazgo: registrar la decisión o crear una tarea en el Timeline.", diag && hz.length>0 && !hz.some(h=>h.estado==="abierto"), "hallazgos"],
+    ["Revisar cada hallazgo: lo incorporamos, asignar a alguien o no aplica.", diag && hz.length>0 && !hz.some(h=>h.estado==="abierto"), "hallazgos"],
     ["Revisar la coherencia entre el PEI y el RIE.", diag && !hz.some(h=>h.ruta==="ambos" && h.estado==="abierto"), "coherencia"],
     ["Participación: descargar la guía de cada estamento, hacer la actividad y subir el compilado.", new Set(parts.map(p=>p.estamento)).size >= Object.keys(d.estamentos||{}).length, "participacion"],
     ["Incluir los aportes pertinentes y descargar la propuesta de cambios.", aps.length>0 && !aps.some(x=>x.estado==="propuesto"), "participacion"],
@@ -4088,6 +4104,60 @@ function prPasoAPaso(d){
     <ol class="space-y-1.5">${pasos.map(([t,ok,tab],i)=>`<li class="flex items-center gap-2 text-[12px] ${i===siguiente?"text-white font-bold":ok?"text-slate-400":"text-slate-300"}">
       <span class="w-6 h-6 flex-none rounded-full flex items-center justify-center text-[11px] font-black ${ok?"bg-emerald-600 text-white":i===siguiente?"gaduai-btn-peirie text-white":"bg-slate-800 text-slate-300"}">${ok?"✓":i+1}</span>
       <span class="flex-1">${t}</span>${tab && !ok ? `<button onclick="prTab('${tab}')" class="text-[10.5px] font-bold px-2.5 py-1 rounded-lg ${i===siguiente?"gaduai-btn-accent text-white":"border border-slate-700 text-slate-300"}">Ir</button>` : ""}</li>`).join("")}</ol></div>`;
+}
+
+// ---------- Mis tareas PEI/RIE (también la usa el plan Solo PEI/RIE) ----------
+function prMisTareas(){
+  return (timelineCache||[]).filter(h=>h.tipo==="tarea" && String(h.titulo||"").startsWith("PEI/RIE ")
+    && (h.responsable===STATE.persona || h.persona===STATE.persona))
+    .sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+}
+function prVistaTareas(){
+  const ts = prMisTareas();
+  if(!ts.length) return `<div class="text-center py-12"><i class="fa-solid fa-circle-check text-3xl pr-vio"></i><p class="text-sm font-bold text-white mt-2">No tienes tareas de PEI/RIE</p>
+    <p class="text-[11.5px] text-slate-400">Cuando te asignen un hallazgo, aparece aquí con el círculo de la promesa.</p></div>`;
+  const tarjeta = (h) => { const dias = diasHastaCliente(h.fecha), cerrada = h.circuloEstado==="cerrado";
+    const plazo = cerrada ? prChip("bg-emerald-500/20 text-emerald-300","Cerrada") : dias<0 ? prChip("bg-rose-500/20 text-rose-300",`Venció hace ${-dias} día(s)`)
+      : dias===0 ? prChip("bg-amber-500/20 text-amber-300","Vence hoy") : prChip("bg-sky-500/20 text-sky-300",`Vence en ${dias} día(s)`);
+    const rol = h.responsable===STATE.persona ? `Asignada por ${esc(h.persona)}` : `Asignaste a ${esc(h.responsable||"—")}`;
+    return `<button onclick="abrirCirculo(${h.id})" class="w-full text-left bg-slate-950 border border-slate-800 hover:border-slate-600 rounded-xl p-3 mb-2">
+      <div class="flex flex-wrap justify-between gap-2">${plazo}<span class="text-[10.5px] text-slate-500">${rol}</span></div>
+      <p class="text-[12.5px] font-bold text-white mt-1">${esc(String(h.titulo).replace(/^PEI\/RIE /,""))}</p>
+      <div class="flex items-center gap-1 mt-1">${circuloIconTrail(h)}</div></button>`; };
+  return `<p class="text-[11.5px] text-slate-400 mb-3">Toca una tarea para aceptarla, marcarla realizada o cerrarla (círculo de la promesa). Cada paso avisa en la campanita.</p>${ts.map(tarjeta).join("")}`;
+}
+function prPintarSoloTareas(){
+  document.getElementById("pr-titulo").textContent = "Mis tareas PEI/RIE";
+  document.getElementById("pr-subtitulo").textContent = "Tareas del proceso de actualización del PEI y del Reglamento Interno";
+  document.getElementById("pr-tabs").hidden = true; document.getElementById("pr-btn-editar").hidden = true;
+  document.getElementById("pr-vista").innerHTML = prVistaTareas();
+}
+
+// ---------- Plan "Solo PEI/RIE": barra propia y el módulo a pantalla completa ----------
+async function prActivarModoSolo(){
+  document.documentElement.classList.add("plan-peirie");
+  let bar = document.getElementById("pr-solo-bar");
+  if(!bar){ bar = document.createElement("div"); bar.id = "pr-solo-bar"; document.getElementById("pantalla-app").prepend(bar); }
+  const admin = STATE.isMaster; // las cuentas se crean solo desde el máster
+  bar.className = "bg-slate-950/95 backdrop-blur border-b border-slate-800 px-4 flex items-center justify-between gap-3";
+  bar.innerHTML = `<div class="flex items-center gap-3 min-w-0"><div class="w-9 h-9 rounded-xl gaduai-btn-peirie text-white flex items-center justify-center font-black">G</div>
+      <div class="min-w-0"><p class="text-[15px] font-black text-white leading-tight">GADUAI PEI/RIE</p><p class="text-[11px] text-slate-400 truncate">${esc(STATE.colegio.nombre)} · ${esc(STATE.persona||"")}</p></div></div>
+    <div class="flex items-center gap-2">
+      <button onclick="abrirAlertas()" title="Avisos" class="relative text-[12px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1.5"><i class="fa-solid fa-bell"></i> <span id="pr-solo-alertas">0</span></button>
+      ${admin ? `<button onclick="abrirUsuarios()" class="hidden sm:inline-flex text-[11px] font-bold px-3 py-1.5 rounded-xl border border-slate-700 text-slate-200"><i class="fa-solid fa-users-gear mr-1"></i> Cuentas del equipo</button>` : ""}
+      <button onclick="cambiarTema()" title="Modo claro u oscuro" class="text-[12px] px-2.5 py-1.5 rounded-xl border border-slate-700 text-slate-200"><i class="fa-solid fa-circle-half-stroke"></i></button>
+      <button onclick="abrirCambiarClave()" title="Cambiar mi clave" class="text-[12px] px-2.5 py-1.5 rounded-xl border border-slate-700 text-slate-200"><i class="fa-solid fa-key"></i></button>
+      <button onclick="cerrarSesion()" title="Cerrar sesión" class="text-[12px] px-2.5 py-1.5 rounded-xl border border-slate-700 text-slate-200"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>`;
+  document.title = "GADUAI PEI/RIE";
+  await cargarTimeline();
+  const espejo = () => { const a = document.getElementById("alertas-count"), b = document.getElementById("pr-solo-alertas"); if(a && b) b.textContent = a.textContent; };
+  espejo();
+  if(!window._prEspejo){ window._prEspejo = new MutationObserver(espejo); window._prEspejo.observe(document.getElementById("alertas-count"), { childList:true, characterData:true, subtree:true }); }
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(()=>{ cargarTimeline().then(()=>{ if(prEstado.soloTareas) prPintarSoloTareas(); else if(prEstado.tab==="tareas" && prEstado.data) prPintar(); }); }, 15000);
+  prEstado.tab = PERFILES_PEIRIE.includes(STATE.perfil) ? "expediente" : "tareas";
+  await abrirPeiRie();
 }
 
 // ---------- 2 · documentos ----------
