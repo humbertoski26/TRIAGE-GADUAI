@@ -952,6 +952,7 @@
       <button data-t="documentos" onclick="prTab('documentos')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-file-lines"></i> Documentos</button>
       <button data-t="hallazgos" onclick="prTab('hallazgos')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-list-check"></i> Hallazgos</button>
       <button data-t="coherencia" onclick="prTab('coherencia')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-arrows-left-right"></i> Coherencia</button>
+      <button data-t="participacion" onclick="prTab('participacion')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-people-group"></i> Participación</button>
       <button data-t="matriz" onclick="prTab('matriz')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-scale-balanced"></i> Matriz normativa</button>
       <button data-t="historial" onclick="prTab('historial')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-clock-rotate-left"></i> Historial</button>
     </div>
@@ -3909,7 +3910,7 @@ const PR_REL = { contradiccion:"Posible contradicción", dependencia:"Dependenci
 const PR_RUTA = { pei:"PEI", rie:"RIE", ambos:"PEI ↔ RIE" };
 const PR_ALCANCE = { ajuste:"Ajuste (cambios menores)", actualizacion:"Actualización (cambios de contenido con consulta)", reformulacion:"Reformulación (rehacerlo)" };
 const PR_CIRCULO = { nuevo:"Asignada", dedo_arriba:"Aceptada", dedo_abajo:"Rechazada", manito_ok:"Realizada", cerrado:"Cerrada" };
-let prEstado = { data:null, tab:"expediente", filtro:"todos", sel:null, usuarios:null, timer:null, editando:false, accion:null, buscar:"" };
+let prEstado = { data:null, tab:"expediente", filtro:"todos", sel:null, usuarios:null, timer:null, editando:false, accion:null, buscar:"", est:null, subiendo:null, accionAporte:null };
 
 const prChip = (cls, txt) => `<span class="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full ${cls}">${txt}</span>`;
 const prTipoChip = (t) => prChip((PR_TIPOS[t]||PR_TIPOS.sugerencia_ia)[0], (PR_TIPOS[t]||PR_TIPOS.sugerencia_ia)[1]);
@@ -3920,7 +3921,7 @@ function STATE_HOY(){ return (prEstado.data && prEstado.data.hoy) || new Date().
 function prFecha(ts){ return ts ? new Date(ts).toLocaleDateString("es-CL",{day:"numeric",month:"short",year:"numeric"}) : ""; }
 
 async function abrirPeiRie(){
-  prEstado.tab = "expediente"; prEstado.sel = null; prEstado.filtro = "todos"; prEstado.editando = false; prEstado.accion = null;
+  prEstado.tab = "expediente"; prEstado.sel = null; prEstado.filtro = "todos"; prEstado.editando = false; prEstado.accion = null; prEstado.subiendo = null; prEstado.accionAporte = null;
   document.getElementById("modal-peirie").classList.remove("hidden");
   document.getElementById("pr-vista").innerHTML = `<p class="text-xs text-slate-400 py-10 text-center"><i class="fa-solid fa-spinner fa-spin"></i> Cargando…</p>`;
   await prCargar();
@@ -3933,10 +3934,11 @@ async function prCargar(){
     prPintar();
     clearTimeout(prEstado.timer);
     const a = prEstado.data.analisis;
-    if(a && a.estado==="analizando" && !document.getElementById("modal-peirie").classList.contains("hidden")) prEstado.timer = setTimeout(prCargar, 8000);
+    const enCurso = (a && a.estado==="analizando") || (prEstado.data.participacion||[]).some(p=>p.analisis_estado==="analizando");
+    if(enCurso && !document.getElementById("modal-peirie").classList.contains("hidden")) prEstado.timer = setTimeout(prCargar, 8000);
   }catch(e){ toast(e.message==="sin_permiso" ? "PEI/RIE es para Dirección, UTP y Convivencia" : "No se pudo cargar PEI/RIE"); }
 }
-function prTab(t){ prEstado.tab = t; prEstado.accion = null; prPintar(); }
+function prTab(t){ prEstado.tab = t; prEstado.accion = null; prEstado.accionAporte = null; prPintar(); }
 
 function prPintar(){
   const d = prEstado.data, exp = d.expediente;
@@ -3953,7 +3955,7 @@ function prPintar(){
   const v = document.getElementById("pr-vista");
   if(!exp || prEstado.editando){ v.innerHTML = prFormExpediente(exp); return; }
   v.innerHTML = ({ expediente:prVistaExpediente, documentos:prVistaDocumentos, hallazgos:prVistaHallazgos,
-    coherencia:prVistaCoherencia, matriz:prVistaMatriz, historial:prVistaHistorial })[prEstado.tab](d);
+    coherencia:prVistaCoherencia, participacion:prVistaParticipacion, matriz:prVistaMatriz, historial:prVistaHistorial })[prEstado.tab](d);
 }
 function prEditarExpediente(){ prEstado.editando = true; prPintar(); }
 
@@ -4019,12 +4021,13 @@ function prVistaExpediente(d){
       <p class="text-[10px] font-black tracking-wider ${ok?"text-emerald-400":act?"pr-vio":"text-slate-500"}">${ok?"✓ ":act?"● ":""}ETAPA ${n}</p>
       <p class="text-[12.5px] font-black text-white">${t}</p><p class="text-[10.5px] text-slate-400 mt-0.5">${txt}</p></div>`;
   const docsOk = tiene("pei") && tiene("rie"), diagOk = a && a.estado==="listo", cohOk = diagOk && !!res.coherencia;
+  const partEst = new Set((d.participacion||[]).map(p=>p.estamento)).size;
   const etapas = [
     etapa(1,"Documentos",docsOk,!docsOk, docsOk ? `PEI y RIE cargados · ${docs.filter(x=>x.tipo==="anexo").length} anexo(s)` : "Sube el PEI y el Reglamento Interno"),
     etapa(2,"Diagnóstico con IA",diagOk,docsOk&&!diagOk, a && a.estado==="analizando" ? "Analizando…" : diagOk ? `${hz.filter(h=>h.ruta!=="ambos").length} hallazgos con evidencia` : "Cada documento por separado"),
     etapa(3,"Coherencia PEI ↔ RIE",cohOk,diagOk&&!cohOk, cohOk ? `${hz.filter(h=>h.ruta==="ambos").length} vínculos por revisar` : "Cruce de ambos documentos"),
     etapa(4,"Decisiones del equipo",diagOk&&!abiertos.length&&hz.length>0,diagOk&&abiertos.length>0, diagOk ? `${abiertos.length} hallazgo(s) esperan decisión` : "El equipo decide qué incorporar"),
-    etapa(5,"Participación","",false,"Próximamente: actividades por estamento"),
+    etapa(5,"Participación",partEst>=Object.keys(d.estamentos||{}).length,diagOk&&partEst<Object.keys(d.estamentos||{}).length, `${partEst} de ${Object.keys(d.estamentos||{}).length} estamentos con aportes · ${(d.aportes||[]).filter(x=>x.estado==="incluido").length} incluidos`),
     etapa(6,"Validación","",false,"Próximamente: expediente al Consejo Escolar"),
   ].join("");
   const kpi = (n, t, cls) => `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-3"><p class="text-2xl font-black ${cls}">${n}</p><p class="text-[10.5px] text-slate-400 font-bold">${t}</p></div>`;
@@ -4272,6 +4275,275 @@ function prVistaHistorial(d){
   return `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">${d.historial.map(h=>`<div class="flex gap-3 py-2 border-b border-slate-800">
       <p class="text-[10.5px] text-slate-500 w-32 flex-none">${new Date(h.creado_en).toLocaleString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</p>
       <p class="text-[12px] text-slate-200"><b class="text-white">${esc(h.accion)}</b>${h.detalle?` · ${esc(h.detalle)}`:""}<span class="text-slate-500"> — ${esc(h.autor)}</span></p></div>`).join("") || `<p class="text-[11.5px] text-slate-400">Sin movimientos todavía.</p>`}</div>`;
+}
+
+// ---------- participación por estamento ----------
+// Cada estamento descarga su guía, hace la actividad y sube un compilado de sus aportes. GADUAI
+// separa cada aporte, dice si es pertinente y propone cómo incluirlo; el equipo decide.
+const PR_ORDEN_EST = ["directivos","docentes","asistentes","estudiantes","apoderados","consejo"];
+const PR_PERT = { pertinente:["pr-r-coherente","Pertinente"], requiere_deliberacion:["pr-r-sin_norma","Requiere deliberación"], no_pertinente:["bg-slate-500/20 text-slate-300","No pertinente"] };
+const PR_EST_APORTE = { propuesto:["bg-amber-500/20 text-amber-300","Por decidir"], incluido:["bg-emerald-500/20 text-emerald-300","Incluido"], descartado:["bg-slate-500/20 text-slate-300","Descartado"] };
+const PR_GUIA = {
+  directivos: { duracion:"90 minutos", pei:[
+      "¿Qué sellos nos distinguen hoy y cuáles queremos fortalecer en los próximos cuatro años?",
+      "¿La misión y la visión describen lo que realmente hacemos y hacia dónde vamos?",
+      "¿Qué perfil de equipo directivo necesita nuestro proyecto educativo?",
+      "¿Cómo evaluaremos el avance del PEI y cómo se conecta con el PME?"],
+    rie:[
+      "¿Qué normas o procedimientos nos han generado más dificultades al aplicarlos?",
+      "¿Nuestros protocolos están al día con la Ley 21.809 (canal confidencial, plazos de investigación, medidas formativas)?",
+      "¿Qué medidas formativas y de apoyo usamos antes de aplicar una sanción?",
+      "¿Cómo informamos el reglamento a la comunidad al inicio del año?"] },
+  docentes: { duracion:"60 a 90 minutos", pei:[
+      "¿Qué aprendizajes son esenciales en nuestro colegio y deberían verse en cada clase?",
+      "¿Qué valores queremos que se vivan en la sala de clases?",
+      "¿Qué características debe tener un docente de este colegio?",
+      "¿Qué perfil de estudiante queremos al egresar?"],
+    rie:[
+      "¿Qué situaciones de convivencia en la sala no están bien resueltas en el reglamento?",
+      "¿Qué secuencia de medidas pedagógicas, formativas y disciplinarias debería seguir un docente ante una falta?",
+      "¿Cómo se debería citar a los apoderados y registrar su asistencia?",
+      "¿Qué protocolo les cuesta aplicar o necesitan conocer mejor?"] },
+  asistentes: { duracion:"60 minutos", pei:[
+      "¿Cómo aporta tu rol al proyecto educativo del colegio?",
+      "¿Qué valores del colegio ves en el día a día (patio, comedor, portería, sala)?",
+      "¿Qué debería decir el PEI sobre el perfil de los asistentes de la educación?"],
+    rie:[
+      "¿Qué normas de convivencia en patio, comedor, baños y entrada deberían ser más claras?",
+      "¿Qué situaciones enfrentas sin un procedimiento claro?",
+      "¿Cómo debería protegerte el reglamento ante agresiones de estudiantes o apoderados?"] },
+  estudiantes: { duracion:"45 minutos (por ejemplo, en consejo de curso)", pei:[
+      "¿Qué es lo que más te gusta de tu colegio y lo hace distinto?",
+      "¿Qué te gustaría aprender aquí, además de las asignaturas?",
+      "¿Cómo te imaginas a un estudiante que sale de este colegio?"],
+    rie:[
+      "¿Qué normas te parecen justas y cuáles no entiendes?",
+      "Cuando alguien se equivoca o daña a otra persona, ¿qué debería pasar para que repare el daño?",
+      "¿A quién le contarías si alguien te molesta? ¿Qué haría que te sintieras seguro o segura al contarlo?",
+      "¿Cómo te gustaría participar en las decisiones del colegio?"] },
+  apoderados: { duracion:"60 minutos (por ejemplo, en reunión de apoderados)", pei:[
+      "¿Por qué eligieron este colegio y qué esperan de él?",
+      "¿Qué valores deberían compartir el colegio y las familias?",
+      "¿Cómo les gustaría participar en el proyecto educativo?"],
+    rie:[
+      "¿Qué normas les parecen claras y cuáles no?",
+      "¿Por qué medio y en qué plazo esperan que el colegio les informe una situación?",
+      "Cuando un estudiante comete una falta, ¿qué debería pasar primero?",
+      "¿Cómo debería funcionar el canal de denuncias y reclamos para usarlo con confianza?"] },
+  consejo: { duracion:"una sesión", pei:[
+      "¿El PEI recoge la voz de todos los estamentos?",
+      "¿Qué ejes de trabajo propone el Consejo para la actualización?"],
+    rie:[
+      "¿Qué observaciones tiene el Consejo sobre las propuestas recogidas?",
+      "¿Cómo se asegura la participación de quienes no pertenecen a un curso o nivel?",
+      "¿Cómo se informará a la comunidad el reglamento actualizado?"] },
+};
+
+function prVistaParticipacion(d){
+  const ests = d.estamentos || {}, parts = d.participacion || [], aps = d.aportes || [];
+  if(!prEstado.est || !ests[prEstado.est]) prEstado.est = (PR_ORDEN_EST.find(e=>aps.some(a=>a.estamento===e && a.estado==="propuesto"))
+    || PR_ORDEN_EST.find(e=>parts.some(p=>p.estamento===e)) || "directivos");
+  const tarjeta = (e) => {
+    const pe = parts.filter(p=>p.estamento===e), ae = aps.filter(a=>a.estamento===e);
+    const analizando = pe.some(p=>p.analisis_estado==="analizando");
+    const estado = !pe.length ? prChip("bg-slate-500/20 text-slate-300","Sin compilado") : analizando ? prChip("bg-sky-500/20 text-sky-300",'<i class="fa-solid fa-spinner fa-spin"></i> Analizando')
+      : prChip("bg-emerald-500/20 text-emerald-300",`${pe.length} compilado(s)`);
+    const sel = prEstado.est === e;
+    return `<div class="bg-slate-950 border ${sel?"pr-sel":"border-slate-800"} rounded-2xl p-3">
+      <div class="flex justify-between items-start gap-2"><button onclick="prEstado.est='${e}';prEstado.subiendo=null;prPintar()" class="text-left"><p class="text-[13px] font-black text-white">${esc(ests[e])}</p></button>${estado}</div>
+      <p class="text-[10.5px] text-slate-400 mt-1">${pe.reduce((n,p)=>n+(p.participantes||0),0) || "—"} participantes · ${ae.length} aportes · ${ae.filter(a=>a.pertinencia==="pertinente").length} pertinentes · ${ae.filter(a=>a.estado==="incluido").length} incluidos</p>
+      <div class="flex flex-wrap gap-1.5 mt-2">
+        <button onclick="prDescargarGuia('${e}')" class="text-[10.5px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-700 text-slate-200"><i class="fa-solid fa-file-word"></i> Guía</button>
+        <button onclick="prEstado.est='${e}';prEstado.subiendo='${e}';prPintar()" class="text-[10.5px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-700 text-slate-200"><i class="fa-solid fa-arrow-up-from-bracket"></i> Subir compilado</button>
+        <button onclick="prEstado.est='${e}';prEstado.subiendo=null;prPintar()" class="text-[10.5px] font-bold px-2.5 py-1.5 rounded-lg ${sel?"plan-tab-on":"border border-slate-700 text-slate-200"}"><i class="fa-solid fa-eye"></i> Aportes</button>
+      </div></div>`;
+  };
+  const incluidos = aps.filter(a=>a.estado==="incluido");
+  return `<div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+      <p class="text-[11.5px] text-slate-400 max-w-3xl">Cada estamento descarga su guía, hace la actividad y sube un compilado de sus aportes en Word o PDF. GADUAI separa cada aporte y dice si es pertinente y cómo incluirlo en el PEI o el RIE; el equipo decide.</p>
+      <button onclick="prDescargarPropuesta()" ${incluidos.length?"":"disabled"} class="gaduai-btn-peirie text-white text-[11px] font-bold px-3 py-2 rounded-xl disabled:opacity-40"><i class="fa-solid fa-file-word"></i> Propuesta de cambios (${incluidos.length})</button></div>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">${PR_ORDEN_EST.filter(e=>ests[e]).map(tarjeta).join("")}</div>
+    ${prEstado.subiendo ? prFormCompilado(prEstado.subiendo, ests) : ""}
+    ${prDetalleEstamento(prEstado.est, d)}`;
+}
+function prFormCompilado(e, ests){
+  return `<div class="bg-slate-950 border pr-borde rounded-2xl p-4 mb-4">
+    <p class="text-xs font-black text-white mb-2"><i class="fa-solid fa-arrow-up-from-bracket pr-vio"></i> Subir compilado · ${esc(ests[e])}</p>
+    <div class="grid sm:grid-cols-3 gap-2">
+      <label class="text-[11px] text-slate-400">Actividad<input id="pr-c-act" placeholder="Ej. Taller de convivencia" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
+      <label class="text-[11px] text-slate-400">Fecha<input id="pr-c-fecha" type="date" value="${STATE_HOY()}" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
+      <label class="text-[11px] text-slate-400">N° de participantes<input id="pr-c-n" type="number" min="1" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 mt-3">
+      <label class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"><i class="fa-solid fa-file-arrow-up"></i> Elegir archivo y analizar
+        <input type="file" accept=".docx,.pdf" hidden onchange="prSubirCompilado('${e}', this)"></label>
+      <button onclick="prEstado.subiendo=null;prPintar()" class="text-xs px-3 py-2 rounded-xl border border-slate-700 text-slate-300">Cancelar</button>
+      <p class="text-[10.5px] text-slate-500">Word (.docx) o PDF con texto. Sin nombres de estudiantes ni datos personales.</p>
+    </div></div>`;
+}
+function prDetalleEstamento(e, d){
+  const nombre = d.estamentos[e], pe = d.participacion.filter(p=>p.estamento===e), ae = d.aportes.filter(a=>a.estamento===e);
+  if(!pe.length && !ae.length) return `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-6 text-center"><i class="fa-solid fa-people-group text-2xl pr-vio"></i>
+      <p class="text-sm font-bold text-white mt-1">${esc(nombre)}: aún sin compilado</p><p class="text-[11.5px] text-slate-400">Descarga la guía, haz la actividad y sube el compilado completado.</p></div>`;
+  const compilados = pe.map(p=>`<div class="flex flex-wrap justify-between items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl p-2.5 mb-2">
+      <div><p class="text-[12px] font-bold text-white">${esc(p.actividad||"Compilado")} · ${esc(p.archivo_nombre)}</p>
+        <p class="text-[10.5px] text-slate-400">${p.fecha?planFechaLarga(p.fecha):"sin fecha"} · ${p.participantes||"—"} participantes · subido por ${esc(p.subido_por)}
+        ${p.analisis_estado==="analizando"?' · <i class="fa-solid fa-spinner fa-spin"></i> analizando…':p.analisis_estado==="error"||p.analisis_estado==="sin_ia"?` · <span class="text-rose-300">${esc(p.analisis_error||"No se pudo analizar")}</span>`:""}</p></div>
+      <div class="flex gap-1.5"><button onclick="prAbrirCompilado(${p.id})" class="text-[10.5px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-700 text-slate-200"><i class="fa-solid fa-download"></i> Abrir</button>
+        ${p.analisis_estado!=="analizando"?`<button onclick="prReanalizarCompilado(${p.id})" class="text-[10.5px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-700 text-slate-200"><i class="fa-solid fa-rotate"></i> Analizar de nuevo</button>`:""}
+        <button onclick="prQuitarCompilado(${p.id})" class="text-[10.5px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-700 text-rose-300"><i class="fa-solid fa-trash"></i></button></div></div>`).join("");
+  const sint = pe.find(p=>p.analisis_estado==="listo" && p.analisis);
+  const lista = (t, arr) => arr && arr.length ? `<div><p class="text-[11px] font-bold text-white mb-1">${t}</p><ul class="list-disc pl-5 text-[11.5px] text-slate-300 space-y-0.5">${arr.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  const pertinentes = ae.filter(a=>a.estado==="propuesto" && a.pertinencia==="pertinente" && a.redaccion).length;
+  const orden = { pertinente:0, requiere_deliberacion:1, no_pertinente:2 };
+  const tarjetas = ae.slice().sort((x,y)=>(orden[x.pertinencia]-orden[y.pertinencia]) || x.id-y.id).map(a=>prTarjetaAporte(a, d)).join("");
+  return `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+    <div class="flex flex-wrap justify-between items-center gap-2 mb-3"><p class="text-[14px] font-black text-white">${esc(nombre)}</p>
+      ${pertinentes ? `<button onclick="prIncluirPertinentes('${e}')" class="bg-emerald-600 text-white text-[11px] font-bold px-3 py-2 rounded-xl"><i class="fa-solid fa-check-double"></i> ${pertinentes===1 ? "Incluir el aporte pertinente" : `Incluir los ${pertinentes} aportes pertinentes`}</button>` : ""}</div>
+    ${compilados}
+    ${sint ? `<div class="plan-ia rounded-xl p-3 my-3 grid md:grid-cols-2 gap-3">${lista("En lo que coinciden", sint.analisis.coincidencias)}${lista("Posiciones distintas", sint.analisis.diferencias)}
+      <p class="md:col-span-2 text-[10.5px] text-slate-500"><i class="fa-solid fa-handshake"></i> GADUAI ordena lo que dijeron; no declara consensos. El equipo decide qué se incluye.</p></div>` : ""}
+    ${tarjetas || `<p class="text-[11.5px] text-slate-400 mt-2">Cuando termine el análisis, aquí aparecen los aportes.</p>`}</div>`;
+}
+function prTarjetaAporte(a, d){
+  const pert = PR_PERT[a.pertinencia] || PR_PERT.requiere_deliberacion, est = PR_EST_APORTE[a.estado] || PR_EST_APORTE.propuesto;
+  const req = a.requisito_id ? (d.requisitos||[]).find(r=>r.id===a.requisito_id) : null;
+  let acciones = "";
+  if(prEstado.accionAporte && prEstado.accionAporte.id===a.id){
+    const incluir = prEstado.accionAporte.tipo==="incluir";
+    acciones = `<div class="mt-2 space-y-2">${incluir
+        ? `<label class="block text-[11px] text-slate-400">Texto que se incluirá en el ${a.documento} (puedes editarlo)<textarea id="pr-a-red" rows="4" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-[12px] text-white">${esc(a.redaccion||"")}</textarea></label>`
+        : `<textarea id="pr-a-mot" rows="2" placeholder="Por qué se descarta (queda en el historial)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-[12px] text-white"></textarea>`}
+      <div class="flex gap-2"><button onclick="prDecidirAporte(${a.id}, '${incluir?"incluido":"descartado"}')" class="${incluir?"bg-emerald-600 text-white":"border border-slate-700 text-slate-200"} text-xs font-bold px-4 py-2 rounded-xl">${incluir?"Confirmar inclusión":"Confirmar descarte"}</button>
+        <button onclick="prEstado.accionAporte=null;prPintar()" class="text-xs px-3 py-2 rounded-xl text-slate-400">Cancelar</button></div></div>`;
+  } else if(a.estado==="propuesto"){
+    acciones = `<div class="flex flex-wrap gap-2 mt-2">
+      <button onclick="prEstado.accionAporte={id:${a.id},tipo:'incluir'};prPintar()" class="bg-emerald-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg"><i class="fa-solid fa-check"></i> Incluir</button>
+      <button onclick="prEstado.accionAporte={id:${a.id},tipo:'descartar'};prPintar()" class="text-[11px] font-bold px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200"><i class="fa-solid fa-xmark"></i> Descartar</button></div>`;
+  } else {
+    acciones = `<div class="flex flex-wrap items-center gap-2 mt-2"><p class="text-[10.5px] text-slate-500">${esc(a.decidido_por||"")} · ${prFecha(a.decidido_en)}${a.decision?` · ${esc(a.decision)}`:""}</p>
+      <button onclick="prDecidirAporte(${a.id}, 'propuesto')" class="text-[10.5px] font-bold px-2.5 py-1 rounded-lg border border-slate-700 text-slate-300"><i class="fa-solid fa-rotate-left"></i> Reabrir</button></div>`;
+  }
+  return `<div class="bg-slate-900 border ${a.estado==="incluido"?"border-emerald-500/40":"border-slate-800"} rounded-xl p-3 mt-2">
+    <div class="flex flex-wrap gap-1 mb-1">${prChip("bg-slate-500/20 text-slate-300",esc(a.codigo))}${prChip(a.documento==="PEI"?"pr-t-obligacion":"pr-t-instruccion",esc(a.documento))}${prChip(pert[0],pert[1])}${prChip(est[0],est[1])}</div>
+    <p class="text-[12.5px] font-bold text-white">${esc(a.resumen)}</p>
+    ${a.cita ? `<div class="pr-cita rounded-r-lg px-3 py-1.5 mt-1 text-[11.5px] italic text-slate-300">“${esc(a.cita)}”</div>` : ""}
+    <p class="text-[11.5px] text-slate-300 mt-1.5"><b class="text-slate-200">${a.pertinencia==="no_pertinente"?"Por qué no":"Por qué"}:</b> ${esc(a.motivo||"")}</p>
+    ${a.redaccion && a.estado!=="descartado" && !(prEstado.accionAporte && prEstado.accionAporte.id===a.id) ? `<p class="text-[11.5px] text-slate-300 mt-1"><b class="text-slate-200">Propuesta para ${esc(a.documento)}${a.seccion?" · "+esc(a.seccion):""}:</b> ${esc(a.redaccion)}</p>` : ""}
+    ${req || a.hallazgo_codigo ? `<p class="text-[10.5px] text-slate-500 mt-1">${req?`Relacionado con ${esc(req.id)} (${esc(req.articulo)})`:""}${req&&a.hallazgo_codigo?" · ":""}${a.hallazgo_codigo?`ayuda a resolver ${esc(a.hallazgo_codigo)}`:""}</p>` : ""}
+    ${acciones}</div>`;
+}
+async function prSubirCompilado(est, input){
+  const f = input.files && input.files[0]; input.value = "";
+  if(!f) return;
+  const ext = (f.name.match(/\.([a-z0-9]+)$/i)||[])[1]?.toLowerCase();
+  if(!["docx","pdf"].includes(ext)) return toast("Sube el compilado en Word (.docx) o PDF");
+  if(f.size > 25*1024*1024) return toast("El archivo pesa más de 25 MB");
+  toast("Subiendo el compilado…");
+  try{
+    const data = await new Promise((ok, mal)=>{ const fr = new FileReader(); fr.onload = ()=>ok(fr.result); fr.onerror = mal; fr.readAsDataURL(f); });
+    await api(`/api/colegios/${STATE.colegioId}/peirie/participacion`, { method:"POST", body: JSON.stringify(actorBody({
+      estamento: est, actividad: document.getElementById("pr-c-act").value, fecha: document.getElementById("pr-c-fecha").value,
+      participantes: document.getElementById("pr-c-n").value, archivoNombre: f.name, data })) });
+    prEstado.subiendo = null; prEstado.est = est;
+    toast("Compilado recibido: GADUAI está analizando los aportes. Te avisamos en la campanita.");
+    await prCargar();
+  }catch(e){
+    toast(({ sin_texto:"El archivo no tiene texto legible (¿es un escaneo?).", no_legible:"No se pudo leer el archivo.", archivo_grande:"El archivo pesa más de 25 MB.",
+      formato_invalido:"Formato no válido: usa Word (.docx) o PDF.", sin_expediente:"Primero crea el expediente." })[e.message] || "No se pudo subir el compilado");
+  }
+}
+async function prAbrirCompilado(id){
+  try{ const r = await api(`/api/colegios/${STATE.colegioId}/peirie/participacion/${id}/archivo`);
+    const a = document.createElement("a"); a.href = r.data; a.download = r.nombre; document.body.appendChild(a); a.click(); a.remove(); }
+  catch(e){ toast("No se pudo abrir el compilado"); }
+}
+async function prReanalizarCompilado(id){
+  try{ await api(`/api/colegios/${STATE.colegioId}/peirie/participacion/${id}/analizar`, { method:"POST", body: JSON.stringify(actorBody({})) });
+    toast("Analizando de nuevo. Los aportes ya decididos se conservan."); await prCargar(); }
+  catch(e){ toast(e.message==="sin_ia" ? "La IA no está activa en este GADUAI" : "No se pudo iniciar el análisis"); }
+}
+async function prQuitarCompilado(id){
+  if(!confirm("¿Quitar este compilado? Los aportes ya incluidos se conservan en la propuesta de cambios.")) return;
+  try{ await api(`/api/colegios/${STATE.colegioId}/peirie/participacion/${id}/quitar`, { method:"POST", body: JSON.stringify(actorBody({})) }); await prCargar(); }
+  catch(e){ toast("No se pudo quitar el compilado"); }
+}
+async function prDecidirAporte(id, estado){
+  const red = document.getElementById("pr-a-red"), mot = document.getElementById("pr-a-mot");
+  const body = { estado };
+  if(estado==="incluido"){ body.redaccion = red ? red.value.trim() : undefined; if(red && !body.redaccion) return toast("Escribe el texto que se incluirá"); }
+  if(estado==="descartado"){ body.decision = mot ? mot.value.trim() : ""; if(!body.decision) return toast("Escribe por qué se descarta"); }
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/peirie/aportes/${id}/decision`, { method:"POST", body: JSON.stringify(actorBody(body)) });
+    prEstado.accionAporte = null; toast(estado==="incluido" ? "Aporte incluido en la propuesta de cambios" : estado==="descartado" ? "Aporte descartado" : "Aporte reabierto");
+    await prCargar();
+  }catch(e){ toast("No se pudo registrar la decisión"); }
+}
+async function prIncluirPertinentes(est){
+  if(!confirm("¿Incluir todos los aportes que GADUAI marcó como pertinentes? Podrás reabrir cualquiera después.")) return;
+  try{ const r = await api(`/api/colegios/${STATE.colegioId}/peirie/aportes/incluir-pertinentes`, { method:"POST", body: JSON.stringify(actorBody({ estamento: est })) });
+    toast(`${r.incluidos} aporte(s) incluidos en la propuesta de cambios`); await prCargar(); }
+  catch(e){ toast("No se pudieron incluir los aportes"); }
+}
+function prDocWord(nombreArchivo, cuerpo){
+  return Promise.all([obtenerInsignia(), obtenerLogoGaduai()]).then(([insignia, logo])=>{
+    const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      @page{size:8.5in 11in;margin:0.8in} body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#1a1a1a}
+      .encabezado-doc td{border:none;padding:0} h1{font-size:17pt;color:#0C0B70;margin:4px 0} h2{font-size:13pt;color:#0034DA;margin:16px 0 6px}
+      p{margin:4px 0} li{margin:3px 0} table{width:100%;border-collapse:collapse;margin-top:6px}
+      th,td{border:1px solid #9aa0c8;padding:6px 8px;text-align:left;vertical-align:top;font-size:10pt} th{background:#0C0B70;color:#fff}
+      .nota{background:#F3EEFF;border:1px solid #8B5CF6;padding:8px 10px} .linea{height:46px}
+    </style></head><body>${encabezadoDocumentoHtml(insignia, logo, `Fecha: ${new Date().toLocaleDateString("es-CL")}`)}${cuerpo}</body></html>`;
+    const blob = window.htmlDocx.asBlob(doc), url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = nombreArchivo; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  });
+}
+async function prDescargarGuia(e){
+  const d = prEstado.data, g = PR_GUIA[e], nombre = d.estamentos[e], colegio = STATE.colegio.nombre;
+  // Lo que GADUAI detectó en el diagnóstico, como preguntas abiertas (no para estudiantes: es lenguaje técnico).
+  const detectado = e==="estudiantes" ? [] : d.hallazgos.filter(h=>h.estado==="abierto").slice(0,5).map(h=>`GADUAI detectó: «${h.titulo}». ¿Qué proponen ustedes?`);
+  const todas = [...g.pei.map(q=>["PEI",q]), ...g.rie.map(q=>["RIE",q]), ...detectado.map(q=>["Diagnóstico",q])];
+  const ol = (arr) => `<ol>${arr.map(q=>`<li>${esc(q)}</li>`).join("")}</ol>`;
+  const cuerpo = `<p style="color:#5b35c9;font-weight:bold;letter-spacing:1px">GADUAI PEI/RIE · ACTUALIZACIÓN PARTICIPATIVA</p>
+    <h1>Guía de participación · ${esc(nombre)}</h1><p><b>${esc(colegio)}</b> · ${esc(d.expediente.nombre)}</p>
+    <h2>1. Para qué es esta actividad</h2>
+    <p>Estamos actualizando el Proyecto Educativo Institucional (PEI) y el Reglamento Interno (RIE). La ley pide que participen todos los estamentos (Ley 21.809, art. 16 H). Sus aportes se analizarán uno por uno y el equipo directivo informará qué se incorporó y por qué.</p>
+    <h2>2. Cómo organizarla</h2>
+    <ul><li>Duración sugerida: ${esc(g.duracion)}.</li><li>Definan una persona que modere y otra que registre (secretaría).</li>
+      <li>Trabajen en grupos de 4 a 6 personas y luego compartan en plenario.</li>
+      <li>Registren lo que se dijo tal como se dijo: en qué coinciden y en qué hay posiciones distintas. No escriban acuerdos que no se tomaron.</li>
+      <li>No escriban nombres de estudiantes ni datos personales.</li><li>Cuenten cuántas personas participaron.</li></ul>
+    <h2>3. Preguntas sobre el Proyecto Educativo (PEI)</h2>${ol(g.pei)}
+    <h2>4. Preguntas sobre el Reglamento Interno (RIE)</h2>${ol(g.rie)}
+    ${detectado.length ? `<h2>5. Lo que GADUAI detectó en el diagnóstico</h2>${ol(detectado)}` : ""}
+    <br style="page-break-before:always">
+    <h1>Compilado de aportes · ${esc(nombre)}</h1>
+    <p class="nota">Completen esta ficha y súbanla en GADUAI: <b>PEI/RIE → Participación → ${esc(nombre)} → Subir compilado</b> (Word o PDF).</p>
+    <table><tr><th>Estamento</th><td>${esc(nombre)}</td><th>Fecha</th><td></td></tr>
+      <tr><th>Actividad</th><td></td><th>N° de participantes</th><td></td></tr>
+      <tr><th>Modera</th><td></td><th>Registra</th><td></td></tr></table>
+    <table><tr><th style="width:24%">Pregunta</th><th style="width:30%">Aportes principales</th><th style="width:23%">En qué coinciden</th><th style="width:23%">Posiciones distintas</th></tr>
+      ${todas.map(([doc,q])=>`<tr><td><b>${doc}:</b> ${esc(q)}</td><td class="linea"></td><td></td><td></td></tr>`).join("")}
+      <tr><td><b>Otros aportes</b> que quieran sumar</td><td class="linea"></td><td></td><td></td></tr></table>`;
+  try{ await prDocWord(`Guia_PEI-RIE_${nombre.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñ0-9]+/g,"_")}.docx`, cuerpo); }
+  catch(err){ toast("No se pudo generar la guía"); }
+}
+async function prDescargarPropuesta(){
+  const d = prEstado.data, inc = d.aportes.filter(a=>a.estado==="incluido");
+  if(!inc.length) return toast("Aún no hay aportes incluidos");
+  const bloque = (docu) => {
+    const filas = inc.filter(a=>a.documento===docu).sort((x,y)=>String(x.seccion||"").localeCompare(String(y.seccion||"")));
+    return filas.length ? `<h2>${docu==="PEI"?"Proyecto Educativo Institucional (PEI)":"Reglamento Interno (RIE)"}</h2>
+      <table><tr><th style="width:9%">N°</th><th style="width:21%">Sección</th><th style="width:45%">Texto propuesto</th><th style="width:25%">Origen</th></tr>
+      ${filas.map(a=>`<tr><td>${esc(a.codigo)}</td><td>${esc(a.seccion||"—")}</td><td>${esc(a.redaccion||"")}</td><td>${esc(d.estamentos[a.estamento]||a.estamento)}${a.hallazgo_codigo?` · resuelve ${esc(a.hallazgo_codigo)}`:""}<br><i>“${esc(a.cita||a.resumen)}”</i></td></tr>`).join("")}</table>` : "";
+  };
+  const resumen = (d.participacion||[]).map(p=>`<li>${esc(d.estamentos[p.estamento])}: ${esc(p.actividad||"actividad")}${p.fecha?`, ${esc(planFechaLarga(p.fecha))}`:""}${p.participantes?`, ${p.participantes} participantes`:""}</li>`).join("");
+  const cuerpo = `<p style="color:#5b35c9;font-weight:bold;letter-spacing:1px">GADUAI PEI/RIE</p><h1>Propuesta de cambios desde la participación</h1>
+    <p><b>${esc(STATE.colegio.nombre)}</b> · ${esc(d.expediente.nombre)}</p>
+    <p class="nota">Aportes de la comunidad que el equipo decidió incluir. Es un borrador de trabajo para redactar las nuevas versiones del PEI y del RIE.</p>
+    <h2>Participación registrada</h2><ul>${resumen || "<li>—</li>"}</ul>${bloque("PEI")}${bloque("RIE")}`;
+  try{ await prDocWord(`Propuesta_de_cambios_PEI-RIE_${STATE.colegio.nombre.replace(/\s+/g,"_")}.docx`, cuerpo); }
+  catch(err){ toast("No se pudo generar la propuesta"); }
 }
 
 const PERFILES_PLANIFICACION = ["UTP"];
@@ -5051,7 +5323,7 @@ async function ausentismoDescargarWord(){
   }catch(e){ toast("No se pudo generar el Word del panorama"); }
 }
 
-document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista","modal-circulo","modal-ia","modal-monitor","modal-monitor-historial","modal-buscador","modal-ficha-persona","modal-agenda","modal-ausentismo"].forEach(cerrarModalId); } });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ cerrarModal(); cerrarUsuarios(); ["modal-minuta","modal-chat","modal-alertar","modal-alertas","modal-entrevista","modal-circulo","modal-ia","modal-monitor","modal-monitor-historial","modal-buscador","modal-ficha-persona","modal-agenda","modal-ausentismo"].forEach(cerrarModalId); clearTimeout(prEstado.timer); cerrarModalId("modal-peirie"); } });
 init();
 </script>
 </body>

@@ -648,3 +648,49 @@ create table if not exists peirie_historial (
   creado_en timestamptz not null default now()
 );
 create index if not exists peirie_historial_exp_idx on peirie_historial(expediente_id, creado_en desc);
+
+-- PEI/RIE · participación por estamento: cada estamento sube un compilado de sus aportes (con la
+-- guía que descarga de GADUAI); la IA separa cada aporte y propone si es pertinente y cómo incluirlo.
+create table if not exists peirie_participacion (
+  id bigserial primary key,
+  expediente_id bigint not null references peirie_expedientes(id) on delete cascade,
+  colegio_id text not null references colegios(id) on delete cascade,
+  estamento text not null,           -- directivos | docentes | asistentes | estudiantes | apoderados | consejo
+  actividad text,
+  fecha date,
+  participantes integer,
+  archivo_nombre text not null,
+  archivo_data text not null,
+  texto text not null,
+  subido_por text not null,
+  creado_en timestamptz not null default now(),
+  analisis_estado text,              -- analizando | listo | error | sin_ia
+  analisis jsonb,                    -- coincidencias y diferencias (sin declarar consenso)
+  analisis_error text,
+  analizado_en timestamptz
+);
+create index if not exists peirie_participacion_exp_idx on peirie_participacion(expediente_id, estamento);
+
+create table if not exists peirie_aportes (
+  id bigserial primary key,
+  expediente_id bigint not null references peirie_expedientes(id) on delete cascade,
+  colegio_id text not null references colegios(id) on delete cascade,
+  participacion_id bigint references peirie_participacion(id) on delete set null,
+  estamento text not null,
+  codigo text not null,
+  documento text not null,           -- PEI | RIE
+  seccion text,
+  resumen text not null,
+  cita text,
+  pertinencia text not null,         -- pertinente | requiere_deliberacion | no_pertinente
+  motivo text,
+  redaccion text,                    -- texto propuesto para insertar (editable por el equipo)
+  requisito_id text,
+  hallazgo_codigo text,
+  estado text not null default 'propuesto',   -- propuesto | incluido | descartado
+  decision text,
+  decidido_por text,
+  decidido_en timestamptz,
+  creado_en timestamptz not null default now()
+);
+create index if not exists peirie_aportes_exp_idx on peirie_aportes(expediente_id, estamento);

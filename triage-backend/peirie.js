@@ -25,6 +25,12 @@ const TIPOS_HALLAZGO = ["obligacion", "instruccion", "facultativa", "orientacion
 const ESTADOS_HALLAZGO = ["abierto", "en_tarea", "resuelto", "descartado"];
 const RELACIONES = ["contradiccion", "dependencia", "sin_norma", "coherente"];
 const PERSONA_AVISOS = "PEI/RIE (automático)";
+// Estamentos que participan en la actualización (art. 16 H LGE: todos los estamentos).
+const ESTAMENTOS = {
+  directivos: "Equipo directivo", docentes: "Docentes", asistentes: "Asistentes de la educación",
+  estudiantes: "Estudiantes", apoderados: "Madres, padres y apoderados", consejo: "Consejo Escolar",
+};
+const PERTINENCIAS = ["pertinente", "requiere_deliberacion", "no_pertinente"];
 const DATA_URI_RE = /^data:([\w.+-]+\/[\w.+-]+)?(;[\w.+=-]+)*;base64,([A-Za-z0-9+/=\s]+)$/;
 
 const MATRIZ = JSON.parse(fs.readFileSync(path.join(__dirname, "peirie-matriz.json"), "utf8"));
@@ -102,6 +108,35 @@ const ESQUEMA_COHERENCIA = {
     },
   },
   required: ["resumen", "vinculos"],
+  additionalProperties: false,
+};
+
+const ESQUEMA_APORTES = {
+  type: "object",
+  properties: {
+    coincidencias: { type: "array", items: { type: "string" } },
+    diferencias: { type: "array", items: { type: "string" } },
+    aportes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          resumen: { type: "string" },
+          cita: { type: "string" },
+          documento: { type: "string", enum: ["PEI", "RIE"] },
+          seccion: { type: "string" },
+          pertinencia: { type: "string", enum: PERTINENCIAS },
+          motivo: { type: "string" },
+          redaccion: { type: "string" },
+          requisito_id: { type: "string" },
+          hallazgo_codigo: { type: "string" },
+        },
+        required: ["resumen", "cita", "documento", "seccion", "pertinencia", "motivo", "redaccion", "requisito_id", "hallazgo_codigo"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["coincidencias", "diferencias", "aportes"],
   additionalProperties: false,
 };
 
@@ -306,9 +341,17 @@ function registrarPeiRie(app, d) {
       ultimo = { ...ultimo, estado: "error", error: "El análisis se interrumpió. Vuelve a analizar." };
     }
     const hist = (await pool.query("select accion, detalle, autor, creado_en from peirie_historial where expediente_id=$1 order by creado_en desc limit 80", [exp.id])).rows;
+    const participacion = (await pool.query(
+      `select id, estamento, actividad, fecha, participantes, archivo_nombre, subido_por, creado_en, analisis_estado, analisis, analisis_error, analizado_en
+         from peirie_participacion where expediente_id=$1 order by creado_en desc`, [exp.id]
+    )).rows.map((p) => ({ ...p, fecha: p.fecha ? isoFecha(p.fecha) : null,
+      // Un análisis que quedó a medias se da por fallido a los 15 minutos.
+      analisis_estado: p.analisis_estado === "analizando" && Date.now() - new Date(p.analizado_en).getTime() > 15 * 60 * 1000 ? "error" : p.analisis_estado }));
+    const aportes = (await pool.query("select * from peirie_aportes where expediente_id=$1 order by id", [exp.id])).rows;
     res.json({
       ...base, expediente: { ...exp, meta_fecha: exp.meta_fecha ? isoFecha(exp.meta_fecha) : null },
       requisitos: requisitosAplicables(exp.perfil_colegio), documentos: docs, hallazgos, analisis: ultimo, historial: hist,
+      estamentos: ESTAMENTOS, participacion, aportes,
     });
   }));
 
@@ -475,7 +518,175 @@ function registrarPeiRie(app, d) {
     }
   }));
 
+  // ---------- participación por estamento ----------
+  // Cada estamento trabaja con su guía y sube un compilado de sus aportes. La IA separa cada aporte,
+  // lo cruza con el PEI y el RIE vigentes y con la matriz, y dice si es pertinente y cómo incluirlo.
+  // Incluirlo o descartarlo lo decide el equipo (puede incluir de una vez todos los pertinentes).
+  async function analizarCompilado(partId) {
+    const part = (await pool.query("select * from peirie_participacion where id=$1", [partId])).rows[0];
+    if (!part) return;
+    const exp = (await pool.query("select * from peirie_expedientes where id=$1", [part.expediente_id])).rows[0];
+    const colegio = (await pool.query("select nombre from colegios where id=$1", [part.colegio_id])).rows[0];
+    const guardar = (estado, analisis, error) => pool.query(
+      "update peirie_participacion set analisis_estado=$2, analisis=$3, analisis_error=$4, analizado_en=now() where id=$1",
+      [partId, estado, analisis ? JSON.stringify(analisis) : null, error || null]);
+    if (!anthropic) return guardar("sin_ia", null, "La IA no está activa en este GADUAI.");
+    try {
+      const docs = (await documentosVigentes(exp.id)).filter((x) => x.tipo === "pei" || x.tipo === "rie");
+      const abiertos = (await pool.query("select codigo, titulo from peirie_hallazgos where expediente_id=$1 and estado in ('abierto','en_tarea') order by id", [exp.id])).rows;
+      const sistema = [
+        { type: "text", text:
+          `Eres asesor/a de ${colegio.nombre} en el proceso participativo de actualización del PEI y del Reglamento Interno (RIE). ` +
+          `Recibes el compilado de aportes de un estamento y lo analizas para el equipo directivo, que decide.\n\n` +
+          `Separa cada aporte distinto (no repitas el mismo con otras palabras) y para cada uno indica:\n` +
+          `- cita: texto copiado del compilado, breve. No inventes aportes ni acuerdos.\n` +
+          `- documento y seccion: dónde se incluiría (PEI o RIE, y la sección del documento vigente).\n` +
+          `- pertinencia: "pertinente" si es compatible con la normativa de la matriz, coherente con el ideario del PEI y aporta algo que el ` +
+          `documento no tiene o mejora lo que tiene; "no_pertinente" si contradice la normativa (di la fuente), si el documento ya lo contiene ` +
+          `(di dónde) o si no corresponde a estos instrumentos; "requiere_deliberacion" si hay posiciones distintas en el compilado o implica ` +
+          `una decisión institucional de fondo.\n- motivo: por qué, en 1 o 2 oraciones.\n` +
+          `- redaccion: si es pertinente o requiere deliberación, el texto propuesto listo para insertar en el documento; si no, vacío.\n` +
+          `- requisito_id: código de la matriz relacionado, o vacío. hallazgo_codigo: código del hallazgo abierto que este aporte ayuda a resolver, o vacío.\n` +
+          `En "coincidencias" y "diferencias" resume lo que se repite y las posiciones distintas, sin declarar consensos que el compilado no muestre. ` +
+          `Español de Chile, claro y breve. Máximo 30 aportes.` },
+        { type: "text", text: `MATRIZ NORMATIVA:\n${textoMatriz(requisitosAplicables(exp.perfil_colegio), ["PEI", "RIE", "Ambos"])}`, cache_control: { type: "ephemeral" } },
+      ];
+      const contenido = [
+        ...bloqueDocs(docs, (x) => x.tipo === "pei" ? "PEI VIGENTE" : "RIE VIGENTE"),
+        { type: "text", text: `HALLAZGOS ABIERTOS DEL DIAGNÓSTICO:\n${abiertos.map((h) => `${h.codigo}: ${h.titulo}`).join("\n") || "(ninguno)"}` },
+        { type: "text", text: `COMPILADO DEL ESTAMENTO ${ESTAMENTOS[part.estamento].toUpperCase()} (${part.actividad || "actividad"}, ${part.participantes || "?"} participantes, archivo ${part.archivo_nombre}):\n\n${part.texto}` },
+        { type: "text", text: "Analiza los aportes de este compilado." },
+      ];
+      const { json, modelo } = await llamarIA(sistema, contenido, ESQUEMA_APORTES);
+      await pool.query("delete from peirie_aportes where participacion_id=$1 and estado='propuesto'", [partId]);
+      let n = (await pool.query("select coalesce(max(substring(codigo from 3)::int),0) as n from peirie_aportes where expediente_id=$1", [exp.id])).rows[0].n;
+      for (const a of json.aportes) {
+        n++;
+        const req = REQUISITOS.get(String(a.requisito_id || "").trim().toUpperCase());
+        await pool.query(
+          `insert into peirie_aportes (expediente_id, colegio_id, participacion_id, estamento, codigo, documento, seccion, resumen, cita,
+             pertinencia, motivo, redaccion, requisito_id, hallazgo_codigo)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+          [exp.id, part.colegio_id, partId, part.estamento, `A-${String(n).padStart(2, "0")}`, a.documento === "PEI" ? "PEI" : "RIE",
+            String(a.seccion || "").slice(0, 300), String(a.resumen || "").slice(0, 600), String(a.cita || "").slice(0, 1500),
+            PERTINENCIAS.includes(a.pertinencia) ? a.pertinencia : "requiere_deliberacion", String(a.motivo || "").slice(0, 1000),
+            String(a.redaccion || "").slice(0, 3000) || null, req ? req.id : null, String(a.hallazgo_codigo || "").trim().slice(0, 10) || null]
+        );
+      }
+      await guardar("listo", { coincidencias: json.coincidencias, diferencias: json.diferencias, modelo, aportes: json.aportes.length });
+      await historial(part.colegio_id, exp.id, "Aportes analizados", `${ESTAMENTOS[part.estamento]}: ${json.aportes.length} aporte(s), ${json.aportes.filter((a) => a.pertinencia === "pertinente").length} pertinente(s).`, "GADUAI");
+      for (const u of await responsables(exp)) {
+        crearAlerta(exp.colegio_id, exp.item_id, u, `PEI/RIE: los aportes de ${ESTAMENTOS[part.estamento]} están analizados.`, { autor: "PEI/RIE" }).catch(() => {});
+      }
+    } catch (err) {
+      console.error("PEI/RIE: error al analizar el compilado", partId, "-", err.message);
+      await guardar("error", null, err.message.startsWith("La ") ? err.message : "No se pudo analizar el compilado. Vuelve a intentarlo en unos minutos.");
+    }
+  }
+  function analizarCompiladoEnSegundoPlano(partId) {
+    pool.query("update peirie_participacion set analisis_estado='analizando', analisis_error=null, analizado_en=now() where id=$1", [partId])
+      .then(() => analizarCompilado(partId))
+      .catch((err) => console.error("PEI/RIE: no se pudo iniciar el análisis del compilado", partId, "-", err.message));
+  }
+
+  app.post("/api/colegios/:id/peirie/participacion", asyncRoute(async (req, res) => {
+    const colegioId = req.params.id;
+    const actor = await actorPeiRie(req, colegioId);
+    if (!actor) return res.status(403).json({ error: "sin_permiso" });
+    const exp = await expedienteDe(colegioId);
+    if (!exp) return res.status(409).json({ error: "sin_expediente" });
+    const b = req.body || {};
+    if (!ESTAMENTOS[b.estamento]) return res.status(400).json({ error: "estamento_invalido" });
+    const archivoNombre = String(b.archivoNombre || "").trim().slice(0, 180);
+    const ext = (archivoNombre.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase();
+    const archivo = decodificar(b.data);
+    if (!archivo || !["pdf", "docx"].includes(ext)) return res.status(400).json({ error: "formato_invalido" });
+    const buffer = Buffer.from(archivo.base64, "base64");
+    if (buffer.length > DOC_MAX_BYTES) return res.status(413).json({ error: "archivo_grande" });
+    let texto;
+    try { texto = await extraerTexto(buffer, ext); } catch (err) { return res.status(422).json({ error: "no_legible" }); }
+    if (!texto || texto.length < 80) return res.status(422).json({ error: "sin_texto" });
+    const participantes = Math.max(0, Math.min(5000, parseInt(b.participantes, 10) || 0)) || null;
+    const fecha = /^\d{4}-\d{2}-\d{2}$/.test(b.fecha || "") ? b.fecha : null;
+    const mime = ext === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const r = await pool.query(
+      `insert into peirie_participacion (expediente_id, colegio_id, estamento, actividad, fecha, participantes, archivo_nombre, archivo_data, texto, subido_por)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
+      [exp.id, colegioId, b.estamento, String(b.actividad || "").trim().slice(0, 160) || null, fecha, participantes, archivoNombre,
+        `data:${mime};base64,${archivo.base64}`, texto, actor.nombre]
+    );
+    await historial(colegioId, exp.id, "Compilado de aportes subido", `${ESTAMENTOS[b.estamento]}${participantes ? ` · ${participantes} participantes` : ""} (${archivoNombre})`, actor.nombre);
+    analizarCompiladoEnSegundoPlano(r.rows[0].id);
+    res.json({ ok: true, id: r.rows[0].id });
+  }));
+
+  async function participacionDe(req, res) {
+    const actor = await actorPeiRie(req, req.params.id);
+    if (!actor) { res.status(403).json({ error: "sin_permiso" }); return {}; }
+    const part = (await pool.query("select id, expediente_id, colegio_id, estamento, archivo_nombre from peirie_participacion where id=$1 and colegio_id=$2", [req.params.pid, req.params.id])).rows[0];
+    if (!part) { res.status(404).json({ error: "no_encontrado" }); return {}; }
+    return { actor, part };
+  }
+  app.get("/api/colegios/:id/peirie/participacion/:pid/archivo", asyncRoute(async (req, res) => {
+    const { part } = await participacionDe(req, res);
+    if (!part) return;
+    const r = (await pool.query("select archivo_nombre, archivo_data from peirie_participacion where id=$1", [part.id])).rows[0];
+    res.json({ nombre: r.archivo_nombre, data: r.archivo_data });
+  }));
+  app.post("/api/colegios/:id/peirie/participacion/:pid/analizar", asyncRoute(async (req, res) => {
+    const { part } = await participacionDe(req, res);
+    if (!part) return;
+    if (!anthropic) return res.status(409).json({ error: "sin_ia" });
+    analizarCompiladoEnSegundoPlano(part.id);
+    res.json({ ok: true });
+  }));
+  // Quita un compilado y sus aportes que no fueron incluidos (lo ya incluido queda en la propuesta de cambios).
+  app.post("/api/colegios/:id/peirie/participacion/:pid/quitar", asyncRoute(async (req, res) => {
+    const { actor, part } = await participacionDe(req, res);
+    if (!part) return;
+    await pool.query("delete from peirie_aportes where participacion_id=$1 and estado <> 'incluido'", [part.id]);
+    await pool.query("update peirie_aportes set participacion_id=null where participacion_id=$1", [part.id]);
+    await pool.query("delete from peirie_participacion where id=$1", [part.id]);
+    await historial(part.colegio_id, part.expediente_id, "Compilado quitado", `${ESTAMENTOS[part.estamento]} (${part.archivo_nombre})`, actor.nombre);
+    res.json({ ok: true });
+  }));
+
+  // Decisión del equipo sobre un aporte: incluirlo, descartarlo (con motivo) o volver a "propuesto".
+  app.post("/api/colegios/:id/peirie/aportes/:aid/decision", asyncRoute(async (req, res) => {
+    const colegioId = req.params.id;
+    const actor = await actorPeiRie(req, colegioId);
+    if (!actor) return res.status(403).json({ error: "sin_permiso" });
+    const a = (await pool.query("select * from peirie_aportes where id=$1 and colegio_id=$2", [req.params.aid, colegioId])).rows[0];
+    if (!a) return res.status(404).json({ error: "no_encontrado" });
+    const estado = req.body.estado;
+    const texto = String(req.body.decision || "").trim().slice(0, 2000);
+    const redaccion = req.body.redaccion !== undefined ? String(req.body.redaccion || "").trim().slice(0, 3000) : a.redaccion;
+    if (!["incluido", "descartado", "propuesto"].includes(estado)) return res.status(400).json({ error: "estado_invalido" });
+    if (estado === "descartado" && !texto) return res.status(400).json({ error: "decision_vacia" });
+    if (estado === "incluido" && !redaccion) return res.status(400).json({ error: "sin_redaccion" });
+    await pool.query("update peirie_aportes set estado=$2, decision=$3, redaccion=$4, decidido_por=$5, decidido_en=now() where id=$1",
+      [a.id, estado, estado === "propuesto" ? null : texto || null, redaccion || null, estado === "propuesto" ? null : actor.nombre]);
+    await historial(colegioId, a.expediente_id, estado === "incluido" ? "Aporte incluido" : estado === "descartado" ? "Aporte descartado" : "Aporte reabierto",
+      `${a.codigo} · ${ESTAMENTOS[a.estamento]} · ${a.resumen}${texto ? ` — ${texto}` : ""}`, actor.nombre);
+    res.json({ ok: true });
+  }));
+  // Incluye de una vez todos los aportes que la IA marcó pertinentes (de un estamento o de todos).
+  app.post("/api/colegios/:id/peirie/aportes/incluir-pertinentes", asyncRoute(async (req, res) => {
+    const colegioId = req.params.id;
+    const actor = await actorPeiRie(req, colegioId);
+    if (!actor) return res.status(403).json({ error: "sin_permiso" });
+    const exp = await expedienteDe(colegioId);
+    if (!exp) return res.status(409).json({ error: "sin_expediente" });
+    const est = ESTAMENTOS[req.body.estamento] ? req.body.estamento : null;
+    const r = await pool.query(
+      `update peirie_aportes set estado='incluido', decision='Incluido como pertinente según el análisis de GADUAI.', decidido_por=$3, decidido_en=now()
+        where expediente_id=$1 and estado='propuesto' and pertinencia='pertinente' and redaccion is not null and ($2::text is null or estamento=$2)
+        returning codigo`, [exp.id, est, actor.nombre]);
+    if (r.rowCount) await historial(colegioId, exp.id, "Aportes pertinentes incluidos", `${r.rowCount} aporte(s)${est ? ` de ${ESTAMENTOS[est]}` : ""}: ${r.rows.map((x) => x.codigo).join(", ")}`, actor.nombre);
+    res.json({ ok: true, incluidos: r.rowCount });
+  }));
+
   return { PERFILES_PEIRIE };
 }
 
-module.exports = { registrarPeiRie, PERFILES_PEIRIE };
+module.exports = { registrarPeiRie, PERFILES_PEIRIE, ESTAMENTOS };

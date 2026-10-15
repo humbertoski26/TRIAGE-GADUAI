@@ -133,6 +133,7 @@ app.use("/api/plan-docente", express.json({ limit: "15mb" }));
 app.use("/api/colegios/:id/planificacion-programas", express.json({ limit: "36mb" }));
 // PEI/RIE: el PEI y el Reglamento Interno (con anexos) pueden pesar hasta 25 MB.
 app.use("/api/colegios/:id/peirie/documentos", express.json({ limit: "36mb" }));
+app.use("/api/colegios/:id/peirie/participacion", express.json({ limit: "36mb" }));
 app.use(express.json({ limit: "8mb" })); // documentos adjuntos van en base64 dentro del JSON
 
 // Cabeceras de seguridad básicas. CSP completa queda pendiente (el frontend usa scripts inline y
