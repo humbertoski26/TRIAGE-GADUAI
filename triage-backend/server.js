@@ -21,6 +21,7 @@ const { Pool, types } = require("pg");
 types.setTypeParser(1082, val => val);
 const { enviarCorreo, correoConfigurado } = require("./email");
 const { registrarPlanificaciones, repararTextosMalCodificados } = require("./planificaciones");
+const { registrarPeiRie } = require("./peirie");
 const { enviarPush } = require("./push");
 const Anthropic = require("@anthropic-ai/sdk");
 
@@ -130,6 +131,8 @@ const app = express();
 app.use("/api/plan-docente", express.json({ limit: "15mb" }));
 // Los planes y programas ministeriales son documentos largos (hasta 25 MB).
 app.use("/api/colegios/:id/planificacion-programas", express.json({ limit: "36mb" }));
+// PEI/RIE: el PEI y el Reglamento Interno (con anexos) pueden pesar hasta 25 MB.
+app.use("/api/colegios/:id/peirie/documentos", express.json({ limit: "36mb" }));
 app.use(express.json({ limit: "8mb" })); // documentos adjuntos van en base64 dentro del JSON
 
 // Cabeceras de seguridad básicas. CSP completa queda pendiente (el frontend usa scripts inline y
@@ -2887,6 +2890,11 @@ app.get("/manifest.webmanifest", (req, res) => {
 const planificaciones = registrarPlanificaciones(app, {
   pool, asyncRoute, verificarActor, actorDeHeaders, crearAlerta, enviarCorreo, correoConfigurado, anthropic,
   ahoraChile: agendaAhoraChile, sumarDias: agendaSumarDias,
+});
+
+// ---------- PEI/RIE (Proyecto Educativo + Reglamento Interno) ----------
+registrarPeiRie(app, {
+  pool, asyncRoute, verificarActor, actorDeHeaders, crearAlerta, enviarCorreo, anthropic, ahoraChile: agendaAhoraChile,
 });
 
 // ---------- estáticos (sirve el propio frontend) ----------

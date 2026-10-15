@@ -559,3 +559,92 @@ create table if not exists planificacion_programas (
   creado_en timestamptz not null default now()
 );
 create index if not exists planificacion_programas_colegio_idx on planificacion_programas(colegio_id);
+
+-- ---------- PEI/RIE: actualización del Proyecto Educativo y del Reglamento Interno ----------
+-- Un expediente activo por colegio. La matriz normativa no vive en la base: es común a todos los
+-- colegios y va en peirie-matriz.json (aprobada por el abogado de GADUAI).
+create table if not exists peirie_expedientes (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  nombre text not null,
+  perfil_colegio jsonb,              -- {subvencionado, basica_media, parvularia, especial, financiamiento_compartido}
+  meta_fecha date,
+  responsable_pei text,
+  responsable_rie text,
+  creado_por text not null,
+  item_id bigint references items(id) on delete set null,   -- hito del Timeline donde llegan los avisos
+  estado text not null default 'activo',
+  creado_en timestamptz not null default now()
+);
+create index if not exists peirie_expedientes_colegio_idx on peirie_expedientes(colegio_id);
+
+-- Documentos con versiones: una versión nueva nunca pisa la anterior.
+create table if not exists peirie_documentos (
+  id bigserial primary key,
+  expediente_id bigint not null references peirie_expedientes(id) on delete cascade,
+  colegio_id text not null references colegios(id) on delete cascade,
+  tipo text not null,                -- pei | rie | anexo
+  nombre text not null,
+  archivo_nombre text not null,
+  archivo_data text not null,
+  texto text not null,
+  caracteres integer,
+  version integer not null default 1,
+  subido_por text not null,
+  creado_en timestamptz not null default now()
+);
+create index if not exists peirie_documentos_exp_idx on peirie_documentos(expediente_id, tipo);
+
+create table if not exists peirie_analisis (
+  id bigserial primary key,
+  expediente_id bigint not null references peirie_expedientes(id) on delete cascade,
+  estado text not null,              -- analizando | listo | error
+  documentos jsonb,
+  resultado jsonb,                   -- resúmenes, fortalezas, alcance sugerido y vínculos coherentes
+  error text,
+  solicitado_por text,
+  creado_en timestamptz not null default now(),
+  terminado_en timestamptz
+);
+create index if not exists peirie_analisis_exp_idx on peirie_analisis(expediente_id, id desc);
+
+-- Hallazgos: evidencia, fuente (requisito de la matriz), propuesta, decisión humana y tarea vinculada.
+create table if not exists peirie_hallazgos (
+  id bigserial primary key,
+  expediente_id bigint not null references peirie_expedientes(id) on delete cascade,
+  colegio_id text not null references colegios(id) on delete cascade,
+  analisis_id bigint references peirie_analisis(id) on delete set null,
+  ruta text not null,                -- pei | rie | ambos
+  codigo text not null,
+  titulo text not null,
+  documento text,
+  seccion text,
+  evidencia text,
+  requisito_id text,
+  tipo text not null,                -- obligacion | instruccion | facultativa | orientacion | sugerencia_ia
+  propuesta text,
+  requiere_confirmacion boolean not null default false,
+  vinculo text,
+  relacion text,                     -- solo coherencia: contradiccion | dependencia | sin_norma
+  seccion_otro text,                 -- solo coherencia: sección y cita del RIE
+  cita_otro text,
+  estado text not null default 'abierto',   -- abierto | en_tarea | resuelto | descartado
+  decision text,
+  decidido_por text,
+  decidido_en timestamptz,
+  item_id bigint references items(id) on delete set null,
+  responsable text,
+  creado_en timestamptz not null default now()
+);
+create index if not exists peirie_hallazgos_exp_idx on peirie_hallazgos(expediente_id, ruta);
+
+create table if not exists peirie_historial (
+  id bigserial primary key,
+  colegio_id text not null references colegios(id) on delete cascade,
+  expediente_id bigint references peirie_expedientes(id) on delete cascade,
+  accion text not null,
+  detalle text,
+  autor text not null,
+  creado_en timestamptz not null default now()
+);
+create index if not exists peirie_historial_exp_idx on peirie_historial(expediente_id, creado_en desc);

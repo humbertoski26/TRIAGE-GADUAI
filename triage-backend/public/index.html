@@ -108,6 +108,7 @@
   :root[data-theme="claro"] .gaduai-btn-violet.text-white,
   :root[data-theme="claro"] .gaduai-btn-amber.text-white,
   :root[data-theme="claro"] .gaduai-btn-plan.text-white,
+  :root[data-theme="claro"] .gaduai-btn-peirie.text-white,
   :root[data-theme="claro"] .bg-indigo-600.text-white,
   :root[data-theme="claro"] .bg-indigo-600\/30.text-white,
   :root[data-theme="claro"] .bg-emerald-600.text-white,
@@ -166,6 +167,38 @@
   .plan-fila{background:rgba(2,6,23,.45)}
   :root[data-theme="claro"] .plan-fila{background:#ffffff;border:1px solid #D7F3EF}
   .gaduai-btn-amber:hover{background:#b45f04}
+  /* PEI/RIE — azul marino a violeta (función inteligente); el turquesa queda para lo que hace la IA.
+     Las etiquetas de tipo de exigencia usan tonos de la paleta, con su versión para modo claro. */
+  .gaduai-btn-peirie{background:linear-gradient(90deg,#0C0B70,#8B5CF6)}
+  .gaduai-btn-peirie:hover{background:linear-gradient(90deg,#08075a,#7c3aed)}
+  .pr-vio{color:#c4b5fd}
+  .pr-borde{border-color:rgba(139,92,246,.45)!important}
+  .pr-t-obligacion{background:rgba(0,52,218,.28);color:#b9c8ff}
+  .pr-t-instruccion{background:rgba(139,92,246,.22);color:#d4c6ff}
+  .pr-t-facultativa{background:rgba(148,163,184,.18);color:#cbd5e1}
+  .pr-t-orientacion{background:rgba(157,178,255,.12);color:#c7d2fe}
+  .pr-t-ia{background:rgba(32,201,181,.12);color:#5eead4;border:1px solid rgba(32,201,181,.4)}
+  .pr-r-contradiccion{background:rgba(225,29,72,.18);color:#fda4af}
+  .pr-r-dependencia{background:rgba(2,132,199,.2);color:#7dd3fc}
+  .pr-r-sin_norma{background:rgba(217,119,6,.2);color:#fcd34d}
+  .pr-r-coherente{background:rgba(16,185,129,.18);color:#6ee7b7}
+  .pr-sel{border-color:#8B5CF6!important;box-shadow:0 0 0 1px #8B5CF6}
+  .pr-cita{border-left:3px solid #8B5CF6;background:rgba(139,92,246,.08)}
+  .pr-plazo{border:1px solid rgba(139,92,246,.55);background:rgba(139,92,246,.12)}
+  :root[data-theme="claro"] .pr-vio{color:#5b35c9!important}
+  :root[data-theme="claro"] .pr-borde{border-color:rgba(139,92,246,.35)!important}
+  :root[data-theme="claro"] .pr-t-obligacion{background:#E9EEFF;color:#0034DA}
+  :root[data-theme="claro"] .pr-t-instruccion{background:#F3EEFF;color:#5b35c9}
+  :root[data-theme="claro"] .pr-t-facultativa{background:#EEF0F8;color:#33357f}
+  :root[data-theme="claro"] .pr-t-orientacion{background:#F1F3FF;color:#33357f}
+  :root[data-theme="claro"] .pr-t-ia{background:#EAFBF8;color:#0b6b60;border-color:#20C9B5}
+  :root[data-theme="claro"] .pr-r-contradiccion{background:#FDE7EC;color:#b5123a}
+  :root[data-theme="claro"] .pr-r-dependencia{background:#E3F2FB;color:#035e8f}
+  :root[data-theme="claro"] .pr-r-sin_norma{background:#FDF1E1;color:#9a4f00}
+  :root[data-theme="claro"] .pr-r-coherente{background:#E7F8F1;color:#0f7a57}
+  :root[data-theme="claro"] .pr-sel{border-color:#8B5CF6!important}
+  :root[data-theme="claro"] .pr-cita{background:#F7F4FF}
+  :root[data-theme="claro"] .pr-plazo{background:#F3EEFF;border-color:#8B5CF6}
   /* ---------- Fase 9/18: PULSO GADUAI — monitor de signos vitales del colegio ----------
      Botón más grande que sus vecinos (Entrevista/Relacionai/IA GADUAI/Buscador) a propósito
      — es el primero y el más importante de la fila. Se ve como un monitor clínico: 3 líneas
@@ -420,6 +453,7 @@
           <button id="btn-buscador" hidden onclick="abrirBuscador()" title="Buscador" class="gaduai-btn-violet text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-magnifying-glass"></i> Buscador</button>
           <button onclick="abrirAgenda()" title="Agenda / Calendario" class="gaduai-btn-lime text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-calendar-days"></i> Agenda</button>
           <button id="btn-planificaciones" hidden onclick="abrirPlanificaciones()" title="Planificaciones" class="gaduai-btn-plan text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px] relative"><i class="fa-solid fa-folder-open"></i> Planificaciones <span id="plan-badge" hidden class="absolute -top-2 -right-2 bg-rose-600 text-white text-[10px] font-black rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center"></span></button>
+          <button id="btn-peirie" hidden onclick="abrirPeiRie()" title="PEI/RIE: Proyecto Educativo y Reglamento Interno" class="gaduai-btn-peirie text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-compass"></i> PEI/RIE</button>
           <button id="btn-ausentismo" hidden onclick="abrirAusentismo()" title="Ausentismo" class="gaduai-btn-amber text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-1.5 flex-1 justify-center min-w-[120px]"><i class="fa-solid fa-user-clock"></i> Ausentismo</button>
         </div>
 
@@ -896,6 +930,32 @@
       <button data-t="historial" onclick="planTab('historial')" class="plan-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-clock-rotate-left"></i> Historial</button>
     </div>
     <div id="plan-vista"></div>
+  </div>
+</div>
+
+<!-- ============ MODAL: PEI/RIE ============ -->
+<div id="modal-peirie" class="hidden fixed inset-0 z-[110] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+  <div class="w-full max-w-6xl bg-slate-900 border border-slate-800 rounded-3xl p-6 modal-scroll fade-in">
+    <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+      <div>
+        <p class="text-[10px] uppercase tracking-widest pr-vio font-bold"><i class="fa-solid fa-compass"></i> PEI/RIE · Proyecto Educativo y Reglamento Interno</p>
+        <h3 id="pr-titulo" class="text-xl font-black text-white">—</h3>
+        <p id="pr-subtitulo" class="text-[11px] text-slate-400 mt-1"></p>
+      </div>
+      <div class="flex gap-2 items-center">
+        <button id="pr-btn-editar" hidden onclick="prEditarExpediente()" class="text-[11px] font-bold px-3 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-200"><i class="fa-solid fa-gear"></i> Expediente</button>
+        <button onclick="prCerrar()" class="text-slate-400 hover:text-white ml-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
+    </div>
+    <div id="pr-tabs" class="flex flex-wrap gap-2 mb-4">
+      <button data-t="expediente" onclick="prTab('expediente')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-folder-tree"></i> Expediente</button>
+      <button data-t="documentos" onclick="prTab('documentos')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-file-lines"></i> Documentos</button>
+      <button data-t="hallazgos" onclick="prTab('hallazgos')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-list-check"></i> Hallazgos</button>
+      <button data-t="coherencia" onclick="prTab('coherencia')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-arrows-left-right"></i> Coherencia</button>
+      <button data-t="matriz" onclick="prTab('matriz')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-scale-balanced"></i> Matriz normativa</button>
+      <button data-t="historial" onclick="prTab('historial')" class="pr-tab text-[11px] font-bold px-4 py-2 rounded-xl border border-slate-700"><i class="fa-solid fa-clock-rotate-left"></i> Historial</button>
+    </div>
+    <div id="pr-vista"></div>
   </div>
 </div>
 
@@ -1441,6 +1501,7 @@ async function entrarApp(){
   document.getElementById("btn-buscador").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
   document.getElementById("btn-ausentismo").hidden = !PERFILES_BUSCADOR.includes(STATE.perfil);
   document.getElementById("btn-planificaciones").hidden = !PERFILES_PLANIFICACION.includes(STATE.perfil);
+  document.getElementById("btn-peirie").hidden = !PERFILES_PEIRIE.includes(STATE.perfil);
   cargarPlanBadge();
   actualizarLinkRelacionai();
   eiSetup();
@@ -3834,6 +3895,385 @@ let ausBuscarTimer = null;
 /* ---------- Planificaciones (perfil UTP) ----------
    La UTP recibe cada mes una planificación por asignatura y curso de cada docente. Las docentes
    suben sus archivos desde un link personal que llega por correo (pantalla-plan-docente). */
+/* ============ PEI/RIE: Proyecto Educativo Institucional + Reglamento Interno ============
+   El colegio sube su PEI y su RIE, la IA los diagnostica contra la matriz normativa (común a todos
+   los colegios, aprobada por el abogado) y los cruza entre sí. Cada hallazgo muestra evidencia y
+   fuente; el equipo decide o lo convierte en una tarea del Timeline. La IA propone; nunca aprueba. */
+const PERFILES_PEIRIE = ["Director ejecutivo/máster","Director/a de colegio","UTP","Encargado de Convivencia Educativa"];
+const PR_PLAZO_LEY = "2027-04-01"; // Ley 21.809, art. quinto transitorio (subvencionados)
+const PR_TIPOS = { obligacion:["pr-t-obligacion","Obligación legal"], instruccion:["pr-t-instruccion","Instrucción Supereduc"],
+  facultativa:["pr-t-facultativa","Medida facultativa"], orientacion:["pr-t-orientacion","Orientación oficial"], sugerencia_ia:["pr-t-ia","✨ Sugerencia IA"] };
+const PR_ESTADOS = { abierto:["bg-amber-500/20 text-amber-300","Abierto"], en_tarea:["bg-sky-500/20 text-sky-300","En tarea"],
+  resuelto:["bg-emerald-500/20 text-emerald-300","Resuelto"], descartado:["bg-slate-500/20 text-slate-300","Descartado"] };
+const PR_REL = { contradiccion:"Posible contradicción", dependencia:"Dependencia a revisar", sin_norma:"Principio sin norma que lo exprese", coherente:"Coherente" };
+const PR_RUTA = { pei:"PEI", rie:"RIE", ambos:"PEI ↔ RIE" };
+const PR_ALCANCE = { ajuste:"Ajuste (cambios menores)", actualizacion:"Actualización (cambios de contenido con consulta)", reformulacion:"Reformulación (rehacerlo)" };
+const PR_CIRCULO = { nuevo:"Asignada", dedo_arriba:"Aceptada", dedo_abajo:"Rechazada", manito_ok:"Realizada", cerrado:"Cerrada" };
+let prEstado = { data:null, tab:"expediente", filtro:"todos", sel:null, usuarios:null, timer:null, editando:false, accion:null, buscar:"" };
+
+const prChip = (cls, txt) => `<span class="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full ${cls}">${txt}</span>`;
+const prTipoChip = (t) => prChip((PR_TIPOS[t]||PR_TIPOS.sugerencia_ia)[0], (PR_TIPOS[t]||PR_TIPOS.sugerencia_ia)[1]);
+const prEstadoChip = (e) => prChip((PR_ESTADOS[e]||PR_ESTADOS.abierto)[0], (PR_ESTADOS[e]||PR_ESTADOS.abierto)[1]);
+const prRelChip = (r) => prChip("pr-r-"+r, PR_REL[r]||r);
+function prDiasHasta(iso){ const a=new Date(STATE_HOY()+"T00:00:00Z"), b=new Date(iso+"T00:00:00Z"); return Math.round((b-a)/86400000); }
+function STATE_HOY(){ return (prEstado.data && prEstado.data.hoy) || new Date().toISOString().slice(0,10); }
+function prFecha(ts){ return ts ? new Date(ts).toLocaleDateString("es-CL",{day:"numeric",month:"short",year:"numeric"}) : ""; }
+
+async function abrirPeiRie(){
+  prEstado.tab = "expediente"; prEstado.sel = null; prEstado.filtro = "todos"; prEstado.editando = false; prEstado.accion = null;
+  document.getElementById("modal-peirie").classList.remove("hidden");
+  document.getElementById("pr-vista").innerHTML = `<p class="text-xs text-slate-400 py-10 text-center"><i class="fa-solid fa-spinner fa-spin"></i> Cargando…</p>`;
+  await prCargar();
+}
+function prCerrar(){ clearTimeout(prEstado.timer); cerrarModalId("modal-peirie"); }
+async function prCargar(){
+  try{
+    prEstado.data = await api(`/api/colegios/${STATE.colegioId}/peirie`);
+    if(!prEstado.usuarios) prEstado.usuarios = await api(`/api/colegios/${STATE.colegioId}/usuarios`).catch(()=>[]);
+    prPintar();
+    clearTimeout(prEstado.timer);
+    const a = prEstado.data.analisis;
+    if(a && a.estado==="analizando" && !document.getElementById("modal-peirie").classList.contains("hidden")) prEstado.timer = setTimeout(prCargar, 8000);
+  }catch(e){ toast(e.message==="sin_permiso" ? "PEI/RIE es para Dirección, UTP y Convivencia" : "No se pudo cargar PEI/RIE"); }
+}
+function prTab(t){ prEstado.tab = t; prEstado.accion = null; prPintar(); }
+
+function prPintar(){
+  const d = prEstado.data, exp = d.expediente;
+  document.getElementById("pr-titulo").textContent = exp && !prEstado.editando ? exp.nombre : (exp ? "Editar expediente" : "Iniciar el proceso");
+  document.getElementById("pr-subtitulo").textContent = exp
+    ? [exp.responsable_pei && `Ruta PEI: ${exp.responsable_pei}`, exp.responsable_rie && `Ruta RIE: ${exp.responsable_rie}`, exp.meta_fecha && `Meta: ${planFechaLarga(exp.meta_fecha)}`].filter(Boolean).join(" · ")
+    : "Crea el expediente del colegio para subir el PEI y el Reglamento Interno.";
+  document.getElementById("pr-btn-editar").hidden = !exp || prEstado.editando;
+  document.getElementById("pr-tabs").hidden = !exp || prEstado.editando;
+  document.querySelectorAll(".pr-tab").forEach(b=>{
+    const on = b.dataset.t === prEstado.tab;
+    b.classList.toggle("plan-tab-on", on); b.classList.toggle("text-slate-300", !on);
+  });
+  const v = document.getElementById("pr-vista");
+  if(!exp || prEstado.editando){ v.innerHTML = prFormExpediente(exp); return; }
+  v.innerHTML = ({ expediente:prVistaExpediente, documentos:prVistaDocumentos, hallazgos:prVistaHallazgos,
+    coherencia:prVistaCoherencia, matriz:prVistaMatriz, historial:prVistaHistorial })[prEstado.tab](d);
+}
+function prEditarExpediente(){ prEstado.editando = true; prPintar(); }
+
+// ---------- expediente: crear o editar ----------
+function prOpcionesUsuarios(sel, perfiles){
+  const us = (prEstado.usuarios||[]).filter(u=>!perfiles || perfiles.includes(u.perfil));
+  return `<option value="">— Sin asignar —</option>` + us.map(u=>`<option value="${esc(u.nombre)}" ${u.nombre===sel?"selected":""}>${esc(u.nombre)} · ${esc(u.perfil)}</option>`).join("");
+}
+function prFormExpediente(exp){
+  const p = (exp && exp.perfil_colegio) || { subvencionado:true, basica_media:true };
+  const anio = Number(STATE_HOY().slice(0,4));
+  const chk = (id, txt, on) => `<label class="flex items-center gap-2 text-[12px] text-slate-200 py-1"><input id="${id}" type="checkbox" class="w-4 h-4" ${on?"checked":""}> ${txt}</label>`;
+  return `<div class="grid md:grid-cols-2 gap-4">
+    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <label class="block text-[11px] text-slate-400">Nombre del proceso
+        <input id="pr-f-nombre" value="${esc(exp ? exp.nombre : `Actualización PEI/RIE ${anio}-${anio+1}`)}" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
+      <label class="block text-[11px] text-slate-400">Responsable de la ruta PEI
+        <select id="pr-f-pei" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white">${prOpcionesUsuarios(exp && exp.responsable_pei)}</select></label>
+      <label class="block text-[11px] text-slate-400">Responsable de la ruta RIE
+        <select id="pr-f-rie" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white">${prOpcionesUsuarios(exp && exp.responsable_rie)}</select></label>
+      <label class="block text-[11px] text-slate-400">Fecha meta (por ejemplo, la sesión del Consejo Escolar)
+        <input id="pr-f-meta" type="date" value="${esc((exp && exp.meta_fecha) || "")}" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
+    </div>
+    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+      <p class="text-xs font-bold text-white mb-1">Tipo de establecimiento</p>
+      <p class="text-[10.5px] text-slate-500 mb-2">GADUAI usa solo los requisitos de la matriz que aplican a este tipo de colegio.</p>
+      ${chk("pr-f-subv","Subvencionado o con aportes del Estado", p.subvencionado!==false)}
+      ${chk("pr-f-bm","Imparte educación básica y/o media", p.basica_media!==false)}
+      ${chk("pr-f-parv","Tiene niveles de educación parvularia", !!p.parvularia)}
+      ${chk("pr-f-esp","Escuela especial o con Programa de Integración Escolar", !!p.especial)}
+      ${chk("pr-f-fc","Mantiene financiamiento compartido", !!p.financiamiento_compartido)}
+    </div>
+  </div>
+  <div class="flex gap-2 mt-4">
+    <button onclick="prGuardarExpediente()" class="gaduai-btn-peirie text-white text-xs font-bold px-5 py-2.5 rounded-xl"><i class="fa-regular fa-floppy-disk"></i> ${exp ? "Guardar cambios" : "Crear expediente"}</button>
+    ${exp ? `<button onclick="prEstado.editando=false;prPintar()" class="text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300">Cancelar</button>` : ""}
+  </div>`;
+}
+async function prGuardarExpediente(){
+  const val = (id) => document.getElementById(id).value, chk = (id) => document.getElementById(id).checked;
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/peirie/expediente`, { method:"POST", body: JSON.stringify(actorBody({
+      nombre: val("pr-f-nombre"), responsablePei: val("pr-f-pei"), responsableRie: val("pr-f-rie"), metaFecha: val("pr-f-meta"),
+      perfilColegio: { subvencionado:chk("pr-f-subv"), basica_media:chk("pr-f-bm"), parvularia:chk("pr-f-parv"), especial:chk("pr-f-esp"), financiamiento_compartido:chk("pr-f-fc") },
+    })) });
+    const nuevo = !prEstado.data.expediente;
+    prEstado.editando = false; prEstado.tab = nuevo ? "documentos" : prEstado.tab;
+    toast(nuevo ? "Expediente creado: ahora sube el PEI y el Reglamento Interno" : "Expediente actualizado");
+    await prCargar();
+  }catch(e){ toast("No se pudo guardar el expediente"); }
+}
+
+// ---------- 1 · expediente ----------
+function prVistaExpediente(d){
+  const exp = d.expediente, hz = d.hallazgos, docs = d.documentos, a = d.analisis, res = (a && a.estado==="listo" && a.resultado) || {};
+  const tiene = (t) => docs.some(x=>x.tipo===t);
+  const abiertos = hz.filter(h=>h.estado==="abierto"), enTarea = hz.filter(h=>h.estado==="en_tarea"), cerrados = hz.filter(h=>["resuelto","descartado"].includes(h.estado));
+  const subv = !exp.perfil_colegio || exp.perfil_colegio.subvencionado !== false;
+  const dias = prDiasHasta(PR_PLAZO_LEY);
+  const plazo = subv && dias >= 0 ? `<div class="pr-plazo rounded-2xl p-3 mb-4 text-[12px] text-slate-200"><i class="fa-regular fa-clock pr-vio mr-1"></i>
+    <b>Plazo legal:</b> los colegios subvencionados deben actualizar su RIE y su Plan de Convivencia con un proceso participativo antes del <b>1 de abril de 2027</b> (Ley 21.809, art. quinto transitorio). Quedan <b>${dias} días</b>.</div>` : "";
+  const etapa = (n, t, ok, act, txt) => `<div class="bg-slate-950 border ${ok?"border-emerald-500/50":act?"pr-sel":"border-slate-800"} rounded-2xl p-3">
+      <p class="text-[10px] font-black tracking-wider ${ok?"text-emerald-400":act?"pr-vio":"text-slate-500"}">${ok?"✓ ":act?"● ":""}ETAPA ${n}</p>
+      <p class="text-[12.5px] font-black text-white">${t}</p><p class="text-[10.5px] text-slate-400 mt-0.5">${txt}</p></div>`;
+  const docsOk = tiene("pei") && tiene("rie"), diagOk = a && a.estado==="listo", cohOk = diagOk && !!res.coherencia;
+  const etapas = [
+    etapa(1,"Documentos",docsOk,!docsOk, docsOk ? `PEI y RIE cargados · ${docs.filter(x=>x.tipo==="anexo").length} anexo(s)` : "Sube el PEI y el Reglamento Interno"),
+    etapa(2,"Diagnóstico con IA",diagOk,docsOk&&!diagOk, a && a.estado==="analizando" ? "Analizando…" : diagOk ? `${hz.filter(h=>h.ruta!=="ambos").length} hallazgos con evidencia` : "Cada documento por separado"),
+    etapa(3,"Coherencia PEI ↔ RIE",cohOk,diagOk&&!cohOk, cohOk ? `${hz.filter(h=>h.ruta==="ambos").length} vínculos por revisar` : "Cruce de ambos documentos"),
+    etapa(4,"Decisiones del equipo",diagOk&&!abiertos.length&&hz.length>0,diagOk&&abiertos.length>0, diagOk ? `${abiertos.length} hallazgo(s) esperan decisión` : "El equipo decide qué incorporar"),
+    etapa(5,"Participación","",false,"Próximamente: actividades por estamento"),
+    etapa(6,"Validación","",false,"Próximamente: expediente al Consejo Escolar"),
+  ].join("");
+  const kpi = (n, t, cls) => `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-3"><p class="text-2xl font-black ${cls}">${n}</p><p class="text-[10.5px] text-slate-400 font-bold">${t}</p></div>`;
+  const ruta = (r, titulo, pregunta, resp) => {
+    const doc = docs.find(x=>x.tipo===r), hr = hz.filter(h=>h.ruta===r), rr = res[r];
+    const avance = hr.length ? Math.round(100*hr.filter(h=>["resuelto","descartado"].includes(h.estado)).length/hr.length) : 0;
+    return `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+      <div class="flex justify-between items-start gap-2"><div>${prChip(r==="pei"?"pr-t-obligacion":"pr-t-instruccion", r==="pei"?"Ruta A · PEI":"Ruta B · RIE")}
+        <p class="text-[14px] font-black text-white mt-2">${titulo}</p></div>
+        <span class="text-[10.5px] text-slate-400 text-right">${resp ? `Responsable<br><b class="text-slate-200">${esc(resp)}</b>` : ""}</span></div>
+      <p class="text-[11.5px] italic text-slate-300 mt-1 mb-3">${pregunta}</p>
+      <div class="flex justify-between text-[11px] text-slate-400 mb-1"><span>Hallazgos resueltos</span><b class="text-white">${avance}%</b></div>
+      <div class="h-2 rounded-full bg-slate-800 overflow-hidden mb-3"><div class="h-full" style="width:${avance}%;background:${r==="pei"?"#0034DA":"#8B5CF6"}"></div></div>
+      <p class="text-[11px] text-slate-400">Documento: ${doc ? `<b class="text-slate-200">versión ${doc.version}</b> · ${esc(doc.archivo_nombre)}` : `<span class="text-amber-300">falta subirlo</span>`}</p>
+      <p class="text-[11px] text-slate-400">Hallazgos: ${hr.length} · ${hr.filter(h=>h.estado==="abierto").length} abiertos · ${hr.filter(h=>h.estado==="en_tarea").length} en tarea</p>
+      ${rr ? `<div class="plan-ia rounded-xl p-3 mt-3"><p class="text-[11px] font-bold text-white mb-1"><i class="fa-solid fa-wand-magic-sparkles"></i> Lectura de GADUAI · alcance sugerido: ${esc(PR_ALCANCE[rr.alcance]||rr.alcance||"—")}</p>
+        <p class="text-[11.5px] text-slate-300">${esc(rr.resumen||"")}</p>
+        ${(rr.fortalezas||[]).length ? `<p class="text-[11px] text-slate-400 mt-2"><b class="text-slate-200">Fortalezas:</b> ${(rr.fortalezas||[]).map(esc).join(" · ")}</p>` : ""}</div>` : ""}
+    </div>`;
+  };
+  const prioridad = { obligacion:0, instruccion:1, facultativa:2, orientacion:3, sugerencia_ia:4 };
+  const pend = abiertos.slice().sort((x,y)=>(prioridad[x.tipo]??9)-(prioridad[y.tipo]??9)).slice(0,6);
+  const decidir = pend.length ? pend.map(h=>`<button onclick="prVerHallazgo(${h.id})" class="w-full text-left bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-xl p-3 flex justify-between items-center gap-3 mb-2">
+      <div><p class="text-[12.5px] font-bold text-white">${esc(h.codigo)} · ${esc(h.titulo)}</p><p class="text-[10.5px] text-slate-400">${PR_RUTA[h.ruta]} · ${esc(h.seccion||"")}</p></div>${prTipoChip(h.tipo)}</button>`).join("")
+    : `<p class="text-[11.5px] text-slate-400">${diagOk ? "No hay hallazgos esperando decisión. 🎉" : "Cuando el diagnóstico esté listo, aquí aparecen los hallazgos más importantes."}</p>`;
+  return `${plazo}<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 mb-4">${etapas}</div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">${kpi(hz.length,"Hallazgos detectados","text-white")}${kpi(cerrados.length,"Con decisión registrada","text-emerald-400")}${kpi(enTarea.length,"Tareas en el Timeline","text-sky-300")}${kpi(abiertos.length,"Esperan decisión","text-amber-300")}</div>
+    <div class="grid md:grid-cols-2 gap-4 mb-4">${ruta("pei","Proyecto Educativo Institucional","¿Quiénes somos como colegio y qué educación queremos ofrecer?",exp.responsable_pei)}${ruta("rie","Reglamento Interno","¿Cómo se traducen esos principios en normas, derechos, deberes y procedimientos?",exp.responsable_rie)}</div>
+    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4"><p class="text-xs font-black text-white mb-3">Lo que requiere decisión del equipo</p>${decidir}</div>`;
+}
+
+// ---------- 2 · documentos ----------
+function prVistaDocumentos(d){
+  const docs = d.documentos, a = d.analisis;
+  const grupo = (tipo) => { const m = new Map(); docs.filter(x=>x.tipo===tipo).forEach(x=>{ const k=x.nombre.toLowerCase(); if(!m.has(k)) m.set(k,[]); m.get(k).push(x); }); return [...m.values()]; };
+  const fila = (vers, tipo) => { const v = vers[0];
+    return `<div class="bg-slate-900 border border-slate-800 rounded-xl p-3 mb-2">
+      <div class="flex flex-wrap justify-between items-center gap-2">
+        <div><p class="text-[12.5px] font-bold text-white">${tipo==="anexo" ? "📎 "+esc(v.nombre) : tipo==="pei" ? "📘 PEI" : "📕 Reglamento Interno"} ${prChip("bg-emerald-500/20 text-emerald-300","versión "+v.version)}</p>
+          <p class="text-[10.5px] text-slate-400">${esc(v.archivo_nombre)} · ${(v.caracteres||0).toLocaleString("es-CL")} caracteres · subido por ${esc(v.subido_por)} el ${prFecha(v.creado_en)}</p></div>
+        <div class="flex gap-1.5">
+          <button onclick="prDescargar(${v.id})" class="text-[10.5px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-700 text-slate-200"><i class="fa-solid fa-download"></i> Abrir</button>
+          <label class="text-[10.5px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-700 text-slate-200 cursor-pointer"><i class="fa-solid fa-arrow-up-from-bracket"></i> Nueva versión
+            <input type="file" accept=".docx,.pdf" hidden onchange="prSubir('${tipo}', this, '', ${v.id})"></label>
+          ${tipo==="anexo" ? `<button onclick="prQuitarAnexo(${v.id})" class="text-[10.5px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-700 text-rose-300"><i class="fa-solid fa-trash"></i></button>` : ""}
+        </div></div>
+      ${vers.length>1 ? `<p class="text-[10px] text-slate-500 mt-1.5">Versiones anteriores: ${vers.slice(1).map(x=>`<a href="#" onclick="prDescargar(${x.id});return false" class="underline">v${x.version} (${prFecha(x.creado_en)})</a>`).join(" · ")}</p>` : ""}
+    </div>`; };
+  const falta = (tipo, txt) => `<label class="block border-2 border-dashed border-slate-700 rounded-xl p-4 text-center cursor-pointer hover:border-slate-500 mb-2">
+      <i class="fa-solid fa-cloud-arrow-up text-xl pr-vio"></i><p class="text-[12px] font-bold text-white mt-1">Subir ${txt}</p><p class="text-[10.5px] text-slate-400">Word (.docx) o PDF con texto · hasta 25 MB</p>
+      <input type="file" accept=".docx,.pdf" hidden onchange="prSubir('${tipo}', this, '')"></label>`;
+  const pei = grupo("pei"), rie = grupo("rie"), anexos = grupo("anexo");
+  let estadoIA;
+  if(!d.iaActiva) estadoIA = `<p class="text-[11.5px] text-amber-300">La IA no está activa en este GADUAI.</p>`;
+  else if(a && a.estado==="analizando") estadoIA = `<p class="text-[12px] text-slate-200"><i class="fa-solid fa-spinner fa-spin"></i> GADUAI está leyendo los documentos. Toma unos minutos; te avisamos en la campanita cuando termine.</p>`;
+  else estadoIA = `${a && a.estado==="error" ? `<p class="text-[11.5px] text-rose-300 mb-2"><i class="fa-solid fa-triangle-exclamation"></i> ${esc(a.error||"El análisis falló.")}</p>` : ""}
+    ${a && a.estado==="listo" ? `<p class="text-[11px] text-slate-400 mb-2">Último análisis: ${prFecha(a.terminado_en)} · pedido por ${esc(a.solicitado_por||"—")}</p>` : ""}
+    <button onclick="prAnalizar()" ${pei.length||rie.length ? "" : "disabled"} class="gaduai-gradient text-white text-xs font-bold px-4 py-2.5 rounded-xl disabled:opacity-40"><i class="fa-solid fa-wand-magic-sparkles"></i> ${a && a.estado==="listo" ? "Volver a analizar" : "Analizar con IA"}</button>
+    <p class="text-[10.5px] text-slate-500 mt-2">Al volver a analizar se reemplazan solo los hallazgos que aún no tienen decisión ni tarea.</p>`;
+  return `<div class="grid lg:grid-cols-[1.4fr_1fr] gap-4">
+    <div>
+      <p class="text-xs font-black text-white mb-2">Proyecto Educativo Institucional</p>${pei.length ? fila(pei[0],"pei") : falta("pei","el PEI vigente")}
+      <p class="text-xs font-black text-white mb-2 mt-4">Reglamento Interno</p>${rie.length ? fila(rie[0],"rie") : falta("rie","el Reglamento Interno vigente")}
+      <p class="text-xs font-black text-white mb-2 mt-4">Anexos y protocolos del RIE</p>
+      ${anexos.map(v=>fila(v,"anexo")).join("") || `<p class="text-[11px] text-slate-500 mb-2">Si los protocolos están en archivos aparte, súbelos aquí.</p>`}
+      <div class="flex gap-2 items-center"><input id="pr-anexo-nombre" placeholder="Nombre del anexo (ej. Protocolo de accidentes)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2 text-[12px] text-white">
+        <label class="text-[11px] font-bold px-3 py-2 rounded-lg border border-slate-700 text-slate-200 cursor-pointer"><i class="fa-solid fa-plus"></i> Subir anexo
+          <input type="file" accept=".docx,.pdf" hidden onchange="prSubir('anexo', this, document.getElementById('pr-anexo-nombre').value)"></label></div>
+    </div>
+    <div>
+      <div class="plan-ia rounded-2xl p-4 mb-4"><p class="text-xs font-black text-white mb-2"><i class="fa-solid fa-wand-magic-sparkles"></i> Diagnóstico con IA</p>
+        <p class="text-[11.5px] text-slate-300 mb-3">GADUAI lee cada documento por separado, lo compara con la matriz normativa y luego cruza el PEI con el RIE.</p>${estadoIA}</div>
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-[11px] text-slate-400">
+        <p class="text-xs font-black text-white mb-1"><i class="fa-solid fa-scale-balanced pr-vio"></i> Matriz normativa usada</p>
+        <p>${(d.requisitos||[]).length} requisitos aplican a este colegio · aprobada por ${esc(d.matriz.revision.por)} el ${planFechaLarga(d.matriz.revision.fecha)}.</p>
+        <p class="mt-1">Fuentes: ${d.matriz.fuentes.map(f=>esc(f.id==="L21809"?"Ley 21.809":f.id==="L21827"?"Ley 21.827":f.id==="CIRC2018"?"Circular Supereduc 2018":f.id==="OPEI2015"?"Orientaciones PEI 2015":"Orientaciones PEI Parvularia 2026")).join(" · ")}.</p>
+      </div>
+    </div></div>`;
+}
+async function prSubir(tipo, input, nombre, docId){
+  const f = input.files && input.files[0]; input.value = "";
+  if(!f) return;
+  const ext = (f.name.match(/\.([a-z0-9]+)$/i)||[])[1]?.toLowerCase();
+  if(!["docx","pdf"].includes(ext)) return toast("Sube el documento en Word (.docx) o PDF");
+  if(f.size > 25*1024*1024) return toast("El archivo pesa más de 25 MB");
+  if(docId){ const doc = prEstado.data.documentos.find(x=>x.id===docId); if(doc) nombre = doc.nombre; }
+  if(tipo==="anexo" && !String(nombre||"").trim()) nombre = f.name.replace(/\.[^.]+$/,"");
+  toast("Subiendo y leyendo el documento…");
+  try{
+    const data = await new Promise((ok, mal)=>{ const fr = new FileReader(); fr.onload = ()=>ok(fr.result); fr.onerror = mal; fr.readAsDataURL(f); });
+    const r = await api(`/api/colegios/${STATE.colegioId}/peirie/documentos`, { method:"POST", body: JSON.stringify(actorBody({ tipo, nombre, archivoNombre: f.name, data })) });
+    toast(`Documento guardado (versión ${r.version}).`);
+    await prCargar();
+  }catch(e){
+    toast(({ sin_texto:"El archivo no tiene texto legible (¿es un escaneo?). Súbelo en Word o en un PDF con texto.", no_legible:"No se pudo leer el archivo.",
+      archivo_grande:"El archivo pesa más de 25 MB.", formato_invalido:"Formato no válido: usa Word (.docx) o PDF." })[e.message] || "No se pudo subir el documento");
+  }
+}
+async function prDescargar(id){
+  try{
+    const r = await api(`/api/colegios/${STATE.colegioId}/peirie/documentos/${id}/archivo`);
+    const a = document.createElement("a"); a.href = r.data; a.download = r.nombre; document.body.appendChild(a); a.click(); a.remove();
+  }catch(e){ toast("No se pudo abrir el documento"); }
+}
+async function prQuitarAnexo(id){
+  if(!confirm("¿Quitar este anexo y todas sus versiones?")) return;
+  try{ await api(`/api/colegios/${STATE.colegioId}/peirie/documentos/${id}/quitar`, { method:"POST", body: JSON.stringify(actorBody({})) }); await prCargar(); }
+  catch(e){ toast("No se pudo quitar el anexo"); }
+}
+async function prAnalizar(){
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/peirie/analizar`, { method:"POST", body: JSON.stringify(actorBody({})) });
+    toast("GADUAI empezó a analizar. Te avisamos en la campanita cuando termine.");
+    await prCargar();
+  }catch(e){ toast(({ en_curso:"Ya hay un análisis en curso", sin_documentos:"Primero sube el PEI o el Reglamento Interno", sin_ia:"La IA no está activa en este GADUAI" })[e.message] || "No se pudo iniciar el análisis"); }
+}
+
+// ---------- 3 · hallazgos ----------
+const PR_FILTROS = { todos:["Todos",()=>true], pei:["Ruta A · PEI",h=>h.ruta==="pei"], rie:["Ruta B · RIE",h=>h.ruta==="rie"],
+  ambos:["PEI ↔ RIE",h=>h.ruta==="ambos"], abiertos:["Esperan decisión",h=>h.estado==="abierto"], tareas:["En tarea",h=>h.estado==="en_tarea"] };
+function prVerHallazgo(id){ prEstado.tab = "hallazgos"; prEstado.sel = id; prEstado.filtro = "todos"; prEstado.accion = null; prPintar(); }
+function prVistaHallazgos(d){
+  const hz = d.hallazgos;
+  if(!hz.length) return `<div class="text-center py-12"><i class="fa-solid fa-list-check text-3xl pr-vio"></i><p class="text-sm font-bold text-white mt-2">Aún no hay hallazgos</p>
+    <p class="text-[11.5px] text-slate-400">Sube los documentos y pide el diagnóstico con IA en la pestaña Documentos.</p></div>`;
+  const lista = hz.filter(PR_FILTROS[prEstado.filtro][1]);
+  if(!prEstado.sel || !hz.some(h=>h.id===prEstado.sel)) prEstado.sel = (lista[0]||hz[0]).id;
+  const filtros = Object.entries(PR_FILTROS).map(([k,[t,fn]])=>`<button onclick="prEstado.filtro='${k}';prEstado.accion=null;prPintar()" class="text-[11px] font-bold px-3 py-1.5 rounded-full border border-slate-700 ${prEstado.filtro===k?"plan-tab-on":"text-slate-300"}">${t} · ${hz.filter(fn).length}</button>`).join("");
+  const items = lista.map(h=>`<button onclick="prEstado.sel=${h.id};prEstado.accion=null;prPintar()" class="w-full text-left bg-slate-950 border ${h.id===prEstado.sel?"pr-sel":"border-slate-800"} rounded-xl p-3 mb-2">
+      <div class="flex flex-wrap gap-1 mb-1">${prChip("bg-slate-500/20 text-slate-300",esc(h.codigo))}${prChip(h.ruta==="pei"?"pr-t-obligacion":h.ruta==="rie"?"pr-t-instruccion":"pr-t-facultativa",PR_RUTA[h.ruta])}${h.relacion?prRelChip(h.relacion):prTipoChip(h.tipo)}</div>
+      <p class="text-[12.5px] font-bold text-white">${esc(h.titulo)}</p><div class="mt-1">${prEstadoChip(h.estado)}</div></button>`).join("") || `<p class="text-[11.5px] text-slate-400">Sin hallazgos con este filtro.</p>`;
+  return `<div class="flex flex-wrap gap-1.5 mb-3">${filtros}</div>
+    <div class="grid lg:grid-cols-[1fr_1.15fr] gap-4"><div class="max-h-[60vh] overflow-y-auto pr-1">${items}</div>
+    <div>${prDetalleHallazgo(hz.find(h=>h.id===prEstado.sel), d)}</div></div>
+    <p class="text-[10.5px] text-slate-500 mt-3"><i class="fa-solid fa-scale-balanced"></i> El tipo de exigencia lo define la matriz normativa, no la IA. GADUAI nunca declara una infracción: si algo depende de una interpretación jurídica, lo marca "requiere confirmación".</p>`;
+}
+function prDetalleHallazgo(h, d){
+  if(!h) return "";
+  const r = h.requisito, fuente = r ? (d.matriz.fuentes.find(f=>f.id===r.fuente)||{}).nombre : null;
+  const dt = (t) => `<p class="text-[10px] uppercase tracking-wider font-black text-slate-500 mt-3">${t}</p>`;
+  const tarea = h.item_id ? `<div class="bg-slate-900 border border-slate-800 rounded-xl p-3 mt-1 text-[11.5px] text-slate-300"><i class="fa-solid fa-circle-notch pr-vio"></i>
+      Tarea en el Timeline · responsable <b class="text-white">${esc(h.responsable||"—")}</b> · plazo ${h.tarea_fecha ? planFechaLarga(h.tarea_fecha) : "—"} · estado: <b class="text-white">${PR_CIRCULO[h.tarea_estado]||"Asignada"}</b></div>` : "";
+  let acciones = "";
+  if(prEstado.accion==="tarea"){
+    const en14 = new Date(Date.parse(STATE_HOY()+"T12:00:00Z")+14*86400000).toISOString().slice(0,10);
+    const resp = h.ruta==="pei" ? d.expediente.responsable_pei : d.expediente.responsable_rie;
+    acciones = `<div class="bg-slate-950 border pr-borde rounded-2xl p-3 mt-3 space-y-2">
+      <p class="text-xs font-bold text-white"><i class="fa-solid fa-list-check pr-vio"></i> Crear tarea en el Timeline</p>
+      <label class="block text-[11px] text-slate-400">Responsable<select id="pr-t-resp" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white">${prOpcionesUsuarios(resp)}</select></label>
+      <div class="grid grid-cols-2 gap-2"><label class="block text-[11px] text-slate-400">Plazo<input id="pr-t-fecha" type="date" value="${en14}" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
+        <label class="block text-[11px] text-slate-400">Prioridad<select id="pr-t-triage" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white">
+          <option value="Azul" selected>Azul · importante, no urgente</option><option value="Rojo">Rojo · urgente e importante</option><option value="Naranjo">Naranjo · urgente, delegable</option><option value="Gris">Gris · baja prioridad</option></select></label></div>
+      <label class="block text-[11px] text-slate-400">Indicaciones (opcional)<textarea id="pr-t-nota" rows="2" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></textarea></label>
+      <div class="flex gap-2"><button onclick="prCrearTarea(${h.id})" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl">Crear tarea</button>
+        <button onclick="prEstado.accion=null;prPintar()" class="text-xs px-3 py-2 rounded-xl border border-slate-700 text-slate-300">Cancelar</button></div></div>`;
+  } else if(prEstado.accion==="decision"){
+    acciones = `<div class="bg-slate-950 border pr-borde rounded-2xl p-3 mt-3 space-y-2">
+      <p class="text-xs font-bold text-white"><i class="fa-solid fa-gavel pr-vio"></i> Decisión del equipo</p>
+      <textarea id="pr-d-texto" rows="3" placeholder="Qué se decidió y por qué (queda en el historial del expediente)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></textarea>
+      <div class="flex flex-wrap gap-2"><button onclick="prDecidir(${h.id},'resuelto')" class="bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl">Marcar resuelto</button>
+        <button onclick="prDecidir(${h.id},'descartado')" class="text-xs font-bold px-4 py-2 rounded-xl border border-slate-700 text-slate-200">Descartar</button>
+        <button onclick="prEstado.accion=null;prPintar()" class="text-xs px-3 py-2 rounded-xl text-slate-400">Cancelar</button></div></div>`;
+  } else {
+    acciones = `<div class="flex flex-wrap gap-2 mt-4">
+      ${h.item_id ? "" : `<button onclick="prEstado.accion='tarea';prPintar()" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-solid fa-list-check"></i> Crear tarea en el Timeline</button>`}
+      ${["resuelto","descartado"].includes(h.estado)
+        ? `<button onclick="prDecidir(${h.id},'abierto')" class="text-xs font-bold px-4 py-2 rounded-xl border border-slate-700 text-slate-200"><i class="fa-solid fa-rotate-left"></i> Reabrir</button>`
+        : `<button onclick="prEstado.accion='decision';prPintar()" class="text-xs font-bold px-4 py-2 rounded-xl border border-slate-700 text-slate-200"><i class="fa-solid fa-gavel"></i> Registrar decisión</button>`}</div>`;
+  }
+  return `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+    <div class="flex flex-wrap gap-1">${h.relacion?prRelChip(h.relacion):""}${prTipoChip(h.tipo)}${prEstadoChip(h.estado)}${h.requiere_confirmacion?prChip("bg-amber-500/20 text-amber-300","⚖ Requiere confirmación jurídica"):""}</div>
+    <p class="text-[14px] font-black text-white mt-2">${esc(h.codigo)} · ${esc(h.titulo)}</p>
+    ${dt(h.ruta==="ambos"?"En el PEI":"Dónde")}<p class="text-[12px] text-slate-300">${esc(h.documento||"")}${h.seccion?" · "+esc(h.seccion):""}</p>
+    ${h.evidencia ? `<div class="pr-cita rounded-r-xl px-3 py-2 mt-1 text-[12px] italic text-slate-200">${esc(h.evidencia)}</div>` : ""}
+    ${h.ruta==="ambos" ? `${dt("En el RIE")}<p class="text-[12px] text-slate-300">${esc(h.seccion_otro||"No se encontró")}</p>${h.cita_otro?`<div class="pr-cita rounded-r-xl px-3 py-2 mt-1 text-[12px] italic text-slate-200">${esc(h.cita_otro)}</div>`:""}` : ""}
+    ${dt("Fuente")}${r ? `<div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-[11.5px] text-slate-300"><b class="text-white">${esc(r.id)} · ${esc(r.articulo)}</b><br>${esc(fuente||"")}
+      <p class="italic text-slate-400 mt-1">“${esc(r.cita)}”</p>${r.estado!=="Vigente"?`<p class="text-amber-300 mt-1">${esc(r.nota||"")}</p>`:""}</div>` : `<p class="text-[11.5px] text-slate-400">Sugerencia de la IA, sin requisito de la matriz. No es una exigencia normativa.</p>`}
+    ${dt("Propuesta de acción")}<p class="text-[12px] text-slate-200">${esc(h.propuesta||"")}</p>
+    ${h.vinculo ? `${dt(h.ruta==="ambos"?"Por qué":"Vínculo con el otro documento")}<p class="text-[12px] text-slate-300">${esc(h.vinculo)}</p>` : ""}
+    ${h.item_id ? dt("Tarea")+tarea : ""}
+    ${h.decision ? `${dt("Decisión del equipo")}<p class="text-[12px] text-slate-200">${esc(h.decision)}</p><p class="text-[10.5px] text-slate-500">${esc(h.decidido_por||"")} · ${prFecha(h.decidido_en)}</p>` : ""}
+    ${acciones}</div>`;
+}
+async function prCrearTarea(id){
+  const resp = document.getElementById("pr-t-resp").value, fecha = document.getElementById("pr-t-fecha").value;
+  if(!resp) return toast("Elige a la persona responsable");
+  if(!fecha) return toast("Indica el plazo");
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/peirie/hallazgos/${id}/tarea`, { method:"POST", body: JSON.stringify(actorBody({
+      responsable: resp, fecha, triage: document.getElementById("pr-t-triage").value, nota: document.getElementById("pr-t-nota").value })) });
+    prEstado.accion = null; toast("Tarea creada en el Timeline con círculo de la promesa");
+    await prCargar(); cargarTimeline && cargarTimeline();
+  }catch(e){ toast("No se pudo crear la tarea"); }
+}
+async function prDecidir(id, estado){
+  const t = document.getElementById("pr-d-texto");
+  const decision = t ? t.value.trim() : "";
+  if(estado!=="abierto" && !decision) return toast("Escribe la decisión y su justificación");
+  try{
+    await api(`/api/colegios/${STATE.colegioId}/peirie/hallazgos/${id}/decision`, { method:"POST", body: JSON.stringify(actorBody({ estado, decision })) });
+    prEstado.accion = null; toast(estado==="abierto" ? "Hallazgo reabierto" : "Decisión registrada");
+    await prCargar();
+  }catch(e){ toast("No se pudo registrar la decisión"); }
+}
+
+// ---------- 4 · coherencia ----------
+function prVistaCoherencia(d){
+  const a = d.analisis, coh = a && a.estado==="listo" && a.resultado && a.resultado.coherencia;
+  const hz = d.hallazgos.filter(h=>h.ruta==="ambos");
+  if(!coh && !hz.length) return `<div class="text-center py-12"><i class="fa-solid fa-arrows-left-right text-3xl pr-vio"></i><p class="text-sm font-bold text-white mt-2">Aún no hay cruce PEI ↔ RIE</p>
+    <p class="text-[11.5px] text-slate-400">Se genera solo en el diagnóstico con IA, cuando están cargados el PEI y el Reglamento Interno.</p></div>`;
+  const cuenta = (r) => hz.filter(h=>h.relacion===r).length;
+  const kpi = (n, t, cls) => `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-3"><p class="text-2xl font-black ${cls}">${n}</p><p class="text-[10.5px] text-slate-400 font-bold">${t}</p></div>`;
+  const tarjeta = (pei, peiCita, rel, rie, rieCita, extra, onclick) => `<div ${onclick?`onclick="${onclick}"`:""} class="grid md:grid-cols-[1fr_170px_1fr] gap-2 items-center bg-slate-950 border border-slate-800 ${onclick?"hover:border-slate-600 cursor-pointer":""} rounded-2xl p-3 mb-2">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-2.5"><p class="text-[10px] font-bold text-slate-500">PEI · ${esc(pei||"")}</p><p class="text-[12px] text-slate-200">${esc(peiCita||"—")}</p></div>
+      <div class="text-center">${prRelChip(rel)}${extra?`<p class="text-[10px] text-slate-400 mt-1">${extra}</p>`:""}</div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-2.5"><p class="text-[10px] font-bold text-slate-500">RIE · ${esc(rie||"No se encontró")}</p><p class="text-[12px] text-slate-200">${esc(rieCita||"—")}</p></div></div>`;
+  return `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">${kpi((coh&&coh.vinculos||[]).length,"Vínculos coherentes","text-emerald-400")}${kpi(cuenta("dependencia"),"Dependencias a revisar","text-sky-300")}${kpi(cuenta("contradiccion"),"Posibles contradicciones","text-rose-300")}${kpi(cuenta("sin_norma"),"Principios sin norma","text-amber-300")}</div>
+    ${coh && coh.resumen ? `<div class="plan-ia rounded-2xl p-3 mb-4 text-[12px] text-slate-200"><i class="fa-solid fa-wand-magic-sparkles"></i> ${esc(coh.resumen)}</div>` : ""}
+    ${hz.length ? `<p class="text-xs font-black text-white mb-2">Requieren revisión</p>` : ""}
+    ${hz.map(h=>tarjeta(h.seccion,h.evidencia,h.relacion,h.seccion_otro,h.cita_otro,`${esc(h.codigo)} · ${PR_ESTADOS[h.estado][1]}`,`prVerHallazgo(${h.id})`)).join("")}
+    ${(coh&&coh.vinculos||[]).length ? `<p class="text-xs font-black text-white mb-2 mt-4">Coherentes</p>` + coh.vinculos.map(v=>tarjeta(v.pei_seccion,v.pei_cita,"coherente",v.rie_seccion,v.rie_cita,esc(v.tema),null)).join("") : ""}
+    <p class="text-[10.5px] text-slate-500 mt-3">Cuando el equipo apruebe cambios en uno de los documentos, sube la nueva versión y vuelve a analizar: GADUAI vuelve a cruzar ambos.</p>`;
+}
+
+// ---------- 5 · matriz normativa ----------
+function prVistaMatriz(d){
+  const q = prEstado.buscar.toLowerCase();
+  const filas = (d.requisitos||[]).filter(r=>!q || (r.id+" "+r.requisito+" "+r.articulo+" "+r.tema).toLowerCase().includes(q));
+  let tema = "";
+  const cuerpo = filas.map(r=>{
+    const cab = r.tema!==tema ? (tema=r.tema, `<tr><td colspan="3" class="pt-4 pb-1 text-[11px] font-black pr-vio">${esc(r.tema)}</td></tr>`) : "";
+    return cab + `<tr class="border-t border-slate-800 align-top"><td class="py-2 pr-2 text-[11px] font-bold text-white whitespace-nowrap">${esc(r.id)}</td>
+      <td class="py-2 pr-2 text-[12px] text-slate-200">${esc(r.requisito)}<p class="text-[10.5px] text-slate-400 mt-0.5">${esc(r.articulo)}${r.nota?` · ${esc(r.nota)}`:""}</p></td>
+      <td class="py-2 text-right">${prTipoChip(r.tipo)}${r.estado!=="Vigente"?`<div class="mt-1">${prChip("bg-amber-500/20 text-amber-300","Confirmar vigencia")}</div>`:""}</td></tr>`;
+  }).join("");
+  return `<div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+      <p class="text-[11.5px] text-slate-400">${(d.requisitos||[]).length} requisitos aplican a este colegio · aprobada por ${esc(d.matriz.revision.por)} el ${planFechaLarga(d.matriz.revision.fecha)} · la mantiene GADUAI y es igual para todos los colegios.</p>
+      <input id="pr-buscar" value="${esc(prEstado.buscar)}" oninput="prEstado.buscar=this.value;prPintar();const i=document.getElementById('pr-buscar');i.focus();i.setSelectionRange(i.value.length,i.value.length)" placeholder="Buscar (ej. suspensión, canal, perfiles)…" class="bg-slate-950 border border-slate-700 rounded-lg p-2 text-[12px] text-white w-64"></div>
+    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 overflow-x-auto"><table class="w-full">${cuerpo || `<tr><td class="text-[11.5px] text-slate-400">Sin resultados.</td></tr>`}</table></div>`;
+}
+
+// ---------- 6 · historial ----------
+function prVistaHistorial(d){
+  return `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">${d.historial.map(h=>`<div class="flex gap-3 py-2 border-b border-slate-800">
+      <p class="text-[10.5px] text-slate-500 w-32 flex-none">${new Date(h.creado_en).toLocaleString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</p>
+      <p class="text-[12px] text-slate-200"><b class="text-white">${esc(h.accion)}</b>${h.detalle?` · ${esc(h.detalle)}`:""}<span class="text-slate-500"> — ${esc(h.autor)}</span></p></div>`).join("") || `<p class="text-[11.5px] text-slate-400">Sin movimientos todavía.</p>`}</div>`;
+}
+
 const PERFILES_PLANIFICACION = ["UTP"];
 const PLAN_PERSONA_AVISOS = "Planificaciones (automático)";
 const PLAN_MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
