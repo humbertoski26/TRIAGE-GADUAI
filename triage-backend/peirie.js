@@ -45,6 +45,8 @@ function requisitosAplicables(perfilColegio) {
       case "parv": return !!p.parvularia;
       case "bm": return p.basica_media !== false;
       case "fc": return !!p.financiamiento_compartido;
+      case "tp": return !!p.tecnico_profesional;
+      case "dual": return !!p.tecnico_profesional && !!p.dual;
       default: return true;
     }
   });
@@ -52,7 +54,7 @@ function requisitosAplicables(perfilColegio) {
 function textoMatriz(requisitos, instrumentos) {
   const fuentes = new Map(MATRIZ.fuentes.map((f) => [f.id, f]));
   return requisitos.filter((r) => instrumentos.includes(r.instrumento)).map((r) =>
-    `[${r.id}] (${MATRIZ.tipos[r.tipo]}${r.estado !== "Vigente" ? " · confirmar vigencia" : ""}) ${r.requisito}\n` +
+    `[${r.id}] (${MATRIZ.tipos[r.tipo]}${r.estado !== "Vigente" ? " · confirmar vigencia" : ""}${r.revision === "pendiente" ? " · pendiente de aprobación del abogado" : ""}) ${r.requisito}\n` +
     `   Fuente: ${(fuentes.get(r.fuente) || {}).nombre || r.fuente} · ${r.articulo}. Cita: "${r.cita}"` +
     (r.nota ? `\n   Nota: ${r.nota}` : "")
   ).join("\n");
@@ -181,6 +183,14 @@ function registrarPeiRie(app, d) {
   }
 
   // ---------- análisis con IA ----------
+  // Un error de la API se traduce a un mensaje que el colegio entienda (el detalle queda en el log).
+  function mensajeErrorIA(err) {
+    if (err && err.status === 401) return "La IA de este GADUAI no tiene una clave válida. Avísale al equipo de GADUAI.";
+    if (err && (err.status === 429 || err.status === 529)) return "La IA está con mucha demanda en este momento. Vuelve a intentarlo en unos minutos.";
+    if (err && err.status === 400 && /credit|billing/i.test(err.message || "")) return "La cuenta de IA de este GADUAI no tiene saldo. Avísale al equipo de GADUAI.";
+    if (err && err.message && err.message.startsWith("La ")) return err.message;
+    return null;
+  }
   async function llamarIA(system, contenido, esquema) {
     const respuesta = await anthropic.beta.messages.create({
       model: MODELO,
@@ -228,7 +238,8 @@ function registrarPeiRie(app, d) {
     ];
     const contexto = `Establecimiento: ${colegioNombre}. Tipo declarado: ${[perfil.subvencionado !== false ? "subvencionado o con aportes del Estado" : "particular pagado",
       perfil.basica_media !== false ? "básica y/o media" : null, perfil.parvularia ? "con educación parvularia" : null,
-      perfil.especial ? "escuela especial o con Programa de Integración" : null].filter(Boolean).join(", ")}.`;
+      perfil.especial ? "escuela especial o con Programa de Integración" : null,
+      perfil.tecnico_profesional ? `con enseñanza media técnico-profesional${perfil.dual ? " y formación profesional dual" : ""} (revisa también el reglamento de práctica y titulación si viene en el RIE o en un anexo)` : null].filter(Boolean).join(", ")}.`;
     const contenido = [...bloqueDocs(documentos, (x) => x.tipo === "anexo" ? `ANEXO DEL RIE: ${x.nombre}` : `DOCUMENTO ${x.tipo.toUpperCase()}`),
       { type: "text", text: `${contexto}\nHaz el diagnóstico.` }];
     return llamarIA(sistema, contenido, ESQUEMA_DIAGNOSTICO);
@@ -268,7 +279,7 @@ function registrarPeiRie(app, d) {
         [exp.id, exp.colegio_id, analisisId, ruta, `H-${String(n).padStart(2, "0")}`, String(h.titulo || "").slice(0, 300),
           h.documento, String(h.seccion || "").slice(0, 300), String(h.evidencia || "").slice(0, 2000),
           req ? req.id : null, req ? req.tipo : "sugerencia_ia", String(h.propuesta || "").slice(0, 2000),
-          !!h.requiere_confirmacion || (req && req.estado !== "Vigente") || false, String(h.vinculo || "").slice(0, 600) || null,
+          !!h.requiere_confirmacion || (req && (req.estado !== "Vigente" || req.revision === "pendiente")) || false, String(h.vinculo || "").slice(0, 600) || null,
           h.relacion || null, h.seccion_otro || null, h.cita_otro || null]
       );
     }
@@ -310,7 +321,7 @@ function registrarPeiRie(app, d) {
     } catch (err) {
       console.error("PEI/RIE: error en el análisis del expediente", exp.id, "-", err.message);
       await pool.query("update peirie_analisis set estado='error', error=$2, terminado_en=now() where id=$1",
-        [analisis.id, err.message.startsWith("La ") ? err.message : "No se pudo completar el análisis con IA. Vuelve a intentarlo en unos minutos."]);
+        [analisis.id, mensajeErrorIA(err) || "No se pudo completar el análisis con IA. Vuelve a intentarlo en unos minutos."]);
     }
   }
   async function responsables(exp) {
@@ -363,7 +374,8 @@ function registrarPeiRie(app, d) {
     const nombre = String(b.nombre || "").trim().slice(0, 160) || "Actualización PEI/RIE";
     const p = b.perfilColegio || {};
     const perfil = { subvencionado: p.subvencionado !== false, basica_media: p.basica_media !== false, parvularia: !!p.parvularia,
-      especial: !!p.especial, financiamiento_compartido: !!p.financiamiento_compartido };
+      especial: !!p.especial, financiamiento_compartido: !!p.financiamiento_compartido,
+      tecnico_profesional: !!p.tecnico_profesional, dual: !!p.tecnico_profesional && !!p.dual };
     const meta = /^\d{4}-\d{2}-\d{2}$/.test(b.metaFecha || "") ? b.metaFecha : null;
     const usuarios = (await pool.query("select nombre from usuarios where colegio_id=$1", [colegioId])).rows.map((u) => u.nombre);
     const respPei = usuarios.includes(b.responsablePei) ? b.responsablePei : null;
@@ -580,7 +592,7 @@ function registrarPeiRie(app, d) {
       }
     } catch (err) {
       console.error("PEI/RIE: error al analizar el compilado", partId, "-", err.message);
-      await guardar("error", null, err.message.startsWith("La ") ? err.message : "No se pudo analizar el compilado. Vuelve a intentarlo en unos minutos.");
+      await guardar("error", null, mensajeErrorIA(err) || "No se pudo analizar el compilado. Vuelve a intentarlo en unos minutos.");
     }
   }
   function analizarCompiladoEnSegundoPlano(partId) {

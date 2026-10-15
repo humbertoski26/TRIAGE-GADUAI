@@ -3901,7 +3901,10 @@ let ausBuscarTimer = null;
    los colegios, aprobada por el abogado) y los cruza entre sí. Cada hallazgo muestra evidencia y
    fuente; el equipo decide o lo convierte en una tarea del Timeline. La IA propone; nunca aprueba. */
 const PERFILES_PEIRIE = ["Director ejecutivo/máster","Director/a de colegio","UTP","Encargado de Convivencia Educativa"];
-const PR_PLAZO_LEY = "2027-04-01"; // Ley 21.809, art. quinto transitorio (subvencionados)
+const PR_PLAZO_LEY = "2027-04-01";
+const PR_FUENTE_CORTA = { L21809:"Ley 21.809", L21827:"Ley 21.827", CIRC2018:"Circular Supereduc 2018", D2516:"Decreto 2516 (práctica y titulación EMTP)",
+  D452:"Decreto 452 (Bases Curriculares EMTP)", D313:"Decreto 313 (seguro escolar)", D67:"Decreto 67 (evaluación)", RES1385:"Res. 1385 (formación dual)",
+  OPEI2015:"Orientaciones PEI 2015", OPEI2026:"Orientaciones PEI Parvularia 2026" }; // Ley 21.809, art. quinto transitorio (subvencionados)
 const PR_TIPOS = { obligacion:["pr-t-obligacion","Obligación legal"], instruccion:["pr-t-instruccion","Instrucción Supereduc"],
   facultativa:["pr-t-facultativa","Medida facultativa"], orientacion:["pr-t-orientacion","Orientación oficial"], sugerencia_ia:["pr-t-ia","✨ Sugerencia IA"] };
 const PR_ESTADOS = { abierto:["bg-amber-500/20 text-amber-300","Abierto"], en_tarea:["bg-sky-500/20 text-sky-300","En tarea"],
@@ -3987,6 +3990,8 @@ function prFormExpediente(exp){
       ${chk("pr-f-parv","Tiene niveles de educación parvularia", !!p.parvularia)}
       ${chk("pr-f-esp","Escuela especial o con Programa de Integración Escolar", !!p.especial)}
       ${chk("pr-f-fc","Mantiene financiamiento compartido", !!p.financiamiento_compartido)}
+      ${chk("pr-f-tp","Imparte enseñanza media técnico-profesional", !!p.tecnico_profesional)}
+      ${chk("pr-f-dual","Tiene formación profesional dual (solo técnico-profesional)", !!p.dual)}
     </div>
   </div>
   <div class="flex gap-2 mt-4">
@@ -3999,7 +4004,8 @@ async function prGuardarExpediente(){
   try{
     await api(`/api/colegios/${STATE.colegioId}/peirie/expediente`, { method:"POST", body: JSON.stringify(actorBody({
       nombre: val("pr-f-nombre"), responsablePei: val("pr-f-pei"), responsableRie: val("pr-f-rie"), metaFecha: val("pr-f-meta"),
-      perfilColegio: { subvencionado:chk("pr-f-subv"), basica_media:chk("pr-f-bm"), parvularia:chk("pr-f-parv"), especial:chk("pr-f-esp"), financiamiento_compartido:chk("pr-f-fc") },
+      perfilColegio: { subvencionado:chk("pr-f-subv"), basica_media:chk("pr-f-bm"), parvularia:chk("pr-f-parv"), especial:chk("pr-f-esp"), financiamiento_compartido:chk("pr-f-fc"),
+        tecnico_profesional:chk("pr-f-tp"), dual:chk("pr-f-tp") && chk("pr-f-dual") },
     })) });
     const nuevo = !prEstado.data.expediente;
     prEstado.editando = false; prEstado.tab = nuevo ? "documentos" : prEstado.tab;
@@ -4053,10 +4059,33 @@ function prVistaExpediente(d){
   const decidir = pend.length ? pend.map(h=>`<button onclick="prVerHallazgo(${h.id})" class="w-full text-left bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-xl p-3 flex justify-between items-center gap-3 mb-2">
       <div><p class="text-[12.5px] font-bold text-white">${esc(h.codigo)} · ${esc(h.titulo)}</p><p class="text-[10.5px] text-slate-400">${PR_RUTA[h.ruta]} · ${esc(h.seccion||"")}</p></div>${prTipoChip(h.tipo)}</button>`).join("")
     : `<p class="text-[11.5px] text-slate-400">${diagOk ? "No hay hallazgos esperando decisión. 🎉" : "Cuando el diagnóstico esté listo, aquí aparecen los hallazgos más importantes."}</p>`;
-  return `${plazo}<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 mb-4">${etapas}</div>
+  return `${prPasoAPaso(d)}${plazo}<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 mb-4">${etapas}</div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">${kpi(hz.length,"Hallazgos detectados","text-white")}${kpi(cerrados.length,"Con decisión registrada","text-emerald-400")}${kpi(enTarea.length,"Tareas en el Timeline","text-sky-300")}${kpi(abiertos.length,"Esperan decisión","text-amber-300")}</div>
     <div class="grid md:grid-cols-2 gap-4 mb-4">${ruta("pei","Proyecto Educativo Institucional","¿Quiénes somos como colegio y qué educación queremos ofrecer?",exp.responsable_pei)}${ruta("rie","Reglamento Interno","¿Cómo se traducen esos principios en normas, derechos, deberes y procedimientos?",exp.responsable_rie)}</div>
     <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4"><p class="text-xs font-black text-white mb-3">Lo que requiere decisión del equipo</p>${decidir}</div>`;
+}
+
+// Paso a paso numerado: qué hacer y en qué pestaña, con el estado de cada paso.
+function prPasoAPaso(d){
+  const docs = d.documentos, hz = d.hallazgos, a = d.analisis, aps = d.aportes||[], parts = d.participacion||[];
+  const tiene = (t) => docs.some(x=>x.tipo===t);
+  const diag = a && a.estado==="listo";
+  const pasos = [
+    ["Crear el expediente: responsables, fecha meta y tipo de colegio.", true, null],
+    ["Subir el PEI y el Reglamento Interno (y sus anexos) en Word o PDF.", tiene("pei") && tiene("rie"), "documentos"],
+    ["Tocar «Analizar con IA» y esperar el aviso en la campanita.", diag, "documentos"],
+    ["Revisar cada hallazgo: registrar la decisión o crear una tarea en el Timeline.", diag && hz.length>0 && !hz.some(h=>h.estado==="abierto"), "hallazgos"],
+    ["Revisar la coherencia entre el PEI y el RIE.", diag && !hz.some(h=>h.ruta==="ambos" && h.estado==="abierto"), "coherencia"],
+    ["Participación: descargar la guía de cada estamento, hacer la actividad y subir el compilado.", new Set(parts.map(p=>p.estamento)).size >= Object.keys(d.estamentos||{}).length, "participacion"],
+    ["Incluir los aportes pertinentes y descargar la propuesta de cambios.", aps.length>0 && !aps.some(x=>x.estado==="propuesto"), "participacion"],
+    ["Redactar las nuevas versiones del PEI y del RIE, subirlas y volver a analizar.", docs.some(x=>(x.tipo==="pei"||x.tipo==="rie") && x.version>1) && diag, "documentos"],
+    ["Presentar el informe al Consejo Escolar y aprobar las versiones finales (próximamente en GADUAI).", false, null],
+  ];
+  const siguiente = pasos.findIndex(p=>!p[1]);
+  return `<div class="bg-slate-950 border pr-borde rounded-2xl p-4 mb-4"><p class="text-xs font-black text-white mb-2"><i class="fa-solid fa-list-ol pr-vio"></i> Paso a paso</p>
+    <ol class="space-y-1.5">${pasos.map(([t,ok,tab],i)=>`<li class="flex items-center gap-2 text-[12px] ${i===siguiente?"text-white font-bold":ok?"text-slate-400":"text-slate-300"}">
+      <span class="w-6 h-6 flex-none rounded-full flex items-center justify-center text-[11px] font-black ${ok?"bg-emerald-600 text-white":i===siguiente?"gaduai-btn-peirie text-white":"bg-slate-800 text-slate-300"}">${ok?"✓":i+1}</span>
+      <span class="flex-1">${t}</span>${tab && !ok ? `<button onclick="prTab('${tab}')" class="text-[10.5px] font-bold px-2.5 py-1 rounded-lg ${i===siguiente?"gaduai-btn-accent text-white":"border border-slate-700 text-slate-300"}">Ir</button>` : ""}</li>`).join("")}</ol></div>`;
 }
 
 // ---------- 2 · documentos ----------
@@ -4103,7 +4132,8 @@ function prVistaDocumentos(d){
       <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-[11px] text-slate-400">
         <p class="text-xs font-black text-white mb-1"><i class="fa-solid fa-scale-balanced pr-vio"></i> Matriz normativa usada</p>
         <p>${(d.requisitos||[]).length} requisitos aplican a este colegio · aprobada por ${esc(d.matriz.revision.por)} el ${planFechaLarga(d.matriz.revision.fecha)}.</p>
-        <p class="mt-1">Fuentes: ${d.matriz.fuentes.map(f=>esc(f.id==="L21809"?"Ley 21.809":f.id==="L21827"?"Ley 21.827":f.id==="CIRC2018"?"Circular Supereduc 2018":f.id==="OPEI2015"?"Orientaciones PEI 2015":"Orientaciones PEI Parvularia 2026")).join(" · ")}.</p>
+        <p class="mt-1">Fuentes: ${d.matriz.fuentes.map(f=>esc(PR_FUENTE_CORTA[f.id]||f.id)).join(" · ")}.</p>
+        ${(d.requisitos||[]).some(r=>r.revision==="pendiente") ? `<p class="mt-1 text-amber-300">${(d.requisitos||[]).filter(r=>r.revision==="pendiente").length} requisitos nuevos están pendientes de aprobación del abogado: sus hallazgos se marcan "requiere confirmación".</p>` : ""}
       </div>
     </div></div>`;
 }
@@ -4262,7 +4292,7 @@ function prVistaMatriz(d){
     const cab = r.tema!==tema ? (tema=r.tema, `<tr><td colspan="3" class="pt-4 pb-1 text-[11px] font-black pr-vio">${esc(r.tema)}</td></tr>`) : "";
     return cab + `<tr class="border-t border-slate-800 align-top"><td class="py-2 pr-2 text-[11px] font-bold text-white whitespace-nowrap">${esc(r.id)}</td>
       <td class="py-2 pr-2 text-[12px] text-slate-200">${esc(r.requisito)}<p class="text-[10.5px] text-slate-400 mt-0.5">${esc(r.articulo)}${r.nota?` · ${esc(r.nota)}`:""}</p></td>
-      <td class="py-2 text-right">${prTipoChip(r.tipo)}${r.estado!=="Vigente"?`<div class="mt-1">${prChip("bg-amber-500/20 text-amber-300","Confirmar vigencia")}</div>`:""}</td></tr>`;
+      <td class="py-2 text-right">${prTipoChip(r.tipo)}${r.estado!=="Vigente"?`<div class="mt-1">${prChip("bg-amber-500/20 text-amber-300","Confirmar vigencia")}</div>`:""}${r.revision==="pendiente"?`<div class="mt-1">${prChip("pr-t-instruccion","Pendiente de aprobación")}</div>`:""}</td></tr>`;
   }).join("");
   return `<div class="flex flex-wrap justify-between items-center gap-2 mb-3">
       <p class="text-[11.5px] text-slate-400">${(d.requisitos||[]).length} requisitos aplican a este colegio · aprobada por ${esc(d.matriz.revision.por)} el ${planFechaLarga(d.matriz.revision.fecha)} · la mantiene GADUAI y es igual para todos los colegios.</p>
@@ -4337,6 +4367,19 @@ const PR_GUIA = {
       "¿Qué observaciones tiene el Consejo sobre las propuestas recogidas?",
       "¿Cómo se asegura la participación de quienes no pertenecen a un curso o nivel?",
       "¿Cómo se informará a la comunidad el reglamento actualizado?"] },
+};
+
+// Preguntas extra para liceos técnico-profesionales (se agregan a la guía si el expediente lo indica).
+const PR_GUIA_TP = {
+  directivos: ["¿Nuestro reglamento de práctica y titulación está al día con el Decreto 2516 (visitas en terreno, convenios, seguro escolar)?",
+    "¿Cómo se refleja la vinculación con el sector productivo en el PEI?"],
+  docentes: ["¿Qué debería decir el PEI sobre el perfil de egreso de cada especialidad?",
+    "¿Qué dificultades tienen como profesores tutores en la supervisión de la práctica?"],
+  asistentes: ["¿Qué normas de seguridad en talleres y laboratorios deberían quedar más claras?"],
+  estudiantes: ["¿Qué te gustaría que el liceo te asegure durante tu práctica profesional?",
+    "Si tienes un problema en tu centro de práctica, ¿a quién deberías avisar y qué debería pasar?"],
+  apoderados: ["¿Qué información esperan recibir sobre la práctica profesional y la titulación de sus hijos e hijas?"],
+  consejo: ["¿Cómo se informa a la comunidad el reglamento de práctica profesional y sus cambios?"],
 };
 
 function prVistaParticipacion(d){
@@ -4502,7 +4545,8 @@ async function prDescargarGuia(e){
   const d = prEstado.data, g = PR_GUIA[e], nombre = d.estamentos[e], colegio = STATE.colegio.nombre;
   // Lo que GADUAI detectó en el diagnóstico, como preguntas abiertas (no para estudiantes: es lenguaje técnico).
   const detectado = e==="estudiantes" ? [] : d.hallazgos.filter(h=>h.estado==="abierto").slice(0,5).map(h=>`GADUAI detectó: «${h.titulo}». ¿Qué proponen ustedes?`);
-  const todas = [...g.pei.map(q=>["PEI",q]), ...g.rie.map(q=>["RIE",q]), ...detectado.map(q=>["Diagnóstico",q])];
+  const tp = d.expediente.perfil_colegio && d.expediente.perfil_colegio.tecnico_profesional ? (PR_GUIA_TP[e]||[]) : [];
+  const todas = [...g.pei.map(q=>["PEI",q]), ...g.rie.map(q=>["RIE",q]), ...tp.map(q=>["Técnico-profesional",q]), ...detectado.map(q=>["Diagnóstico",q])];
   const ol = (arr) => `<ol>${arr.map(q=>`<li>${esc(q)}</li>`).join("")}</ol>`;
   const cuerpo = `<p style="color:#5b35c9;font-weight:bold;letter-spacing:1px">GADUAI PEI/RIE · ACTUALIZACIÓN PARTICIPATIVA</p>
     <h1>Guía de participación · ${esc(nombre)}</h1><p><b>${esc(colegio)}</b> · ${esc(d.expediente.nombre)}</p>
@@ -4515,7 +4559,8 @@ async function prDescargarGuia(e){
       <li>No escriban nombres de estudiantes ni datos personales.</li><li>Cuenten cuántas personas participaron.</li></ul>
     <h2>3. Preguntas sobre el Proyecto Educativo (PEI)</h2>${ol(g.pei)}
     <h2>4. Preguntas sobre el Reglamento Interno (RIE)</h2>${ol(g.rie)}
-    ${detectado.length ? `<h2>5. Lo que GADUAI detectó en el diagnóstico</h2>${ol(detectado)}` : ""}
+    ${tp.length ? `<h2>${4+1}. Modalidad técnico-profesional</h2>${ol(tp)}` : ""}
+    ${detectado.length ? `<h2>${tp.length?6:5}. Lo que GADUAI detectó en el diagnóstico</h2>${ol(detectado)}` : ""}
     <br style="page-break-before:always">
     <h1>Compilado de aportes · ${esc(nombre)}</h1>
     <p class="nota">Completen esta ficha y súbanla en GADUAI: <b>PEI/RIE → Participación → ${esc(nombre)} → Subir compilado</b> (Word o PDF).</p>
