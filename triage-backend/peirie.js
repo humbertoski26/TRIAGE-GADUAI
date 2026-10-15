@@ -214,7 +214,8 @@ function registrarPeiRie(app, d) {
     `(3) requisito_id es el código de la matriz normativa (por ejemplo RIE-06) que sustenta el hallazgo; si no corresponde a ninguno, deja requisito_id vacío y será una sugerencia. ` +
     `(4) Marca requiere_confirmacion=true cuando el hallazgo dependa de una interpretación jurídica o el requisito diga "confirmar vigencia". ` +
     `(5) No incluyas requisitos que el documento ya cumple bien; esos van como fortalezas. Máximo 25 hallazgos, los más relevantes primero. ` +
-    `(6) Escribe en español de Chile, claro y breve: título de hasta 12 palabras y propuesta concreta de 1 a 2 oraciones.`;
+    `(6) Escribe en español de Chile, claro y breve: título de hasta 12 palabras y propuesta concreta de 1 a 2 oraciones. ` +
+    `(7) Si el nombre del establecimiento que aparece en los documentos no coincide con el declarado, menciónalo solo en el resumen, no como hallazgo.`;
 
   function bloqueDocs(docs, titulo) {
     return docs.map((x) => ({ type: "text", text: `${titulo(x)} (archivo ${x.archivo_nombre}, versión ${x.version}):\n\n${x.texto}` }));
@@ -296,13 +297,13 @@ function registrarPeiRie(app, d) {
     const resultado = {};
     try {
       for (const ruta of ["pei", "rie"]) {
-        const r = await diagnosticar(exp, ruta, docs, colegio.nombre);
+        const r = await diagnosticar(exp, ruta, docs, exp.establecimiento || colegio.nombre);
         if (r.omitido) continue;
         resultado[ruta] = { resumen: r.json.resumen, fortalezas: r.json.fortalezas, alcance: r.json.alcance_sugerido };
         await guardarHallazgos(exp, analisis.id, ruta, r.json.hallazgos.map((h) => ({ ...h, documento: ruta === "pei" ? "PEI" : "RIE" })));
         resultado.modelo = r.modelo;
       }
-      const c = await cruzar(exp, docs, colegio.nombre);
+      const c = await cruzar(exp, docs, exp.establecimiento || colegio.nombre);
       if (!c.omitido) {
         const vinculos = c.json.vinculos;
         resultado.coherencia = { resumen: c.json.resumen, vinculos: vinculos.filter((v) => v.relacion === "coherente") };
@@ -377,14 +378,16 @@ function registrarPeiRie(app, d) {
       especial: !!p.especial, financiamiento_compartido: !!p.financiamiento_compartido,
       tecnico_profesional: !!p.tecnico_profesional, dual: !!p.tecnico_profesional && !!p.dual };
     const meta = /^\d{4}-\d{2}-\d{2}$/.test(b.metaFecha || "") ? b.metaFecha : null;
+    // Nombre del establecimiento tal como aparece en sus documentos (puede diferir del nombre en GADUAI).
+    const establecimiento = String(b.establecimiento || "").trim().slice(0, 200) || null;
     const usuarios = (await pool.query("select nombre from usuarios where colegio_id=$1", [colegioId])).rows.map((u) => u.nombre);
     const respPei = usuarios.includes(b.responsablePei) ? b.responsablePei : null;
     const respRie = usuarios.includes(b.responsableRie) ? b.responsableRie : null;
     let exp = await expedienteDe(colegioId);
     if (exp) {
       await pool.query(
-        `update peirie_expedientes set nombre=$2, perfil_colegio=$3, meta_fecha=$4, responsable_pei=$5, responsable_rie=$6 where id=$1`,
-        [exp.id, nombre, JSON.stringify(perfil), meta, respPei, respRie]
+        `update peirie_expedientes set nombre=$2, perfil_colegio=$3, meta_fecha=$4, responsable_pei=$5, responsable_rie=$6, establecimiento=$7 where id=$1`,
+        [exp.id, nombre, JSON.stringify(perfil), meta, respPei, respRie, establecimiento]
       );
       await historial(colegioId, exp.id, "Expediente actualizado", nombre, actor.nombre);
       return res.json({ ok: true, id: exp.id });
@@ -397,9 +400,9 @@ function registrarPeiRie(app, d) {
         meta || ahoraChile().fecha, PERSONA_AVISOS, actor.perfil, new Date().toLocaleDateString("es-CL")]
     )).rows[0];
     exp = (await pool.query(
-      `insert into peirie_expedientes (colegio_id, nombre, perfil_colegio, meta_fecha, responsable_pei, responsable_rie, creado_por, item_id)
-       values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
-      [colegioId, nombre, JSON.stringify(perfil), meta, respPei, respRie, actor.nombre, item.id]
+      `insert into peirie_expedientes (colegio_id, nombre, perfil_colegio, meta_fecha, responsable_pei, responsable_rie, creado_por, item_id, establecimiento)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
+      [colegioId, nombre, JSON.stringify(perfil), meta, respPei, respRie, actor.nombre, item.id, establecimiento]
     )).rows[0];
     await historial(colegioId, exp.id, "Expediente creado", nombre, actor.nombre);
     res.json({ ok: true, id: exp.id });
@@ -548,7 +551,7 @@ function registrarPeiRie(app, d) {
       const abiertos = (await pool.query("select codigo, titulo from peirie_hallazgos where expediente_id=$1 and estado in ('abierto','en_tarea') order by id", [exp.id])).rows;
       const sistema = [
         { type: "text", text:
-          `Eres asesor/a de ${colegio.nombre} en el proceso participativo de actualización del PEI y del Reglamento Interno (RIE). ` +
+          `Eres asesor/a de ${exp.establecimiento || colegio.nombre} en el proceso participativo de actualización del PEI y del Reglamento Interno (RIE). ` +
           `Recibes el compilado de aportes de un estamento y lo analizas para el equipo directivo, que decide.\n\n` +
           `Separa cada aporte distinto (no repitas el mismo con otras palabras) y para cada uno indica:\n` +
           `- cita: texto copiado del compilado, breve. No inventes aportes ni acuerdos.\n` +

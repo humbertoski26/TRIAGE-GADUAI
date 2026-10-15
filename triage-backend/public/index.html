@@ -3924,7 +3924,7 @@ function STATE_HOY(){ return (prEstado.data && prEstado.data.hoy) || new Date().
 function prFecha(ts){ return ts ? new Date(ts).toLocaleDateString("es-CL",{day:"numeric",month:"short",year:"numeric"}) : ""; }
 
 async function abrirPeiRie(){
-  prEstado.tab = "expediente"; prEstado.sel = null; prEstado.filtro = "todos"; prEstado.editando = false; prEstado.accion = null; prEstado.subiendo = null; prEstado.accionAporte = null;
+  prEstado.tab = "expediente"; prEstado.sel = null; prEstado.filtro = "abiertos"; prEstado.editando = false; prEstado.accion = null; prEstado.subiendo = null; prEstado.accionAporte = null;
   document.getElementById("modal-peirie").classList.remove("hidden");
   document.getElementById("pr-vista").innerHTML = `<p class="text-xs text-slate-400 py-10 text-center"><i class="fa-solid fa-spinner fa-spin"></i> Cargando…</p>`;
   await prCargar();
@@ -3947,7 +3947,7 @@ function prPintar(){
   const d = prEstado.data, exp = d.expediente;
   document.getElementById("pr-titulo").textContent = exp && !prEstado.editando ? exp.nombre : (exp ? "Editar expediente" : "Iniciar el proceso");
   document.getElementById("pr-subtitulo").textContent = exp
-    ? [exp.responsable_pei && `Ruta PEI: ${exp.responsable_pei}`, exp.responsable_rie && `Ruta RIE: ${exp.responsable_rie}`, exp.meta_fecha && `Meta: ${planFechaLarga(exp.meta_fecha)}`].filter(Boolean).join(" · ")
+    ? [exp.establecimiento && exp.establecimiento !== STATE.colegio.nombre && exp.establecimiento, exp.responsable_pei && `Ruta PEI: ${exp.responsable_pei}`, exp.responsable_rie && `Ruta RIE: ${exp.responsable_rie}`, exp.meta_fecha && `Meta: ${planFechaLarga(exp.meta_fecha)}`].filter(Boolean).join(" · ")
     : "Crea el expediente del colegio para subir el PEI y el Reglamento Interno.";
   document.getElementById("pr-btn-editar").hidden = !exp || prEstado.editando;
   document.getElementById("pr-tabs").hidden = !exp || prEstado.editando;
@@ -3975,6 +3975,8 @@ function prFormExpediente(exp){
     <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
       <label class="block text-[11px] text-slate-400">Nombre del proceso
         <input id="pr-f-nombre" value="${esc(exp ? exp.nombre : `Actualización PEI/RIE ${anio}-${anio+1}`)}" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
+      <label class="block text-[11px] text-slate-400">Establecimiento (tal como aparece en sus documentos)
+        <input id="pr-f-est" value="${esc((exp && exp.establecimiento) || STATE.colegio.nombre)}" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></label>
       <label class="block text-[11px] text-slate-400">Responsable de la ruta PEI
         <select id="pr-f-pei" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white">${prOpcionesUsuarios(exp && exp.responsable_pei)}</select></label>
       <label class="block text-[11px] text-slate-400">Responsable de la ruta RIE
@@ -4003,7 +4005,7 @@ async function prGuardarExpediente(){
   const val = (id) => document.getElementById(id).value, chk = (id) => document.getElementById(id).checked;
   try{
     await api(`/api/colegios/${STATE.colegioId}/peirie/expediente`, { method:"POST", body: JSON.stringify(actorBody({
-      nombre: val("pr-f-nombre"), responsablePei: val("pr-f-pei"), responsableRie: val("pr-f-rie"), metaFecha: val("pr-f-meta"),
+      nombre: val("pr-f-nombre"), establecimiento: val("pr-f-est"), responsablePei: val("pr-f-pei"), responsableRie: val("pr-f-rie"), metaFecha: val("pr-f-meta"),
       perfilColegio: { subvencionado:chk("pr-f-subv"), basica_media:chk("pr-f-bm"), parvularia:chk("pr-f-parv"), especial:chk("pr-f-esp"), financiamiento_compartido:chk("pr-f-fc"),
         tecnico_profesional:chk("pr-f-tp"), dual:chk("pr-f-tp") && chk("pr-f-dual") },
     })) });
@@ -4178,7 +4180,7 @@ async function prAnalizar(){
 // ---------- 3 · hallazgos ----------
 const PR_FILTROS = { todos:["Todos",()=>true], pei:["Ruta A · PEI",h=>h.ruta==="pei"], rie:["Ruta B · RIE",h=>h.ruta==="rie"],
   ambos:["PEI ↔ RIE",h=>h.ruta==="ambos"], abiertos:["Esperan decisión",h=>h.estado==="abierto"], tareas:["En tarea",h=>h.estado==="en_tarea"] };
-function prVerHallazgo(id){ prEstado.tab = "hallazgos"; prEstado.sel = id; prEstado.filtro = "todos"; prEstado.accion = null; prPintar(); }
+function prVerHallazgo(id){ prEstado.tab = "hallazgos"; prEstado.sel = id; prEstado.filtro = "abiertos"; prEstado.accion = null; prPintar(); }
 function prVistaHallazgos(d){
   const hz = d.hallazgos;
   if(!hz.length) return `<div class="text-center py-12"><i class="fa-solid fa-list-check text-3xl pr-vio"></i><p class="text-sm font-bold text-white mt-2">Aún no hay hallazgos</p>
@@ -4189,7 +4191,12 @@ function prVistaHallazgos(d){
   const items = lista.map(h=>`<button onclick="prEstado.sel=${h.id};prEstado.accion=null;prPintar()" class="w-full text-left bg-slate-950 border ${h.id===prEstado.sel?"pr-sel":"border-slate-800"} rounded-xl p-3 mb-2">
       <div class="flex flex-wrap gap-1 mb-1">${prChip("bg-slate-500/20 text-slate-300",esc(h.codigo))}${prChip(h.ruta==="pei"?"pr-t-obligacion":h.ruta==="rie"?"pr-t-instruccion":"pr-t-facultativa",PR_RUTA[h.ruta])}${h.relacion?prRelChip(h.relacion):prTipoChip(h.tipo)}</div>
       <p class="text-[12.5px] font-bold text-white">${esc(h.titulo)}</p><div class="mt-1">${prEstadoChip(h.estado)}</div></button>`).join("") || `<p class="text-[11.5px] text-slate-400">Sin hallazgos con este filtro.</p>`;
-  return `<div class="flex flex-wrap gap-1.5 mb-3">${filtros}</div>
+  const listos = hz.filter(h=>h.estado!=="abierto").length, pct = Math.round(100*listos/hz.length);
+  const guia = `<div class="bg-slate-950 border pr-borde rounded-2xl p-3 mb-3">
+      <div class="flex flex-wrap justify-between items-center gap-2 mb-1.5"><p class="text-[12.5px] font-black text-white"><i class="fa-solid fa-list-check pr-vio"></i> Revisados ${listos} de ${hz.length} hallazgos</p><b class="text-[12px] text-white">${pct}%</b></div>
+      <div class="h-2 rounded-full bg-slate-800 overflow-hidden mb-2"><div class="h-full" style="width:${pct}%;background:#8B5CF6"></div></div>
+      <p class="text-[11.5px] text-slate-300">Abre cada hallazgo y elige una opción: <b class="text-white">✓ Lo incorporamos</b> (se corregirá en la nueva versión), <b class="text-white">👤 Asignar a alguien</b> (crea una tarea en el Timeline) o <b class="text-white">✗ No aplica</b> (con el motivo). Al decidir, pasa solo al siguiente.</p></div>`;
+  return `${guia}<div class="flex flex-wrap gap-1.5 mb-3">${filtros}</div>
     <div class="grid lg:grid-cols-[1fr_1.15fr] gap-4"><div class="max-h-[60vh] overflow-y-auto pr-1">${items}</div>
     <div>${prDetalleHallazgo(hz.find(h=>h.id===prEstado.sel), d)}</div></div>
     <p class="text-[10.5px] text-slate-500 mt-3"><i class="fa-solid fa-scale-balanced"></i> El tipo de exigencia lo define la matriz normativa, no la IA. GADUAI nunca declara una infracción: si algo depende de una interpretación jurídica, lo marca "requiere confirmación".</p>`;
@@ -4213,23 +4220,32 @@ function prDetalleHallazgo(h, d){
       <label class="block text-[11px] text-slate-400">Indicaciones (opcional)<textarea id="pr-t-nota" rows="2" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></textarea></label>
       <div class="flex gap-2"><button onclick="prCrearTarea(${h.id})" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl">Crear tarea</button>
         <button onclick="prEstado.accion=null;prPintar()" class="text-xs px-3 py-2 rounded-xl border border-slate-700 text-slate-300">Cancelar</button></div></div>`;
-  } else if(prEstado.accion==="decision"){
+  } else if(prEstado.accion==="incorporar" || prEstado.accion==="noaplica"){
+    const inc = prEstado.accion==="incorporar";
+    const rapidas = inc ? ["Se incorporará en la nueva versión.", "Ya lo corregimos en el documento.", "Lo trabajaremos en la jornada con la comunidad."]
+      : ["No corresponde a nuestro establecimiento.", "El documento ya lo contiene.", "El equipo decidió no incorporarlo por ahora."];
     acciones = `<div class="bg-slate-950 border pr-borde rounded-2xl p-3 mt-3 space-y-2">
-      <p class="text-xs font-bold text-white"><i class="fa-solid fa-gavel pr-vio"></i> Decisión del equipo</p>
-      <textarea id="pr-d-texto" rows="3" placeholder="Qué se decidió y por qué (queda en el historial del expediente)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"></textarea>
-      <div class="flex flex-wrap gap-2"><button onclick="prDecidir(${h.id},'resuelto')" class="bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl">Marcar resuelto</button>
-        <button onclick="prDecidir(${h.id},'descartado')" class="text-xs font-bold px-4 py-2 rounded-xl border border-slate-700 text-slate-200">Descartar</button>
-        <button onclick="prEstado.accion=null;prPintar()" class="text-xs px-3 py-2 rounded-xl text-slate-400">Cancelar</button></div></div>`;
+      <p class="text-xs font-bold text-white">${inc ? "✓ Lo incorporamos: ¿cómo?" : "✗ No aplica: ¿por qué?"}</p>
+      <div class="flex flex-wrap gap-1.5">${rapidas.map(t=>`<button onclick="document.getElementById('pr-d-texto').value=this.textContent" class="text-[11px] px-2.5 py-1 rounded-full border border-slate-700 text-slate-300">${t}</button>`).join("")}</div>
+      <textarea id="pr-d-texto" rows="2" placeholder="Elige una frase o escribe la tuya (queda en el historial)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white">${inc ? rapidas[0] : ""}</textarea>
+      <div class="flex flex-wrap gap-2"><button onclick="prDecidir(${h.id},'${inc ? "resuelto" : "descartado"}')" class="${inc ? "bg-emerald-600 text-white" : "border border-slate-700 text-slate-200"} text-xs font-bold px-4 py-2 rounded-xl">Confirmar y pasar al siguiente</button>
+        <button onclick="prEstado.accion=null;prPintar()" class="text-xs px-3 py-2 rounded-xl text-slate-400">Volver</button></div></div>`;
+  } else if(["resuelto","descartado"].includes(h.estado)){
+    acciones = `<div class="flex flex-wrap gap-2 mt-4"><button onclick="prDecidir(${h.id},'abierto')" class="text-xs font-bold px-4 py-2 rounded-xl border border-slate-700 text-slate-200"><i class="fa-solid fa-rotate-left"></i> Cambiar la decisión</button></div>`;
   } else {
-    acciones = `<div class="flex flex-wrap gap-2 mt-4">
-      ${h.item_id ? "" : `<button onclick="prEstado.accion='tarea';prPintar()" class="gaduai-btn-accent text-white text-xs font-bold px-4 py-2 rounded-xl"><i class="fa-solid fa-list-check"></i> Crear tarea en el Timeline</button>`}
-      ${["resuelto","descartado"].includes(h.estado)
-        ? `<button onclick="prDecidir(${h.id},'abierto')" class="text-xs font-bold px-4 py-2 rounded-xl border border-slate-700 text-slate-200"><i class="fa-solid fa-rotate-left"></i> Reabrir</button>`
-        : `<button onclick="prEstado.accion='decision';prPintar()" class="text-xs font-bold px-4 py-2 rounded-xl border border-slate-700 text-slate-200"><i class="fa-solid fa-gavel"></i> Registrar decisión</button>`}</div>`;
+    const op = (accion, icono, titulo, txt, cls) => `<button onclick="prEstado.accion='${accion}';prPintar()" class="text-left rounded-xl p-3 ${cls}">
+        <p class="text-[12.5px] font-black">${icono} ${titulo}</p><p class="text-[10.5px] opacity-90 mt-0.5">${txt}</p></button>`;
+    acciones = `<p class="text-[10px] uppercase tracking-wider font-black text-slate-500 mt-3 mb-1.5">¿Qué hacemos con este hallazgo?</p>
+      <div class="grid sm:grid-cols-3 gap-2">
+        ${op("incorporar","✓","Lo incorporamos","Se corregirá en la nueva versión del documento.","bg-emerald-600 text-white")}
+        ${h.item_id ? "" : op("tarea","👤","Asignar a alguien","Crea una tarea con responsable y plazo.","gaduai-btn-accent text-white")}
+        ${op("noaplica","✗","No aplica","Se descarta indicando el motivo.","border border-slate-700 text-slate-200")}
+      </div>`;
   }
   return `<div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
     <div class="flex flex-wrap gap-1">${h.relacion?prRelChip(h.relacion):""}${prTipoChip(h.tipo)}${prEstadoChip(h.estado)}${h.requiere_confirmacion?prChip("bg-amber-500/20 text-amber-300","⚖ Requiere confirmación jurídica"):""}</div>
     <p class="text-[14px] font-black text-white mt-2">${esc(h.codigo)} · ${esc(h.titulo)}</p>
+    ${acciones}
     ${dt(h.ruta==="ambos"?"En el PEI":"Dónde")}<p class="text-[12px] text-slate-300">${esc(h.documento||"")}${h.seccion?" · "+esc(h.seccion):""}</p>
     ${h.evidencia ? `<div class="pr-cita rounded-r-xl px-3 py-2 mt-1 text-[12px] italic text-slate-200">${esc(h.evidencia)}</div>` : ""}
     ${h.ruta==="ambos" ? `${dt("En el RIE")}<p class="text-[12px] text-slate-300">${esc(h.seccion_otro||"No se encontró")}</p>${h.cita_otro?`<div class="pr-cita rounded-r-xl px-3 py-2 mt-1 text-[12px] italic text-slate-200">${esc(h.cita_otro)}</div>`:""}` : ""}
@@ -4239,7 +4255,14 @@ function prDetalleHallazgo(h, d){
     ${h.vinculo ? `${dt(h.ruta==="ambos"?"Por qué":"Vínculo con el otro documento")}<p class="text-[12px] text-slate-300">${esc(h.vinculo)}</p>` : ""}
     ${h.item_id ? dt("Tarea")+tarea : ""}
     ${h.decision ? `${dt("Decisión del equipo")}<p class="text-[12px] text-slate-200">${esc(h.decision)}</p><p class="text-[10.5px] text-slate-500">${esc(h.decidido_por||"")} · ${prFecha(h.decidido_en)}</p>` : ""}
-    ${acciones}</div>`;
+    </div>`;
+}
+// Después de decidir, abre el siguiente hallazgo que espera decisión (en el orden de la lista).
+function prSiguientePendiente(idActual){
+  const hz = prEstado.data.hallazgos, i = hz.findIndex(h=>h.id===idActual);
+  const sig = hz.slice(i+1).find(h=>h.estado==="abierto") || hz.find(h=>h.estado==="abierto" && h.id!==idActual);
+  prEstado.sel = sig ? sig.id : idActual;
+  return sig;
 }
 async function prCrearTarea(id){
   const resp = document.getElementById("pr-t-resp").value, fecha = document.getElementById("pr-t-fecha").value;
@@ -4248,8 +4271,10 @@ async function prCrearTarea(id){
   try{
     await api(`/api/colegios/${STATE.colegioId}/peirie/hallazgos/${id}/tarea`, { method:"POST", body: JSON.stringify(actorBody({
       responsable: resp, fecha, triage: document.getElementById("pr-t-triage").value, nota: document.getElementById("pr-t-nota").value })) });
-    prEstado.accion = null; toast("Tarea creada en el Timeline con círculo de la promesa");
+    prEstado.accion = null;
     await prCargar(); cargarTimeline && cargarTimeline();
+    const sig = prSiguientePendiente(id); prPintar();
+    toast(sig ? `Tarea creada. Siguiente: ${sig.codigo}` : "Tarea creada. ¡No quedan hallazgos pendientes!");
   }catch(e){ toast("No se pudo crear la tarea"); }
 }
 async function prDecidir(id, estado){
@@ -4258,8 +4283,11 @@ async function prDecidir(id, estado){
   if(estado!=="abierto" && !decision) return toast("Escribe la decisión y su justificación");
   try{
     await api(`/api/colegios/${STATE.colegioId}/peirie/hallazgos/${id}/decision`, { method:"POST", body: JSON.stringify(actorBody({ estado, decision })) });
-    prEstado.accion = null; toast(estado==="abierto" ? "Hallazgo reabierto" : "Decisión registrada");
+    prEstado.accion = null;
     await prCargar();
+    if(estado==="abierto"){ toast("Hallazgo reabierto"); return; }
+    const sig = prSiguientePendiente(id); prPintar();
+    toast(sig ? `Decisión registrada. Siguiente: ${sig.codigo}` : "Decisión registrada. ¡No quedan hallazgos pendientes!");
   }catch(e){ toast("No se pudo registrar la decisión"); }
 }
 
